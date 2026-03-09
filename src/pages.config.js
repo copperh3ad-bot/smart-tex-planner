@@ -49,12 +49,14 @@
  */
 import Dashboard from './pages/Dashboard';
 import PurchaseOrders from './pages/PurchaseOrders';
+import PODetail from './pages/PODetail';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
     "Dashboard": Dashboard,
     "PurchaseOrders": PurchaseOrders,
+    "PODetail": PODetail,
 }
 
 export const pagesConfig = {
