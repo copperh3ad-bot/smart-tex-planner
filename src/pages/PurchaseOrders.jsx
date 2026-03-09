@@ -77,9 +77,14 @@ export default function PurchaseOrders() {
             </SelectContent>
           </Select>
         </div>
-        <Button onClick={() => setShowForm(true)} className="bg-primary hover:bg-primary/90">
-          <Plus className="h-4 w-4 mr-2" /> New PO
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowEmailImport(true)}>
+            <Mail className="h-4 w-4 mr-2" /> Import from Email
+          </Button>
+          <Button onClick={() => { setPrefillData(null); setShowForm(true); }} className="bg-primary hover:bg-primary/90">
+            <Plus className="h-4 w-4 mr-2" /> New PO
+          </Button>
+        </div>
       </div>
 
       {/* Table */}
