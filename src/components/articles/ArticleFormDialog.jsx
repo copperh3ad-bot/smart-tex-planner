@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -8,19 +8,69 @@ import { Label } from "@/components/ui/label";
 import { Plus, Trash2 } from "lucide-react";
 
 const COMPONENT_TYPES = [
-  "Top Fabric", "Bottom Fabric", "Skirt Fabric", "Piping", "Binding",
-  "Filling / Padding", "Lamination / TPU", "Lining", "Other"
+  "Front",
+  "Back / Bottom",
+  "Skirt",
+  "Piping",
+  "Binding",
+  "Filling / Padding",
+  "Lamination / TPU",
+  "Lining",
+  "Pouch",
+  "Other",
+];
+
+const DIRECTIONS = [
+  { value: "LxL", label: "LxL – Length × Length" },
+  { value: "WxL", label: "WxL – Width × Length" },
+  { value: "ND",  label: "ND – No Direction" },
+];
+
+const emptyComponent = (type = "Front") => ({
+  component_type: type,
+  fabric_description: "",
+  gsm: "",
+  width_cm: "",
+  direction: "LxL",
+  cut_size: "",
+  pieces_per_width: "",
+  remarks: "",
+  consumption_per_unit: "",
+  wastage_percent: "6",
+  price_per_meter: "",
+});
+
+const DEFAULT_COMPONENTS = [
+  emptyComponent("Front"),
+  emptyComponent("Skirt"),
+  emptyComponent("Piping"),
 ];
 
 export default function ArticleFormDialog({ open, onOpenChange, onSave, purchaseOrders, initialData }) {
-  const [form, setForm] = useState(initialData || {
+  const [form, setForm] = useState(() => initialData || {
     article_name: "",
     article_code: "",
+    size: "",
     po_id: "",
     order_quantity: "",
-    components: [{ component_type: "Top Fabric", fabric_type: "", gsm: "", width: "", consumption_per_unit: "", wastage_percent: "" }],
+    components: DEFAULT_COMPONENTS,
+    notes: "",
   });
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setForm(initialData || {
+        article_name: "",
+        article_code: "",
+        size: "",
+        po_id: "",
+        order_quantity: "",
+        components: DEFAULT_COMPONENTS.map((c) => ({ ...c })),
+        notes: "",
+      });
+    }
+  }, [open, initialData]);
 
   const update = (key, val) => setForm((p) => ({ ...p, [key]: val }));
 
@@ -31,10 +81,7 @@ export default function ArticleFormDialog({ open, onOpenChange, onSave, purchase
   };
 
   const addComponent = () => {
-    setForm((p) => ({
-      ...p,
-      components: [...p.components, { component_type: "Other", fabric_type: "", gsm: "", width: "", consumption_per_unit: "", wastage_percent: "" }],
-    }));
+    setForm((p) => ({ ...p, components: [...p.components, emptyComponent("Other")] }));
   };
 
   const removeComponent = (index) => {
@@ -44,51 +91,67 @@ export default function ArticleFormDialog({ open, onOpenChange, onSave, purchase
   const handleSave = async () => {
     setSaving(true);
     const qty = Number(form.order_quantity) || 0;
+
     const components = form.components.map((c) => {
       const consumption = Number(c.consumption_per_unit) || 0;
       const wastage = Number(c.wastage_percent) || 0;
-      const totalRequired = qty * consumption * (1 + wastage / 100);
+      const netMeters = qty * consumption;
+      const totalMeters = netMeters * (1 + wastage / 100);
+      const price = Number(c.price_per_meter) || 0;
       return {
         ...c,
         gsm: Number(c.gsm) || undefined,
-        width: Number(c.width) || undefined,
+        width_cm: Number(c.width_cm) || undefined,
+        width_inches: c.width_cm ? Number((Number(c.width_cm) / 2.54).toFixed(2)) : undefined,
+        pieces_per_width: Number(c.pieces_per_width) || undefined,
         consumption_per_unit: consumption,
         wastage_percent: wastage,
-        total_required: Number(totalRequired.toFixed(2)),
+        net_meters: Number(netMeters.toFixed(2)),
+        total_meters: Number(totalMeters.toFixed(2)),
+        price_per_meter: price || undefined,
+        total_value: price ? Number((totalMeters * price).toFixed(2)) : undefined,
       };
     });
-    const totalFabric = components.reduce((s, c) => s + (c.total_required || 0), 0);
+
+    const totalFabric = components.reduce((s, c) => s + (c.total_meters || 0), 0);
+    const totalValue = components.reduce((s, c) => s + (c.total_value || 0), 0);
 
     await onSave({
       ...form,
       order_quantity: qty,
       components,
       total_fabric_required: Number(totalFabric.toFixed(2)),
+      total_fabric_value: Number(totalValue.toFixed(2)),
     });
     setSaving(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{initialData ? "Edit Article" : "New Article"}</DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-4">
-          <div className="space-y-1.5">
+        {/* Header fields */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-3">
+          <div className="space-y-1.5 col-span-2 md:col-span-1">
             <Label className="text-xs">Article Name *</Label>
-            <Input value={form.article_name} onChange={(e) => update("article_name", e.target.value)} />
+            <Input value={form.article_name} onChange={(e) => update("article_name", e.target.value)} placeholder="e.g. Mattress Protector" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Article Code</Label>
-            <Input value={form.article_code} onChange={(e) => update("article_code", e.target.value)} />
+            <Input value={form.article_code} onChange={(e) => update("article_code", e.target.value)} placeholder="GPMP33" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Order Quantity</Label>
+            <Label className="text-xs">Size</Label>
+            <Input value={form.size} onChange={(e) => update("size", e.target.value)} placeholder='39x75+18"' />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Order Qty (pcs)</Label>
             <Input type="number" value={form.order_quantity} onChange={(e) => update("order_quantity", e.target.value)} />
           </div>
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 col-span-2">
             <Label className="text-xs">Purchase Order</Label>
             <select
               className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
@@ -96,58 +159,125 @@ export default function ArticleFormDialog({ open, onOpenChange, onSave, purchase
               onChange={(e) => update("po_id", e.target.value)}
             >
               <option value="">Select PO (optional)</option>
-              {purchaseOrders.map((po) => (
-                <option key={po.id} value={po.id}>{po.po_number} - {po.customer_name}</option>
+              {(purchaseOrders || []).map((po) => (
+                <option key={po.id} value={po.id}>{po.po_number} – {po.customer_name}</option>
               ))}
             </select>
           </div>
+          <div className="space-y-1.5 col-span-2">
+            <Label className="text-xs">Notes</Label>
+            <Input value={form.notes} onChange={(e) => update("notes", e.target.value)} placeholder="Any remarks..." />
+          </div>
         </div>
 
+        {/* Components */}
         <div className="border-t pt-4">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-semibold text-foreground">Fabric Components</p>
+            <p className="text-sm font-semibold text-foreground">Fabric Components</p>
             <Button size="sm" variant="outline" onClick={addComponent}>
               <Plus className="h-3.5 w-3.5 mr-1" /> Add Component
             </Button>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-4">
             {form.components.map((comp, i) => (
-              <div key={i} className="grid grid-cols-2 md:grid-cols-7 gap-2 p-3 bg-muted/50 rounded-lg items-end">
-                <div className="space-y-1">
-                  <Label className="text-[10px]">Type</Label>
-                  <select
-                    className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
-                    value={comp.component_type}
-                    onChange={(e) => updateComponent(i, "component_type", e.target.value)}
-                  >
-                    {COMPONENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
+              <div key={i} className="p-3 bg-muted/40 rounded-lg border border-border/60">
+                {/* Row 1 – identity */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-2 items-end">
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Component Type</Label>
+                    <select
+                      className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
+                      value={comp.component_type}
+                      onChange={(e) => updateComponent(i, "component_type", e.target.value)}
+                    >
+                      {COMPONENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1 col-span-2">
+                    <Label className="text-[10px]">Fabric Description</Label>
+                    <Input className="h-8 text-xs" value={comp.fabric_description}
+                      onChange={(e) => updateComponent(i, "fabric_description", e.target.value)}
+                      placeholder="e.g. 100% polyester 105gsm terry" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">GSM</Label>
+                    <Input className="h-8 text-xs" type="number" value={comp.gsm}
+                      onChange={(e) => updateComponent(i, "gsm", e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Width (cm)</Label>
+                    <Input className="h-8 text-xs" type="number" value={comp.width_cm}
+                      onChange={(e) => updateComponent(i, "width_cm", e.target.value)} />
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px]">Fabric</Label>
-                  <Input className="h-8 text-xs" value={comp.fabric_type} onChange={(e) => updateComponent(i, "fabric_type", e.target.value)} />
+
+                {/* Row 2 – cutting & consumption */}
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-2 items-end">
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Direction</Label>
+                    <select
+                      className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
+                      value={comp.direction}
+                      onChange={(e) => updateComponent(i, "direction", e.target.value)}
+                    >
+                      {DIRECTIONS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Cut Size</Label>
+                    <Input className="h-8 text-xs" value={comp.cut_size}
+                      onChange={(e) => updateComponent(i, "cut_size", e.target.value)}
+                      placeholder="e.g. 0.978" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Pcs/Width</Label>
+                    <Input className="h-8 text-xs" type="number" value={comp.pieces_per_width}
+                      onChange={(e) => updateComponent(i, "pieces_per_width", e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Consumption/Pc (m)</Label>
+                    <Input className="h-8 text-xs" type="number" step="0.0001" value={comp.consumption_per_unit}
+                      onChange={(e) => updateComponent(i, "consumption_per_unit", e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Wastage %</Label>
+                    <Input className="h-8 text-xs" type="number" value={comp.wastage_percent}
+                      onChange={(e) => updateComponent(i, "wastage_percent", e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Price/Mtr (USD)</Label>
+                    <Input className="h-8 text-xs" type="number" step="0.01" value={comp.price_per_meter}
+                      onChange={(e) => updateComponent(i, "price_per_meter", e.target.value)} />
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px]">GSM</Label>
-                  <Input className="h-8 text-xs" type="number" value={comp.gsm} onChange={(e) => updateComponent(i, "gsm", e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px]">Width</Label>
-                  <Input className="h-8 text-xs" type="number" value={comp.width} onChange={(e) => updateComponent(i, "width", e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px]">Consumption/Unit</Label>
-                  <Input className="h-8 text-xs" type="number" step="0.01" value={comp.consumption_per_unit} onChange={(e) => updateComponent(i, "consumption_per_unit", e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px]">Wastage %</Label>
-                  <Input className="h-8 text-xs" type="number" value={comp.wastage_percent} onChange={(e) => updateComponent(i, "wastage_percent", e.target.value)} />
-                </div>
-                <div className="flex items-end">
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeComponent(i)}>
-                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                  </Button>
+
+                {/* Row 3 – remarks + calculated preview + delete */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2 items-end">
+                  <div className="space-y-1 col-span-2">
+                    <Label className="text-[10px]">Remarks</Label>
+                    <Input className="h-8 text-xs" value={comp.remarks}
+                      onChange={(e) => updateComponent(i, "remarks", e.target.value)}
+                      placeholder="e.g. 2 pcs cut in a width, 32 stripes bias cut" />
+                  </div>
+                  {/* Calculated preview */}
+                  {form.order_quantity && comp.consumption_per_unit ? (
+                    <div className="text-[10px] text-muted-foreground bg-background rounded px-2 py-1 border col-span-1">
+                      <span className="font-medium text-foreground">
+                        {(Number(form.order_quantity) * Number(comp.consumption_per_unit) * (1 + (Number(comp.wastage_percent) || 0) / 100)).toFixed(1)}
+                      </span> m total
+                      {comp.price_per_meter ? (
+                        <span className="ml-1 text-primary font-medium">
+                          · ${(Number(form.order_quantity) * Number(comp.consumption_per_unit) * (1 + (Number(comp.wastage_percent) || 0) / 100) * Number(comp.price_per_meter)).toFixed(0)}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : <div />}
+                  <div className="flex justify-end">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeComponent(i)}>
+                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             ))}
