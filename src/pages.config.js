@@ -50,6 +50,10 @@
 import Dashboard from './pages/Dashboard';
 import PurchaseOrders from './pages/PurchaseOrders';
 import PODetail from './pages/PODetail';
+import Articles from './pages/Articles';
+import YarnPlanning from './pages/YarnPlanning';
+import Production from './pages/Production';
+import JobCards from './pages/JobCards';
 import __Layout from './Layout.jsx';
 
 
@@ -57,6 +61,10 @@ export const PAGES = {
     "Dashboard": Dashboard,
     "PurchaseOrders": PurchaseOrders,
     "PODetail": PODetail,
+    "Articles": Articles,
+    "YarnPlanning": YarnPlanning,
+    "Production": Production,
+    "JobCards": JobCards,
 }
 
 export const pagesConfig = {
