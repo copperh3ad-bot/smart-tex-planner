@@ -147,7 +147,17 @@ export default function PurchaseOrders() {
         </Card>
       )}
 
-      <POFormDialog open={showForm} onOpenChange={setShowForm} onSave={handleCreate} />
+      <POFormDialog
+        open={showForm}
+        onOpenChange={(v) => { setShowForm(v); if (!v) setPrefillData(null); }}
+        onSave={handleCreate}
+        initialData={prefillData}
+      />
+      <EmailImportDialog
+        open={showEmailImport}
+        onOpenChange={setShowEmailImport}
+        onExtracted={(data) => { setPrefillData(data); setShowForm(true); }}
+      />
     </div>
   );
 }
