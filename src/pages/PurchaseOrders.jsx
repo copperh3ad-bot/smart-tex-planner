@@ -20,6 +20,8 @@ const statuses = ["All", "PO Received", "Items Entered", "Price Verification", "
 
 export default function PurchaseOrders() {
   const [showForm, setShowForm] = useState(false);
+  const [showEmailImport, setShowEmailImport] = useState(false);
+  const [prefillData, setPrefillData] = useState(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const queryClient = useQueryClient();
