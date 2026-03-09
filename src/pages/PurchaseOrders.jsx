@@ -8,12 +8,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, FileText, Trash2 } from "lucide-react";
+import { Plus, Search, FileText, Trash2, Mail } from "lucide-react";
 import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import StatusBadge from "../components/shared/StatusBadge";
 import EmptyState from "../components/shared/EmptyState";
 import POFormDialog from "../components/po/POFormDialog";
+import EmailImportDialog from "../components/po/EmailImportDialog";
 
 const statuses = ["All", "PO Received", "Items Entered", "Price Verification", "Price Approved", "CBM Calculated", "FWS Prepared", "Yarn Planned", "In Production", "Completed", "Shipped"];
 
