@@ -4,10 +4,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Layers, Trash2, Pencil } from "lucide-react";
+import { Plus, Layers, Trash2, Pencil, BarChart3 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import EmptyState from "../components/shared/EmptyState";
 import ArticleFormDialog from "../components/articles/ArticleFormDialog";
+import FabricInventorySummary from "../components/articles/FabricInventorySummary";
 
 const ARTICLE_TYPES = [
   "All",
@@ -16,6 +17,7 @@ const ARTICLE_TYPES = [
   "Total Encasement",
   "Sleeper Encasement",
   "Other",
+  "📦 Fabric Inventory",
 ];
 
 export default function Articles() {
@@ -52,13 +54,17 @@ export default function Articles() {
     }
   };
 
-  const filtered = activeTab === "All"
+  const isInventoryTab = activeTab === "📦 Fabric Inventory";
+
+  const filtered = (activeTab === "All" || isInventoryTab)
     ? articles
     : articles.filter((a) => a.article_type === activeTab);
 
   // Count per type
-  const countByType = (type) =>
-    type === "All" ? articles.length : articles.filter((a) => a.article_type === type).length;
+  const countByType = (type) => {
+    if (type === "All" || type === "📦 Fabric Inventory") return articles.length;
+    return articles.filter((a) => a.article_type === type).length;
+  };
 
   if (isLoading) {
     return <div className="space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-32 rounded-xl" />)}</div>;
@@ -99,8 +105,10 @@ export default function Articles() {
         })}
       </div>
 
-      {/* Grid */}
-      {filtered.length === 0 ? (
+      {/* Fabric Inventory Summary */}
+      {isInventoryTab ? (
+        <FabricInventorySummary articles={articles} />
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={Layers}
           title={`No ${activeTab === "All" ? "Articles" : activeTab}`}
@@ -175,6 +183,8 @@ export default function Articles() {
           })}
         </div>
       )}
+
+      ) : null}
 
       <ArticleFormDialog
         open={showForm}
