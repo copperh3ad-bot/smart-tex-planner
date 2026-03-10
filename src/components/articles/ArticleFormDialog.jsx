@@ -382,14 +382,31 @@ export default function ArticleFormDialog({ open, onOpenChange, onSave, purchase
                         onChange={(e) => updateComponent(i, "remarks", e.target.value)}
                         placeholder="e.g. 2 pcs cut in a width" />
                     </div>
+                    {/* Live calculation preview */}
                     {totalM != null ? (
-                      <div className="text-[10px] text-muted-foreground bg-background rounded px-2 py-1.5 border">
-                        <span className="font-semibold text-foreground">{totalM.toFixed(2)}</span> m
+                      <div className="col-span-1 rounded-lg border-2 border-primary/30 bg-primary/5 px-3 py-2">
+                        <p className="text-[9px] text-muted-foreground uppercase font-semibold mb-0.5">Calculated Total</p>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-base font-bold text-primary">{totalM.toFixed(2)}</span>
+                          <span className="text-xs text-muted-foreground">m</span>
+                        </div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                          Net: {(qty * Number(comp.consumption_per_unit)).toFixed(2)} m
+                          {" + "}
+                          {comp.wastage_percent || 0}% wastage
+                        </div>
                         {totalV != null && (
-                          <span className="ml-1.5 text-primary font-semibold">· ${totalV.toFixed(0)}</span>
+                          <div className="text-[10px] font-semibold text-accent-foreground mt-0.5">
+                            Est. Value: ${totalV.toFixed(0)}
+                          </div>
                         )}
                       </div>
-                    ) : <div />}
+                    ) : (
+                      <div className="col-span-1 rounded-lg border border-dashed border-border px-3 py-2">
+                        <p className="text-[9px] text-muted-foreground uppercase font-semibold mb-0.5">Calculated Total</p>
+                        <p className="text-xs text-muted-foreground">Enter Qty + Consumption</p>
+                      </div>
+                    )}
                     <div className="flex justify-end">
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeComponent(i)}>
                         <Trash2 className="h-3.5 w-3.5 text-destructive" />
