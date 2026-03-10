@@ -183,8 +183,8 @@ export default function ArticleFormDialog({ open, onOpenChange, onSave, purchase
         </DialogHeader>
 
         {/* ── Section 1: PO / PI linkage ─────────────────────────────── */}
-        <div className="bg-muted/30 rounded-lg p-3 mb-1">
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Order Reference</p>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-1">
+          <p className="text-[11px] font-semibold text-blue-600 uppercase tracking-wide mb-2">⭐ Order Reference — New Fields</p>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Purchase Order</Label>
@@ -200,8 +200,8 @@ export default function ArticleFormDialog({ open, onOpenChange, onSave, purchase
               </select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">PI Number</Label>
-              <Input value={form.pi_number} onChange={(e) => update("pi_number", e.target.value)} placeholder="e.g. 2009-26" />
+              <Label className="text-xs font-semibold text-blue-700">PI Number 🆕</Label>
+              <Input className="border-blue-300 focus:border-blue-500 bg-white" value={form.pi_number} onChange={(e) => update("pi_number", e.target.value)} placeholder="e.g. 2009-26" />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Program Code</Label>
@@ -246,13 +246,13 @@ export default function ArticleFormDialog({ open, onOpenChange, onSave, purchase
         </div>
 
         {/* ── Section 3: Size & Quantity ──────────────────────────────── */}
-        <div className="bg-muted/30 rounded-lg p-3 mb-1">
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Size & Quantity</p>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-1">
+          <p className="text-[11px] font-semibold text-blue-600 uppercase tracking-wide mb-2">⭐ Size & Quantity — New Fields</p>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <div className="space-y-1">
-              <Label className="text-xs">Size</Label>
+              <Label className="text-xs font-semibold text-blue-700">Size 🆕</Label>
               <select
-                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+                className="w-full h-9 rounded-md border border-blue-300 bg-white px-3 text-sm"
                 value={form.size_name}
                 onChange={(e) => handleSizeChange(e.target.value)}
               >
@@ -260,8 +260,8 @@ export default function ArticleFormDialog({ open, onOpenChange, onSave, purchase
               </select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Dimensions</Label>
-              <Input value={form.size_dimensions} onChange={(e) => update("size_dimensions", e.target.value)} placeholder='39x75x18"' />
+              <Label className="text-xs font-semibold text-blue-700">Dimensions 🆕</Label>
+              <Input className="border-blue-300 focus:border-blue-500 bg-white" value={form.size_dimensions} onChange={(e) => update("size_dimensions", e.target.value)} placeholder='39x75x18"' />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Order Qty (pcs)</Label>
