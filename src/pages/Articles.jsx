@@ -184,8 +184,6 @@ export default function Articles() {
         </div>
       )}
 
-      ) : null}
-
       <ArticleFormDialog
         open={showForm}
         onOpenChange={(v) => { setShowForm(v); if (!v) setEditingArticle(null); }}
