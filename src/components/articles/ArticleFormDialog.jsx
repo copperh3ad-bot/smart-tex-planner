@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus, Trash2 } from "lucide-react";
 import PackagingSection from "./PackagingSection";
+import StitchingAccessoriesSection from "./StitchingAccessoriesSection";
 
 const ARTICLE_TYPES = [
   "Mattress Protector",
@@ -97,6 +98,8 @@ export default function ArticleFormDialog({ open, onOpenChange, onSave, purchase
     qty_per_carton: "",
     cbm_per_carton: "",
     components: DEFAULT_COMPONENTS_BY_TYPE["Mattress Protector"].map(emptyComponent),
+    stitching: [],
+    accessories: [],
     packaging: {},
     notes: "",
   });
@@ -426,6 +429,14 @@ export default function ArticleFormDialog({ open, onOpenChange, onSave, purchase
             })}
           </div>
         </div>
+
+        {/* Stitching & Accessories */}
+        <StitchingAccessoriesSection
+          stitching={form.stitching}
+          accessories={form.accessories}
+          onStitchingChange={(val) => update("stitching", val)}
+          onAccessoriesChange={(val) => update("accessories", val)}
+        />
 
         {/* Packaging Instructions */}
         <PackagingSection
