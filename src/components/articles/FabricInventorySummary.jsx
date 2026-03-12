@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Package, Search, TrendingUp } from "lucide-react";
+import { Package, Search, TrendingUp, FileSpreadsheet } from "lucide-react";
 
 // Extract a short fabric type label from the description
 function getFabricType(desc = "") {
@@ -39,11 +39,23 @@ const TYPE_COLORS = {
 
 export default function FabricInventorySummary({ articles }) {
   const [search, setSearch] = useState("");
+  const [activeSize, setActiveSize] = useState("All Sizes");
+
+  // Get unique sizes
+  const sizes = useMemo(() => {
+    const sizeSet = new Set(articles.map(a => a.size_name || "Unspecified").filter(Boolean));
+    return ["All Sizes", ...Array.from(sizeSet).sort()];
+  }, [articles]);
+
+  // Filter articles by selected size
+  const sizeFilteredArticles = activeSize === "All Sizes"
+    ? articles
+    : articles.filter(a => (a.size_name || "Unspecified") === activeSize);
 
   // Aggregate: group by fabric_description (or component_type fallback)
   const summary = useMemo(() => {
     const map = {};
-    articles.forEach((article) => {
+    sizeFilteredArticles.forEach((article) => {
       (article.components || []).forEach((comp) => {
         const key = comp.fabric_description?.trim() || `[${comp.component_type}]`;
         if (!map[key]) {
@@ -52,6 +64,8 @@ export default function FabricInventorySummary({ articles }) {
             fabric_type: getFabricType(comp.fabric_description || ""),
             gsm: comp.gsm,
             width_cm: comp.width_cm,
+            direction: comp.direction,
+            cut_size: comp.cut_size,
             total_meters: 0,
             total_value: 0,
             price_per_meter: comp.price_per_meter,
@@ -75,7 +89,7 @@ export default function FabricInventorySummary({ articles }) {
     return Object.values(map)
       .map((r) => ({ ...r, component_types: [...r.component_types] }))
       .sort((a, b) => b.total_meters - a.total_meters);
-  }, [articles]);
+  }, [sizeFilteredArticles]);
 
   const filtered = search
     ? summary.filter((r) =>
@@ -98,6 +112,41 @@ export default function FabricInventorySummary({ articles }) {
 
   return (
     <div className="space-y-4">
+      {/* Size Tabs - Fabric Working Sheet Style */}
+      <Card className="bg-accent/10 border-accent/30">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-xs flex items-center gap-2">
+            <FileSpreadsheet className="h-3.5 w-3.5 text-accent-foreground" />
+            Fabric Working Sheet — Select Size
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pb-3">
+          <div className="flex gap-1 flex-wrap">
+            {sizes.map((size) => {
+              const count = size === "All Sizes" 
+                ? articles.length 
+                : articles.filter(a => (a.size_name || "Unspecified") === size).length;
+              return (
+                <button
+                  key={size}
+                  onClick={() => setActiveSize(size)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-all ${
+                    activeSize === size
+                      ? "border-accent bg-accent text-accent-foreground shadow-sm"
+                      : "border-border bg-background text-muted-foreground hover:text-foreground hover:border-accent/50"
+                  }`}
+                >
+                  {size}
+                  <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] ${
+                    activeSize === size ? "bg-accent-foreground/20" : "bg-muted"
+                  }`}>{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* KPI row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card className="bg-primary/5 border-primary/20">
@@ -122,8 +171,8 @@ export default function FabricInventorySummary({ articles }) {
         )}
         <Card>
           <CardContent className="p-4">
-            <p className="text-[10px] text-muted-foreground uppercase font-medium">Articles</p>
-            <p className="text-2xl font-bold">{articles.length}</p>
+            <p className="text-[10px] text-muted-foreground uppercase font-medium">Articles ({activeSize})</p>
+            <p className="text-2xl font-bold">{sizeFilteredArticles.length}</p>
           </CardContent>
         </Card>
       </div>
@@ -153,9 +202,12 @@ export default function FabricInventorySummary({ articles }) {
               <thead>
                 <tr className="border-b bg-muted/50">
                   <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Fabric Description</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Component</th>
                   <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Type</th>
                   <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">GSM</th>
                   <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">Width (cm)</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Direction</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Cut Size</th>
                   <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">Price/m</th>
                   <th className="text-right px-3 py-2.5 font-semibold text-primary">Total Meters</th>
                   <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">Est. Value</th>
@@ -169,10 +221,12 @@ export default function FabricInventorySummary({ articles }) {
                     <tr key={i} className="border-b hover:bg-muted/30 transition-colors">
                       <td className="px-4 py-2.5 font-medium max-w-[220px]">
                         <span className="line-clamp-2">{row.fabric_description}</span>
+                      </td>
+                      <td className="px-3 py-2.5">
                         {row.component_types.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
+                          <div className="flex flex-wrap gap-1">
                             {row.component_types.map((ct) => (
-                              <span key={ct} className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground text-[10px]">{ct}</span>
+                              <span key={ct} className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground text-[10px] font-medium">{ct}</span>
                             ))}
                           </div>
                         )}
@@ -184,6 +238,8 @@ export default function FabricInventorySummary({ articles }) {
                       </td>
                       <td className="px-3 py-2.5 text-right text-muted-foreground">{row.gsm || "—"}</td>
                       <td className="px-3 py-2.5 text-right text-muted-foreground">{row.width_cm || "—"}</td>
+                      <td className="px-3 py-2.5 text-left text-muted-foreground text-xs">{row.direction || "—"}</td>
+                      <td className="px-3 py-2.5 text-left text-muted-foreground text-xs">{row.cut_size || "—"}</td>
                       <td className="px-3 py-2.5 text-right text-muted-foreground">
                         {row.price_per_meter ? `$${row.price_per_meter}` : "—"}
                       </td>
@@ -213,7 +269,7 @@ export default function FabricInventorySummary({ articles }) {
               {filtered.length > 0 && (
                 <tfoot>
                   <tr className="border-t bg-muted/30">
-                    <td colSpan={5} className="px-4 py-2.5 font-semibold text-xs">Total</td>
+                    <td colSpan={8} className="px-4 py-2.5 font-semibold text-xs">Total</td>
                     <td className="px-3 py-2.5 text-right font-bold text-primary">
                       {grandTotalMeters.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} m
                     </td>

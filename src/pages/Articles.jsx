@@ -16,6 +16,7 @@ const ARTICLE_TYPES = [
   "Pillow Protector",
   "Total Encasement",
   "Sleeper Encasement",
+  "Sheet Set",
   "Other",
   "📦 Fabric Inventory",
 ];

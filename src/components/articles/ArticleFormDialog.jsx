@@ -12,6 +12,7 @@ const ARTICLE_TYPES = [
   "Pillow Protector",
   "Total Encasement",
   "Sleeper Encasement",
+  "Sheet Set",
   "Other",
 ];
 
@@ -40,9 +41,13 @@ const COMPONENT_TYPES = [
   "Filling / Padding",
   "Lamination / TPU",
   "Lining",
-  "(In Side) Window",
-  "(Outside) Window",
+  "Inside Window",
+  "Outside Window",
   "Pouch",
+  "Flat Sheet",
+  "Fitted Sheet",
+  "Pillowcase",
+  "Fabric Bag",
   "Other",
 ];
 
@@ -70,8 +75,9 @@ const DEFAULT_COMPONENTS_BY_TYPE = {
   "Mattress Protector": ["Front", "Skirt", "Piping"],
   "Pillow Protector":   ["Front", "Piping"],
   "Total Encasement":   ["Front", "Skirt", "Back / Bottom", "Piping", "Binding"],
-  "Sleeper Encasement": ["Front", "Skirt", "Back / Bottom", "Piping", "Binding", "(In Side) Window", "(Outside) Window"],
-  "Other":              ["Front"],
+  "Sleeper Encasement": ["Front", "Skirt", "Back / Bottom", "Piping", "Binding", "Inside Window", "Outside Window"],
+  "Sheet Set":          ["Flat Sheet", "Fitted Sheet", "Pillowcase", "Fabric Bag"],
+  "Other":              ["Front", "Skirt", "Piping"],
 };
 
 export default function ArticleFormDialog({ open, onOpenChange, onSave, purchaseOrders, initialData }) {
