@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft, Pencil, FileText } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import POInfoHeader from "../components/po/POInfoHeader";
 import POWorkflowSteps from "../components/po/POWorkflowSteps";
@@ -95,6 +95,11 @@ export default function PODetail() {
           </Button>
         </Link>
         <h1 className="text-lg font-semibold text-foreground flex-1">PO Detail</h1>
+        <Link to={`/ProformaInvoice?id=${poId}`}>
+          <Button variant="outline" size="sm">
+            <FileText className="h-3.5 w-3.5 mr-1.5" /> View PI
+          </Button>
+        </Link>
         <Button variant="outline" size="sm" onClick={() => setShowEditPO(true)}>
           <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit PO
         </Button>
