@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Plus, Table2, BarChart3 } from "lucide-react";
+import { Plus, Table2, BarChart3, Upload } from "lucide-react";
+import FWSImportDialog from "../components/articles/FWSImportDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import EmptyState from "../components/shared/EmptyState";
 import ArticleFormDialog from "../components/articles/ArticleFormDialog";
@@ -20,6 +21,7 @@ export default function Articles() {
   const [showForm, setShowForm] = useState(false);
   const [editingArticle, setEditingArticle] = useState(null);
   const [activeView, setActiveView] = useState("table");
+  const [showImport, setShowImport] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: articles = [], isLoading } = useQuery({
@@ -83,6 +85,9 @@ export default function Articles() {
 
         <div className="flex items-center gap-3">
           <span className="text-xs text-muted-foreground">{articles.length} articles</span>
+          <Button variant="outline" size="sm" onClick={() => setShowImport(true)}>
+            <Upload className="h-4 w-4 mr-1.5" /> Import FWS
+          </Button>
           <Button onClick={() => { setEditingArticle(null); setShowForm(true); }} size="sm">
             <Plus className="h-4 w-4 mr-1.5" /> New Article
           </Button>
@@ -120,6 +125,15 @@ export default function Articles() {
         onSave={handleSave}
         purchaseOrders={purchaseOrders}
         initialData={editingArticle}
+      />
+      <FWSImportDialog
+        open={showImport}
+        onOpenChange={setShowImport}
+        purchaseOrders={purchaseOrders}
+        onImported={() => {
+          queryClient.invalidateQueries({ queryKey: ["articles"] });
+          setShowImport(false);
+        }}
       />
     </div>
   );
