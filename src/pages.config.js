@@ -48,7 +48,6 @@
  * The mainPage value must match a key in the PAGES object exactly.
  */
 import Articles from './pages/Articles';
-import Reports from './pages/Reports';
 import Dashboard from './pages/Dashboard';
 import JobCards from './pages/JobCards';
 import PODetail from './pages/PODetail';
@@ -65,7 +64,6 @@ export const PAGES = {
     "PODetail": PODetail,
     "Production": Production,
     "PurchaseOrders": PurchaseOrders,
-    "Reports": Reports,
     "YarnPlanning": YarnPlanning,
 }
 
