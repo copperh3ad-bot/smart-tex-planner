@@ -300,53 +300,71 @@ export default function ArticleFormDialog({ open, onOpenChange, onSave, purchase
         {/* ── Section 4: Fabric Components ────────────────────────────── */}
         <div className="border-t pt-3">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-semibold text-foreground">Fabric Components</p>
+            <div>
+              <p className="text-sm font-semibold text-foreground">Fabric Components</p>
+              <p className="text-[11px] text-muted-foreground">Each component (Front, Skirt, Piping…) uses a <strong>different fabric</strong>. Define each separately below.</p>
+            </div>
             <Button size="sm" variant="outline" onClick={addComponent}>
               <Plus className="h-3.5 w-3.5 mr-1" /> Add Component
             </Button>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-4">
             {form.components.map((comp, i) => {
               const totalM = qty && comp.consumption_per_unit
                 ? qty * Number(comp.consumption_per_unit) * (1 + (Number(comp.wastage_percent) || 0) / 100)
                 : null;
               const totalV = totalM && comp.price_per_meter ? totalM * Number(comp.price_per_meter) : null;
 
+              const COMP_COLORS = [
+                "border-blue-400 bg-blue-50",
+                "border-emerald-400 bg-emerald-50",
+                "border-violet-400 bg-violet-50",
+                "border-amber-400 bg-amber-50",
+                "border-rose-400 bg-rose-50",
+                "border-cyan-400 bg-cyan-50",
+                "border-orange-400 bg-orange-50",
+              ];
+              const colorClass = COMP_COLORS[i % COMP_COLORS.length];
+
               return (
-                <div key={i} className="p-3 bg-muted/40 rounded-lg border border-border/60">
-                  {/* Row 1 */}
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-2 items-end">
-                    <div className="space-y-1">
-                      <Label className="text-[10px]">Component</Label>
+                <div key={i} className={`rounded-lg border-l-4 border border-border/60 ${colorClass}`}>
+                  {/* Component Header */}
+                  <div className="flex items-center justify-between px-3 pt-3 pb-2 border-b border-border/30">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-foreground/10 text-[10px] font-bold text-foreground">{i + 1}</span>
                       <select
-                        className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        className="h-8 rounded-md border border-input bg-background px-2 text-xs font-semibold"
                         value={comp.component_type}
                         onChange={(e) => updateComponent(i, "component_type", e.target.value)}
                       >
                         {COMPONENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                       </select>
-                    </div>
-                    <div className="space-y-1 col-span-2">
-                      <Label className="text-[10px]">Fabric Description</Label>
-                      <Input className="h-8 text-xs" value={comp.fabric_description}
+                      <span className="text-[10px] text-muted-foreground">→ uses fabric:</span>
+                      <Input
+                        className="h-8 text-xs w-72 bg-white font-medium"
+                        value={comp.fabric_description}
                         onChange={(e) => updateComponent(i, "fabric_description", e.target.value)}
-                        placeholder="e.g. 100% polyester 105gsm terry w-208cm" />
+                        placeholder="e.g. 105 GSM Terry 100% Polyester w-208cm"
+                      />
                     </div>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeComponent(i)}>
+                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                    </Button>
+                  </div>
+
+                  {/* Fabric Specs */}
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-2 px-3 py-2">
                     <div className="space-y-1">
                       <Label className="text-[10px]">GSM</Label>
                       <Input className="h-8 text-xs" type="number" value={comp.gsm}
-                        onChange={(e) => updateComponent(i, "gsm", e.target.value)} />
+                        onChange={(e) => updateComponent(i, "gsm", e.target.value)} placeholder="e.g. 105" />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-[10px]">Width (cm)</Label>
                       <Input className="h-8 text-xs" type="number" value={comp.width_cm}
-                        onChange={(e) => updateComponent(i, "width_cm", e.target.value)} />
+                        onChange={(e) => updateComponent(i, "width_cm", e.target.value)} placeholder="e.g. 208" />
                     </div>
-                  </div>
-
-                  {/* Row 2 */}
-                  <div className="grid grid-cols-2 md:grid-cols-6 gap-2 items-end">
                     <div className="space-y-1">
                       <Label className="text-[10px]">Direction</Label>
                       <select
@@ -360,18 +378,21 @@ export default function ArticleFormDialog({ open, onOpenChange, onSave, purchase
                     <div className="space-y-1">
                       <Label className="text-[10px]">Cut Size</Label>
                       <Input className="h-8 text-xs" value={comp.cut_size}
-                        onChange={(e) => updateComponent(i, "cut_size", e.target.value)}
-                        placeholder="0.978" />
+                        onChange={(e) => updateComponent(i, "cut_size", e.target.value)} placeholder="e.g. 0.978" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[10px]">Pcs/Width</Label>
+                      <Label className="text-[10px]">Pcs / Width</Label>
                       <Input className="h-8 text-xs" type="number" value={comp.pieces_per_width}
                         onChange={(e) => updateComponent(i, "pieces_per_width", e.target.value)} />
                     </div>
+                  </div>
+
+                  {/* Consumption & Calculation */}
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-2 px-3 pb-3 items-end">
                     <div className="space-y-1">
-                      <Label className="text-[10px]">Consumption/Pc (m)</Label>
-                      <Input className="h-8 text-xs" type="number" step="0.0001" value={comp.consumption_per_unit}
-                        onChange={(e) => updateComponent(i, "consumption_per_unit", e.target.value)} />
+                      <Label className="text-[10px] font-semibold text-primary">Consumption/pc (m) ★</Label>
+                      <Input className="h-8 text-xs border-primary/40 bg-white" type="number" step="0.0001" value={comp.consumption_per_unit}
+                        onChange={(e) => updateComponent(i, "consumption_per_unit", e.target.value)} placeholder="e.g. 1.57" />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-[10px]">Wastage %</Label>
@@ -379,51 +400,36 @@ export default function ArticleFormDialog({ open, onOpenChange, onSave, purchase
                         onChange={(e) => updateComponent(i, "wastage_percent", e.target.value)} />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[10px]">Price/Mtr (USD)</Label>
+                      <Label className="text-[10px]">Price / Mtr (USD)</Label>
                       <Input className="h-8 text-xs" type="number" step="0.01" value={comp.price_per_meter}
                         onChange={(e) => updateComponent(i, "price_per_meter", e.target.value)} />
                     </div>
-                  </div>
-
-                  {/* Row 3: remarks + live calc + delete */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2 items-end">
                     <div className="space-y-1 col-span-2">
                       <Label className="text-[10px]">Remarks</Label>
                       <Input className="h-8 text-xs" value={comp.remarks}
-                        onChange={(e) => updateComponent(i, "remarks", e.target.value)}
-                        placeholder="e.g. 2 pcs cut in a width" />
-                    </div>
-                    {/* Live calculation preview */}
-                    {totalM != null ? (
-                      <div className="col-span-1 rounded-lg border-2 border-primary/30 bg-primary/5 px-3 py-2">
-                        <p className="text-[9px] text-muted-foreground uppercase font-semibold mb-0.5">Calculated Total</p>
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-base font-bold text-primary">{totalM.toFixed(2)}</span>
-                          <span className="text-xs text-muted-foreground">m</span>
-                        </div>
-                        <div className="text-[10px] text-muted-foreground mt-0.5">
-                          Net: {(qty * Number(comp.consumption_per_unit)).toFixed(2)} m
-                          {" + "}
-                          {comp.wastage_percent || 0}% wastage
-                        </div>
-                        {totalV != null && (
-                          <div className="text-[10px] font-semibold text-accent-foreground mt-0.5">
-                            Est. Value: ${totalV.toFixed(0)}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="col-span-1 rounded-lg border border-dashed border-border px-3 py-2">
-                        <p className="text-[9px] text-muted-foreground uppercase font-semibold mb-0.5">Calculated Total</p>
-                        <p className="text-xs text-muted-foreground">Enter Qty + Consumption</p>
-                      </div>
-                    )}
-                    <div className="flex justify-end">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeComponent(i)}>
-                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                      </Button>
+                        onChange={(e) => updateComponent(i, "remarks", e.target.value)} placeholder="e.g. 2 pcs cut per width" />
                     </div>
                   </div>
+
+                  {/* Live calculation preview */}
+                  {totalM != null && (
+                    <div className="mx-3 mb-3 rounded-lg border-2 border-primary/30 bg-white px-3 py-2 flex items-center gap-6">
+                      <div>
+                        <p className="text-[9px] text-muted-foreground uppercase font-semibold">Net Fabric</p>
+                        <p className="text-sm font-bold text-foreground">{(qty * Number(comp.consumption_per_unit)).toFixed(2)} m</p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] text-muted-foreground uppercase font-semibold">+ {comp.wastage_percent || 0}% Wastage</p>
+                        <p className="text-sm font-bold text-primary">{totalM.toFixed(2)} m total</p>
+                      </div>
+                      {totalV != null && (
+                        <div>
+                          <p className="text-[9px] text-muted-foreground uppercase font-semibold">Est. Value</p>
+                          <p className="text-sm font-bold text-emerald-700">${totalV.toFixed(0)}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
