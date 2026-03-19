@@ -10,7 +10,8 @@ import {
   ClipboardList,
   Menu,
   X,
-  Package
+  Package,
+  BarChart2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,7 @@ const navItems = [
   { name: "Dashboard", icon: LayoutDashboard, page: "Dashboard" },
   { name: "Purchase Orders", icon: FileText, page: "PurchaseOrders" },
   { name: "Articles", icon: Layers, page: "Articles" },
+  { name: "Reports", icon: BarChart2, page: "Reports" },
   { name: "Yarn Planning", icon: Scissors, page: "YarnPlanning" },
   { name: "Production", icon: Factory, page: "Production" },
   { name: "Job Cards", icon: ClipboardList, page: "JobCards" },
