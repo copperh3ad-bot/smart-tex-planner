@@ -1,0 +1,142 @@
+import React, { useMemo } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { CheckCircle2, AlertTriangle, HelpCircle, ShieldCheck } from "lucide-react";
+
+function MatchBadge({ status }) {
+  if (status === "Matched")
+    return <Badge className="text-[10px] bg-emerald-100 text-emerald-700 border-emerald-200">✓ Matched</Badge>;
+  if (status === "Mismatch")
+    return <Badge className="text-[10px] bg-red-100 text-red-700 border-red-200">✗ Mismatch</Badge>;
+  return <Badge variant="outline" className="text-[10px] text-muted-foreground">— Not Found</Badge>;
+}
+
+export default function PriceVerification({ poId, items }) {
+  const queryClient = useQueryClient();
+
+  const { data: priceList = [] } = useQuery({
+    queryKey: ["priceList"],
+    queryFn: () => base44.entities.PriceList.list(),
+  });
+
+  const priceMap = useMemo(() => {
+    const m = {};
+    priceList.forEach((p) => { if (p.item_code) m[p.item_code.trim().toUpperCase()] = p; });
+    return m;
+  }, [priceList]);
+
+  const rows = useMemo(() => items.map((item) => {
+    const key = item.item_code?.trim().toUpperCase();
+    const ref = priceMap[key];
+    let priceStatus = "Not Found";
+    let cbmStatus = "Not Found";
+    let refPrice = null;
+    let refCbm = null;
+    let refQtyPerCtn = null;
+
+    if (ref) {
+      refPrice = ref.price_usd;
+      refCbm = ref.cbm_per_carton;
+      refQtyPerCtn = ref.qty_per_carton;
+
+      // Price check
+      if (item.unit_price != null && refPrice != null) {
+        priceStatus = Math.abs(item.unit_price - refPrice) < 0.001 ? "Matched" : "Mismatch";
+      }
+
+      // CBM check: compare cbm per carton derived from item vs price list
+      if (item.cbm != null && refCbm != null && refQtyPerCtn > 0) {
+        const numCartons = item.pieces_per_carton > 0
+          ? Math.ceil(item.quantity / item.pieces_per_carton)
+          : (refQtyPerCtn > 0 ? Math.ceil(item.quantity / refQtyPerCtn) : 0);
+        const expectedCbm = numCartons * refCbm;
+        cbmStatus = Math.abs(item.cbm - expectedCbm) < 0.001 ? "Matched" : "Mismatch";
+      }
+    }
+
+    return { item, ref, priceStatus, cbmStatus, refPrice, refCbm, refQtyPerCtn };
+  }), [items, priceMap]);
+
+  const handleApproveAll = async () => {
+    const matched = rows.filter((r) => r.priceStatus === "Matched" && r.cbmStatus === "Matched");
+    await Promise.all(
+      matched.map((r) => base44.entities.POItem.update(r.item.id, { price_status: "Approved" }))
+    );
+    queryClient.invalidateQueries({ queryKey: ["poItems", poId] });
+  };
+
+  const allMatchCount = rows.filter((r) => r.priceStatus === "Matched" && r.cbmStatus === "Matched").length;
+  const mismatchCount = rows.filter((r) => r.priceStatus === "Mismatch" || r.cbmStatus === "Mismatch").length;
+  const notFoundCount = rows.filter((r) => r.priceStatus === "Not Found").length;
+
+  if (items.length === 0) return null;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3 flex flex-row items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-primary" />
+          <CardTitle className="text-sm font-semibold">Price & CBM Verification (Bob's Price List)</CardTitle>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex gap-2 text-xs">
+            <span className="text-emerald-600 font-medium flex items-center gap-1">
+              <CheckCircle2 className="h-3 w-3" /> {allMatchCount} Matched
+            </span>
+            {mismatchCount > 0 && (
+              <span className="text-red-600 font-medium flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" /> {mismatchCount} Mismatch
+              </span>
+            )}
+            {notFoundCount > 0 && (
+              <span className="text-muted-foreground flex items-center gap-1">
+                <HelpCircle className="h-3 w-3" /> {notFoundCount} Not Found
+              </span>
+            )}
+          </div>
+          {allMatchCount > 0 && (
+            <Button size="sm" variant="outline" onClick={handleApproveAll} className="text-xs h-7">
+              Approve All Matched
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50">
+                <TableHead className="text-xs">Item Code</TableHead>
+                <TableHead className="text-xs">Size / Description</TableHead>
+                <TableHead className="text-xs">PO Price</TableHead>
+                <TableHead className="text-xs">Ref Price</TableHead>
+                <TableHead className="text-xs">Price Check</TableHead>
+                <TableHead className="text-xs hidden md:table-cell">PO CBM</TableHead>
+                <TableHead className="text-xs hidden md:table-cell">Ref CBM/Ctn</TableHead>
+                <TableHead className="text-xs">CBM Check</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map(({ item, ref, priceStatus, cbmStatus, refPrice, refCbm }) => (
+                <TableRow key={item.id} className="hover:bg-muted/30">
+                  <TableCell className="text-xs font-medium">{item.item_code}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{item.item_description || item.fabric_type || "—"}</TableCell>
+                  <TableCell className="text-xs">{item.unit_price != null ? `$${item.unit_price}` : "—"}</TableCell>
+                  <TableCell className="text-xs">{refPrice != null ? `$${refPrice}` : "—"}</TableCell>
+                  <TableCell><MatchBadge status={priceStatus} /></TableCell>
+                  <TableCell className="text-xs hidden md:table-cell">{item.cbm?.toFixed(4) ?? "—"}</TableCell>
+                  <TableCell className="text-xs hidden md:table-cell">{refCbm != null ? refCbm.toFixed(4) : "—"}</TableCell>
+                  <TableCell><MatchBadge status={cbmStatus} /></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
