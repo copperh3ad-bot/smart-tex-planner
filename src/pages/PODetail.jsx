@@ -11,6 +11,7 @@ import POWorkflowSteps from "../components/po/POWorkflowSteps";
 import POItemsTable from "../components/po/POItemsTable";
 import POItemFormDialog from "../components/po/POItemFormDialog";
 import POFormDialog from "../components/po/POFormDialog";
+import PriceVerification from "../components/po/PriceVerification";
 
 export default function PODetail() {
   const urlParams = new URLSearchParams(window.location.search);
@@ -108,6 +109,8 @@ export default function PODetail() {
         onEdit={handleEditItem}
         onDelete={handleDeleteItem}
       />
+
+      <PriceVerification poId={poId} items={items} />
 
       <POItemFormDialog
         open={showItemForm}
