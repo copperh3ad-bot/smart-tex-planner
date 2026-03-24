@@ -1,43 +1,87 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery } from "@tanstack/react-query";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { CheckCircle2, AlertTriangle, HelpCircle } from "lucide-react";
 
 const units = ["Meters", "Yards", "Kgs", "Pieces", "Rolls"];
 const packingMethods = ["Roll", "Bale", "Carton", "Pallet"];
 
+const defaultForm = {
+  item_code: "", item_description: "", fabric_type: "", gsm: "", width: "",
+  quantity: "", unit: "Meters", unit_price: "", delivery_date: "",
+  fabric_construction: "", finish: "", shrinkage: "", packing_method: "Roll",
+  carton_length: "", carton_width: "", carton_height: "",
+  pieces_per_carton: "", expected_price: "",
+  num_cartons: "", cbm: "",
+};
+
 export default function POItemFormDialog({ open, onOpenChange, onSave, poId, poNumber, initialData }) {
-  const defaultForm = {
-    item_code: "", item_description: "", fabric_type: "", gsm: "", width: "",
-    quantity: "", unit: "Meters", unit_price: "", delivery_date: "",
-    fabric_construction: "", finish: "", shrinkage: "", packing_method: "Roll",
-    carton_length: "", carton_width: "", carton_height: "", pieces_per_carton: "", expected_price: "",
-  };
   const [form, setForm] = useState(initialData || defaultForm);
   const [saving, setSaving] = useState(false);
 
-  React.useEffect(() => {
-    setForm(initialData || defaultForm);
+  useEffect(() => {
+    setForm(initialData ? { ...defaultForm, ...initialData } : defaultForm);
   }, [initialData, open]);
 
+  const { data: priceList = [] } = useQuery({
+    queryKey: ["priceList"],
+    queryFn: () => base44.entities.PriceList.list(),
+  });
+
+  const priceMap = useMemo(() => {
+    const m = {};
+    priceList.forEach((p) => { if (p.item_code) m[p.item_code.trim().toUpperCase()] = p; });
+    return m;
+  }, [priceList]);
+
+  const ref = priceMap[form.item_code?.trim().toUpperCase()];
+
+  // Auto-calculate cartons & CBM when quantity or ref changes
+  useEffect(() => {
+    if (!ref) return;
+    const qty = Number(form.quantity) || 0;
+    if (qty > 0 && ref.qty_per_carton > 0) {
+      const numCartons = Math.ceil(qty / ref.qty_per_carton);
+      const cbm = Number((numCartons * ref.cbm_per_carton).toFixed(4));
+      setForm((p) => ({ ...p, pieces_per_carton: ref.qty_per_carton, num_cartons: numCartons, cbm }));
+    }
+  }, [form.quantity, form.item_code, ref]);
+
   const update = (key, val) => setForm((p) => ({ ...p, [key]: val }));
+
+  // Price check status
+  const priceCheck = useMemo(() => {
+    if (!ref) return "not_found";
+    if (!form.unit_price) return "pending";
+    return Math.abs(Number(form.unit_price) - ref.price_usd) < 0.001 ? "matched" : "mismatch";
+  }, [form.unit_price, ref]);
+
+  const handleApprovePrice = () => {
+    if (ref) update("unit_price", ref.price_usd);
+  };
 
   const handleSave = async () => {
     setSaving(true);
     const qty = Number(form.quantity) || 0;
     const price = Number(form.unit_price) || 0;
-    const cL = Number(form.carton_length) || 0;
-    const cW = Number(form.carton_width) || 0;
-    const cH = Number(form.carton_height) || 0;
-    const ppc = Number(form.pieces_per_carton) || 1;
-    const numCartons = ppc > 0 ? Math.ceil(qty / ppc) : 0;
-    const cbm = (cL * cW * cH * numCartons) / 1000000;
+    const numCartons = Number(form.num_cartons) || 0;
+    const cbm = Number(form.cbm) || 0;
+
+    // price_status
+    let price_status = "Pending";
+    if (ref && price) {
+      price_status = Math.abs(price - ref.price_usd) < 0.001 ? "Approved" : "Mismatch";
+    }
 
     await onSave({
       ...form,
@@ -48,15 +92,23 @@ export default function POItemFormDialog({ open, onOpenChange, onSave, poId, poN
       quantity: qty,
       unit_price: price,
       total_price: qty * price,
-      expected_price: Number(form.expected_price) || undefined,
-      carton_length: cL || undefined,
-      carton_width: cW || undefined,
-      carton_height: cH || undefined,
+      expected_price: ref ? ref.price_usd : (Number(form.expected_price) || undefined),
       pieces_per_carton: Number(form.pieces_per_carton) || undefined,
-      cbm: cbm > 0 ? Number(cbm.toFixed(4)) : undefined,
-      price_status: form.expected_price && price !== Number(form.expected_price) ? "Mismatch" : form.expected_price ? "Matched" : "Pending",
+      num_cartons: numCartons || undefined,
+      cbm: cbm > 0 ? cbm : undefined,
+      price_status,
     });
     setSaving(false);
+  };
+
+  const PriceCheckBadge = () => {
+    if (priceCheck === "matched")
+      return <Badge className="text-[10px] bg-emerald-100 text-emerald-700 border-emerald-200 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Matched</Badge>;
+    if (priceCheck === "mismatch")
+      return <Badge className="text-[10px] bg-red-100 text-red-700 border-red-200 flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> Mismatch</Badge>;
+    if (priceCheck === "not_found")
+      return <Badge variant="outline" className="text-[10px] text-muted-foreground flex items-center gap-1"><HelpCircle className="h-3 w-3" /> Not in Price List</Badge>;
+    return null;
   };
 
   return (
@@ -67,9 +119,10 @@ export default function POItemFormDialog({ open, onOpenChange, onSave, poId, poN
         </DialogHeader>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+          {/* Basic Info */}
           <div className="space-y-1.5">
             <Label className="text-xs">Item Code / Quality *</Label>
-            <Input value={form.item_code} onChange={(e) => update("item_code", e.target.value)} placeholder="ITM-001" />
+            <Input value={form.item_code} onChange={(e) => update("item_code", e.target.value)} placeholder="e.g. GPMP33" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Description</Label>
@@ -99,18 +152,105 @@ export default function POItemFormDialog({ open, onOpenChange, onSave, poId, poN
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Unit Price</Label>
-            <Input type="number" step="0.01" value={form.unit_price} onChange={(e) => update("unit_price", e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Expected Price (from price list)</Label>
-            <Input type="number" step="0.01" value={form.expected_price} onChange={(e) => update("expected_price", e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
             <Label className="text-xs">Delivery Date</Label>
             <Input type="date" value={form.delivery_date} onChange={(e) => update("delivery_date", e.target.value)} />
           </div>
 
+          {/* Price Section */}
+          <div className="md:col-span-2 border-t pt-4 mt-2">
+            <p className="text-xs font-semibold text-foreground mb-3">Pricing & Verification</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Unit Price (USD)</Label>
+            <Input type="number" step="0.01" value={form.unit_price} onChange={(e) => update("unit_price", e.target.value)} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Reference Price (from Bob's List)</Label>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 px-3 py-2 bg-muted rounded-md text-sm font-medium text-foreground">
+                {ref ? `$${ref.price_usd}` : <span className="text-muted-foreground text-xs">Item not found in price list</span>}
+              </div>
+              {ref && priceCheck !== "matched" && (
+                <Button type="button" size="sm" variant="outline" className="text-xs whitespace-nowrap" onClick={handleApprovePrice}>
+                  Use Ref Price
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="md:col-span-2 flex items-center gap-3">
+            <PriceCheckBadge />
+            {ref && (
+              <span className="text-xs text-muted-foreground">
+                Article: <span className="font-medium text-foreground">{ref.article}</span>
+                {ref.size && <> · Size: <span className="font-medium text-foreground">{ref.size}</span></>}
+                {ref.program_code && <> · Program: <span className="font-medium text-foreground">{ref.program_code}</span></>}
+              </span>
+            )}
+          </div>
+
+          {/* CBM / Carton Section */}
+          <div className="md:col-span-2 border-t pt-4 mt-2">
+            <p className="text-xs font-semibold text-foreground mb-1">CBM / Carton Calculation</p>
+            {ref && (
+              <p className="text-xs text-muted-foreground mb-3">
+                Auto-calculated from price list: <span className="font-medium text-foreground">{ref.qty_per_carton} pcs/ctn</span> · <span className="font-medium text-foreground">{ref.cbm_per_carton} CBM/ctn</span>
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Qty per Carton (Pcs/Ctn)</Label>
+            <Input
+              type="number"
+              value={form.pieces_per_carton}
+              onChange={(e) => {
+                update("pieces_per_carton", e.target.value);
+                const qty = Number(form.quantity) || 0;
+                const ppc = Number(e.target.value) || 0;
+                if (qty > 0 && ppc > 0) {
+                  const nc = Math.ceil(qty / ppc);
+                  setForm((p) => ({ ...p, pieces_per_carton: e.target.value, num_cartons: nc }));
+                }
+              }}
+              placeholder={ref ? String(ref.qty_per_carton) : ""}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">No. of Cartons</Label>
+            <Input
+              type="number"
+              value={form.num_cartons}
+              onChange={(e) => {
+                const nc = Number(e.target.value) || 0;
+                const cbmPerCtn = ref?.cbm_per_carton || 0;
+                setForm((p) => ({ ...p, num_cartons: e.target.value, cbm: cbmPerCtn > 0 ? Number((nc * cbmPerCtn).toFixed(4)) : p.cbm }));
+              }}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">CBM per Carton (Ref)</Label>
+            <div className="px-3 py-2 bg-muted rounded-md text-sm font-medium text-foreground">
+              {ref ? ref.cbm_per_carton : <span className="text-muted-foreground text-xs">—</span>}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold">Total CBM</Label>
+            <Input
+              type="number"
+              step="0.0001"
+              value={form.cbm}
+              onChange={(e) => update("cbm", e.target.value)}
+              className="font-semibold"
+            />
+          </div>
+
+          {/* FWS */}
           <div className="md:col-span-2 border-t pt-4 mt-2">
             <p className="text-xs font-semibold text-foreground mb-3">Fabric Working Sheet (FWS)</p>
           </div>
@@ -127,31 +267,12 @@ export default function POItemFormDialog({ open, onOpenChange, onSave, poId, poN
             <Input value={form.shrinkage} onChange={(e) => update("shrinkage", e.target.value)} placeholder="e.g. 3% x 5%" />
           </div>
 
-          <div className="md:col-span-2 border-t pt-4 mt-2">
-            <p className="text-xs font-semibold text-foreground mb-3">CBM / Packaging</p>
-          </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Packing Method</Label>
             <Select value={form.packing_method} onValueChange={(v) => update("packing_method", v)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>{packingMethods.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
             </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Pieces per Carton</Label>
-            <Input type="number" value={form.pieces_per_carton} onChange={(e) => update("pieces_per_carton", e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Carton Length (cm)</Label>
-            <Input type="number" value={form.carton_length} onChange={(e) => update("carton_length", e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Carton Width (cm)</Label>
-            <Input type="number" value={form.carton_width} onChange={(e) => update("carton_width", e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Carton Height (cm)</Label>
-            <Input type="number" value={form.carton_height} onChange={(e) => update("carton_height", e.target.value)} />
           </div>
         </div>
 

@@ -15,7 +15,7 @@ function MatchBadge({ status }) {
   return <Badge variant="outline" className="text-[10px] text-muted-foreground">— Not Found</Badge>;
 }
 
-export default function PriceVerification({ poId, items }) {
+export default function PriceVerification({ poId, items, onEditItem }) {
   const queryClient = useQueryClient();
 
   const { data: priceList = [] } = useQuery({
@@ -64,8 +64,22 @@ export default function PriceVerification({ poId, items }) {
   const handleApproveAll = async () => {
     const matched = rows.filter((r) => r.priceStatus === "Matched" && r.cbmStatus === "Matched");
     await Promise.all(
-      matched.map((r) => base44.entities.POItem.update(r.item.id, { price_status: "Approved" }))
+      matched.map((r) => base44.entities.POItem.update(r.item.id, { price_status: "Approved", expected_price: r.refPrice }))
     );
+    queryClient.invalidateQueries({ queryKey: ["poItems", poId] });
+  };
+
+  const handleApproveRow = async (row) => {
+    await base44.entities.POItem.update(row.item.id, {
+      price_status: "Approved",
+      unit_price: row.refPrice,
+      expected_price: row.refPrice,
+      pieces_per_carton: row.refQtyPerCtn,
+      num_cartons: row.item.quantity > 0 && row.refQtyPerCtn > 0 ? Math.ceil(row.item.quantity / row.refQtyPerCtn) : row.item.num_cartons,
+      cbm: row.item.quantity > 0 && row.refQtyPerCtn > 0
+        ? Number((Math.ceil(row.item.quantity / row.refQtyPerCtn) * row.refCbm).toFixed(4))
+        : row.item.cbm,
+    });
     queryClient.invalidateQueries({ queryKey: ["poItems", poId] });
   };
 
@@ -118,8 +132,11 @@ export default function PriceVerification({ poId, items }) {
                 <TableHead className="text-xs hidden md:table-cell">PO CBM</TableHead>
                 <TableHead className="text-xs hidden md:table-cell">Ref CBM/Ctn</TableHead>
                 <TableHead className="text-xs">CBM Check</TableHead>
-              </TableRow>
-            </TableHeader>
+                <TableHead className="text-xs">No. Ctns</TableHead>
+                <TableHead className="text-xs">Total CBM</TableHead>
+                <TableHead className="text-xs w-20"></TableHead>
+                </TableRow>
+                </TableHeader>
             <TableBody>
               {rows.map(({ item, ref, priceStatus, cbmStatus, refPrice, refCbm }) => (
                 <TableRow key={item.id} className="hover:bg-muted/30">
@@ -131,6 +148,22 @@ export default function PriceVerification({ poId, items }) {
                   <TableCell className="text-xs hidden md:table-cell">{item.cbm?.toFixed(4) ?? "—"}</TableCell>
                   <TableCell className="text-xs hidden md:table-cell">{refCbm != null ? refCbm.toFixed(4) : "—"}</TableCell>
                   <TableCell><MatchBadge status={cbmStatus} /></TableCell>
+                  <TableCell className="text-xs">
+                    {item.num_cartons ?? (ref && item.quantity > 0 && ref.qty_per_carton > 0 ? Math.ceil(item.quantity / ref.qty_per_carton) : "—")}
+                  </TableCell>
+                  <TableCell className="text-xs font-medium">
+                    {item.cbm?.toFixed(4) ?? "—"}
+                  </TableCell>
+                  <TableCell>
+                    {ref && priceStatus !== "Matched" && (
+                      <Button size="sm" variant="outline" className="text-[10px] h-6 px-2" onClick={() => handleApproveRow({ item, ref, refPrice, refCbm, refQtyPerCtn, priceStatus, cbmStatus })}>
+                        Approve
+                      </Button>
+                    )}
+                    {ref && priceStatus === "Matched" && (
+                      <Badge className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">✓ Approved</Badge>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
