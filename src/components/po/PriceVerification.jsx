@@ -138,7 +138,7 @@ export default function PriceVerification({ poId, items, onEditItem }) {
                 </TableRow>
                 </TableHeader>
             <TableBody>
-              {rows.map(({ item, ref, priceStatus, cbmStatus, refPrice, refCbm }) => (
+              {rows.map(({ item, ref, priceStatus, cbmStatus, refPrice, refCbm, refQtyPerCtn }) => (
                 <TableRow key={item.id} className="hover:bg-muted/30">
                   <TableCell className="text-xs font-medium">{item.item_code}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{item.item_description || item.fabric_type || "—"}</TableCell>
