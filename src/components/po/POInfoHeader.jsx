@@ -33,6 +33,12 @@ export default function POInfoHeader({ po }) {
             </div>
           ))}
         </div>
+        {po.notes && (
+          <div className="mt-4 pt-3 border-t border-border">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Notes / Reference</p>
+            <p className="text-xs text-muted-foreground">{po.notes}</p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

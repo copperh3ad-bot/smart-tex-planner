@@ -13,29 +13,18 @@ const units = ["Meters", "Yards", "Kgs", "Pieces", "Rolls"];
 const packingMethods = ["Roll", "Bale", "Carton", "Pallet"];
 
 export default function POItemFormDialog({ open, onOpenChange, onSave, poId, poNumber, initialData }) {
-  const [form, setForm] = useState(
-    initialData || {
-      item_code: "",
-      item_description: "",
-      fabric_type: "",
-      gsm: "",
-      width: "",
-      quantity: "",
-      unit: "Meters",
-      unit_price: "",
-      delivery_date: "",
-      fabric_construction: "",
-      finish: "",
-      shrinkage: "",
-      packing_method: "Roll",
-      carton_length: "",
-      carton_width: "",
-      carton_height: "",
-      pieces_per_carton: "",
-      expected_price: "",
-    }
-  );
+  const defaultForm = {
+    item_code: "", item_description: "", fabric_type: "", gsm: "", width: "",
+    quantity: "", unit: "Meters", unit_price: "", delivery_date: "",
+    fabric_construction: "", finish: "", shrinkage: "", packing_method: "Roll",
+    carton_length: "", carton_width: "", carton_height: "", pieces_per_carton: "", expected_price: "",
+  };
+  const [form, setForm] = useState(initialData || defaultForm);
   const [saving, setSaving] = useState(false);
+
+  React.useEffect(() => {
+    setForm(initialData || defaultForm);
+  }, [initialData, open]);
 
   const update = (key, val) => setForm((p) => ({ ...p, [key]: val }));
 

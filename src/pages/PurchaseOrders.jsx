@@ -107,9 +107,10 @@ export default function PurchaseOrders() {
                     <TableHead className="text-xs">Customer</TableHead>
                     <TableHead className="text-xs hidden md:table-cell">Order Date</TableHead>
                     <TableHead className="text-xs hidden lg:table-cell">Delivery Date</TableHead>
+                    <TableHead className="text-xs hidden xl:table-cell">ETD</TableHead>
                     <TableHead className="text-xs">Value</TableHead>
                     <TableHead className="text-xs hidden md:table-cell">Qty</TableHead>
-                    <TableHead className="text-xs">Status</TableHead>
+                    <TableHead className="text-xs hidden lg:table-cell">CBM</TableHead>
                     <TableHead className="text-xs w-10"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -128,11 +129,14 @@ export default function PurchaseOrders() {
                       <TableCell className="text-xs text-muted-foreground hidden lg:table-cell">
                         {po.delivery_date ? format(new Date(po.delivery_date), "dd MMM yyyy") : "—"}
                       </TableCell>
+                      <TableCell className="text-xs text-muted-foreground hidden xl:table-cell">
+                        {po.etd ? format(new Date(po.etd), "dd MMM yyyy") : "—"}
+                      </TableCell>
                       <TableCell className="text-xs font-medium">
                         {po.currency} {po.total_po_value?.toLocaleString() || "—"}
                       </TableCell>
                       <TableCell className="text-xs hidden md:table-cell">{po.total_quantity?.toLocaleString() || "—"}</TableCell>
-                      <TableCell><StatusBadge status={po.status} /></TableCell>
+                      <TableCell className="text-xs hidden lg:table-cell">{po.total_cbm?.toFixed(2) || "—"}</TableCell>
                       <TableCell>
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDelete(po.id)}>
                           <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
