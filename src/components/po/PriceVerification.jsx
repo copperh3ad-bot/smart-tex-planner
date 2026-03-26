@@ -43,18 +43,21 @@ export default function PriceVerification({ poId, items, onEditItem }) {
       refCbm = ref.cbm_per_carton;
       refQtyPerCtn = ref.qty_per_carton;
 
-      // Price check
-      if (item.unit_price != null && refPrice != null) {
-        priceStatus = Math.abs(item.unit_price - refPrice) < 0.001 ? "Matched" : "Mismatch";
+      // Always compute live from actual stored unit_price vs ref — never trust stored price_status
+      if (item.unit_price != null && item.unit_price > 0 && refPrice != null) {
+        priceStatus = Math.abs(Number(item.unit_price) - Number(refPrice)) < 0.001 ? "Matched" : "Mismatch";
+      } else {
+        priceStatus = "Pending";
       }
 
-      // CBM check: compare cbm per carton derived from item vs price list
+      // CBM check
       if (item.cbm != null && refCbm != null && refQtyPerCtn > 0) {
-        const numCartons = item.pieces_per_carton > 0
-          ? Math.ceil(item.quantity / item.pieces_per_carton)
-          : (refQtyPerCtn > 0 ? Math.ceil(item.quantity / refQtyPerCtn) : 0);
+        const ppc = item.pieces_per_carton > 0 ? item.pieces_per_carton : refQtyPerCtn;
+        const numCartons = Math.ceil(item.quantity / ppc);
         const expectedCbm = numCartons * refCbm;
-        cbmStatus = Math.abs(item.cbm - expectedCbm) < 0.001 ? "Matched" : "Mismatch";
+        cbmStatus = Math.abs(item.cbm - expectedCbm) < 0.005 ? "Matched" : "Mismatch";
+      } else {
+        cbmStatus = "Pending";
       }
     }
 

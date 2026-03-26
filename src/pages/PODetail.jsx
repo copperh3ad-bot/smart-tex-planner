@@ -110,7 +110,7 @@ export default function PODetail() {
         onDelete={handleDeleteItem}
       />
 
-      <PriceVerification poId={poId} items={items} />
+      <PriceVerification poId={poId} items={items} onEditItem={handleEditItem} />
 
       <POItemFormDialog
         open={showItemForm}

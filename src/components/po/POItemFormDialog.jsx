@@ -77,10 +77,12 @@ export default function POItemFormDialog({ open, onOpenChange, onSave, poId, poN
     const numCartons = Number(form.num_cartons) || 0;
     const cbm = Number(form.cbm) || 0;
 
-    // price_status
+    // price_status - use live computed priceCheck state
     let price_status = "Pending";
-    if (ref && price) {
-      price_status = Math.abs(price - ref.price_usd) < 0.001 ? "Approved" : "Mismatch";
+    if (price > 0) {
+      if (ref) {
+        price_status = Math.abs(price - ref.price_usd) < 0.001 ? "Matched" : "Mismatch";
+      }
     }
 
     await onSave({
