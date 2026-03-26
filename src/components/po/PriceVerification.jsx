@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, AlertTriangle, HelpCircle, ShieldCheck } from "lucide-react";
+import { CheckCircle2, AlertTriangle, HelpCircle, ShieldCheck, Pencil } from "lucide-react";
 
 function MatchBadge({ status }) {
   if (status === "Matched")
@@ -134,7 +134,7 @@ export default function PriceVerification({ poId, items, onEditItem }) {
                 <TableHead className="text-xs">CBM Check</TableHead>
                 <TableHead className="text-xs">No. Ctns</TableHead>
                 <TableHead className="text-xs">Total CBM</TableHead>
-                <TableHead className="text-xs w-20"></TableHead>
+                <TableHead className="text-xs w-28"></TableHead>
                 </TableRow>
                 </TableHeader>
             <TableBody>
@@ -155,14 +155,21 @@ export default function PriceVerification({ poId, items, onEditItem }) {
                     {item.cbm?.toFixed(4) ?? "—"}
                   </TableCell>
                   <TableCell>
-                    {ref && priceStatus !== "Matched" && (
-                      <Button size="sm" variant="outline" className="text-[10px] h-6 px-2" onClick={() => handleApproveRow({ item, ref, refPrice, refCbm, refQtyPerCtn, priceStatus, cbmStatus })}>
-                        Approve
-                      </Button>
-                    )}
-                    {ref && priceStatus === "Matched" && (
-                      <Badge className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">✓ Approved</Badge>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {ref && priceStatus !== "Matched" && (
+                        <Button size="sm" variant="outline" className="text-[10px] h-6 px-2" onClick={() => handleApproveRow({ item, ref, refPrice, refCbm, refQtyPerCtn, priceStatus, cbmStatus })}>
+                          Approve
+                        </Button>
+                      )}
+                      {ref && priceStatus === "Matched" && (
+                        <Badge className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">✓ Approved</Badge>
+                      )}
+                      {onEditItem && (
+                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => onEditItem(item)} title="Edit Item">
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
