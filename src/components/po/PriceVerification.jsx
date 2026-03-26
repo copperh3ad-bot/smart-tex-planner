@@ -1,22 +1,31 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, AlertTriangle, HelpCircle, ShieldCheck, Pencil } from "lucide-react";
+import { CheckCircle2, AlertTriangle, HelpCircle, ShieldCheck, Pencil, Check, X } from "lucide-react";
 
 function MatchBadge({ status }) {
   if (status === "Matched")
-    return <Badge className="text-[10px] bg-emerald-100 text-emerald-700 border-emerald-200">✓ Matched</Badge>;
+    return <Badge className="text-[10px] bg-emerald-100 text-emerald-700 border-emerald-200"><CheckCircle2 className="h-2.5 w-2.5 mr-0.5" /> Approved</Badge>;
   if (status === "Mismatch")
-    return <Badge className="text-[10px] bg-red-100 text-red-700 border-red-200">✗ Mismatch</Badge>;
+    return <Badge className="text-[10px] bg-red-100 text-red-700 border-red-200"><AlertTriangle className="h-2.5 w-2.5 mr-0.5" /> Mismatch</Badge>;
+  if (status === "Pending")
+    return <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300 bg-amber-50">Pending</Badge>;
   return <Badge variant="outline" className="text-[10px] text-muted-foreground">— Not Found</Badge>;
 }
 
 export default function PriceVerification({ poId, items, onEditItem }) {
   const queryClient = useQueryClient();
+  const [editingRefPrice, setEditingRefPrice] = useState({}); // { [item_code]: string }
+
+  const handleSaveRefPrice = async (itemCode, priceListId, newPrice) => {
+    await base44.entities.PriceList.update(priceListId, { price_usd: Number(newPrice) });
+    queryClient.invalidateQueries({ queryKey: ["priceList"] });
+    setEditingRefPrice((p) => { const n = { ...p }; delete n[itemCode]; return n; });
+  };
 
   const { data: priceList = [] } = useQuery({
     queryKey: ["priceList"],
@@ -146,7 +155,28 @@ export default function PriceVerification({ poId, items, onEditItem }) {
                   <TableCell className="text-xs font-medium">{item.item_code}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{item.item_description || item.fabric_type || "—"}</TableCell>
                   <TableCell className="text-xs">{item.unit_price != null ? `$${item.unit_price}` : "—"}</TableCell>
-                  <TableCell className="text-xs">{refPrice != null ? `$${refPrice}` : "—"}</TableCell>
+                  <TableCell className="text-xs">
+                    {ref ? (
+                      editingRefPrice[item.item_code] !== undefined ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            className="w-20 border rounded px-1 py-0.5 text-xs"
+                            value={editingRefPrice[item.item_code]}
+                            onChange={(e) => setEditingRefPrice((p) => ({ ...p, [item.item_code]: e.target.value }))}
+                          />
+                          <button className="text-emerald-600 hover:text-emerald-800" onClick={() => handleSaveRefPrice(item.item_code, ref.id, editingRefPrice[item.item_code])}><Check className="h-3 w-3" /></button>
+                          <button className="text-muted-foreground hover:text-foreground" onClick={() => setEditingRefPrice((p) => { const n={...p}; delete n[item.item_code]; return n; })}><X className="h-3 w-3" /></button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 group">
+                          <span>${refPrice}</span>
+                          <button className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground" onClick={() => setEditingRefPrice((p) => ({ ...p, [item.item_code]: refPrice }))}><Pencil className="h-2.5 w-2.5" /></button>
+                        </div>
+                      )
+                    ) : "—"}
+                  </TableCell>
                   <TableCell><MatchBadge status={priceStatus} /></TableCell>
                   <TableCell className="text-xs hidden md:table-cell">{item.cbm?.toFixed(4) ?? "—"}</TableCell>
                   <TableCell className="text-xs hidden md:table-cell">{refCbm != null ? refCbm.toFixed(4) : "—"}</TableCell>
