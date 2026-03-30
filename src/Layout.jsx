@@ -10,13 +10,17 @@ import {
   ClipboardList,
   Menu,
   X,
-  Package
+  Package,
+  Receipt,
+  Shirt
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { name: "Dashboard", icon: LayoutDashboard, page: "Dashboard" },
   { name: "Purchase Orders", icon: FileText, page: "PurchaseOrders" },
+  { name: "Proforma Invoice", icon: Receipt, page: "ProformaInvoice" },
+  { name: "Fabric Working", icon: Shirt, page: "FabricWorking" },
   { name: "Articles", icon: Layers, page: "Articles" },
   { name: "Yarn Planning", icon: Scissors, page: "YarnPlanning" },
   { name: "Production", icon: Factory, page: "Production" },
