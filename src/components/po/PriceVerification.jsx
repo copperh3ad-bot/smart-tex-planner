@@ -170,9 +170,9 @@ export default function PriceVerification({ poId, items, onEditItem }) {
                           <button className="text-muted-foreground hover:text-foreground" onClick={() => setEditingRefPrice((p) => { const n={...p}; delete n[item.item_code]; return n; })}><X className="h-3 w-3" /></button>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-1 group">
+                        <div className="flex items-center gap-1">
                           <span>${refPrice}</span>
-                          <button className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground" onClick={() => setEditingRefPrice((p) => ({ ...p, [item.item_code]: refPrice }))}><Pencil className="h-2.5 w-2.5" /></button>
+                          <button className="text-muted-foreground hover:text-primary" onClick={() => setEditingRefPrice((p) => ({ ...p, [item.item_code]: refPrice }))}><Pencil className="h-3 w-3" /></button>
                         </div>
                       )
                     ) : "—"}
