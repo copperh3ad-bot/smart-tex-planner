@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Printer, ArrowLeft, Pencil, Save, X, ChevronDown } from "lucide-react";
+import { Printer, ArrowLeft, Pencil, Save, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -117,7 +117,15 @@ export default function ProformaInvoice() {
   if (!po && pos.length > 0) return null;
 
   return (
-    <>
+    <div>
+      <style>{`
+        @media print {
+          .print-hidden { display: none !important; }
+          @page { margin: 1cm; size: A4; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+      `}</style>
+
       {/* Toolbar */}
       <div className="flex items-center justify-between mb-4 print-hidden gap-3 flex-wrap">
         <div className="flex items-center gap-3">
@@ -154,10 +162,15 @@ export default function ProformaInvoice() {
         {/* Company Header */}
         <div className="border-b-2 border-gray-800 px-6 py-4">
           <div className="flex items-center justify-between">
-            {/* Logo area */}
             <div className="flex items-center gap-3">
               <img src="https://media.base44.com/images/public/69ae7db4de05f431bd9ae6e1/cafccf4cf_image.png" alt="Union Fabrics Logo" className="h-20 w-auto object-contain" />
               <div>
+                <div className="text-lg font-black text-gray-900 tracking-wide">UNION FABRICS LTD.</div>
+                <div className="text-xs text-gray-600">E20/B Central Avenue Site, Karachi, PK 75700</div>
+                <div className="text-xs text-gray-600">Tel: +92 21 32567881</div>
+              </div>
+            </div>
+            <div className="text-right">
               <div className="text-xl font-black text-primary uppercase tracking-widest">Proforma Invoice</div>
               <div className="text-xs text-gray-500 mt-0.5">Sales Confirmation</div>
             </div>
@@ -224,7 +237,7 @@ export default function ProformaInvoice() {
           {/* Addresses */}
           <div className="grid grid-cols-2 gap-0 border border-gray-400 mb-3">
             <div className="border-r border-gray-400 p-2">
-              <div className="font-bold text-gray-700 mb-1 text-xs uppercase">Buyer's Name & Address:</div>
+              <div className="font-bold text-gray-700 mb-1 text-xs uppercase">Buyer's Name &amp; Address:</div>
               {editMode ? (
                 <div className="space-y-1">
                   <input className="border rounded px-1 w-full text-xs font-bold" value={editHeader.buyer_name || ""} onChange={(e) => setEditHeader((h) => ({ ...h, buyer_name: e.target.value }))} />
@@ -237,7 +250,7 @@ export default function ProformaInvoice() {
               )}
             </div>
             <div className="p-2">
-              <div className="font-bold text-gray-700 mb-1 text-xs uppercase">Ship to Party Name & Address:</div>
+              <div className="font-bold text-gray-700 mb-1 text-xs uppercase">Ship to Party Name &amp; Address:</div>
               {editMode ? (
                 <div className="space-y-1">
                   <input className="border rounded px-1 w-full text-xs font-bold" value={editHeader.ship_to_name || ""} onChange={(e) => setEditHeader((h) => ({ ...h, ship_to_name: e.target.value }))} />
@@ -254,13 +267,16 @@ export default function ProformaInvoice() {
           {/* Shipping / Port Info */}
           <div className="border border-gray-400 mb-3 p-2">
             <div className="grid grid-cols-3 gap-4 text-xs">
-              <div><span className="font-bold text-gray-600">Port of Loading: </span>
+              <div>
+                <span className="font-bold text-gray-600">Port of Loading: </span>
                 {editMode ? <input className="border rounded px-1 text-xs" value={editHeader.port_loading || ""} onChange={(e) => setEditHeader((h) => ({ ...h, port_loading: e.target.value }))} /> : "Karachi, Pakistan"}
               </div>
-              <div><span className="font-bold text-gray-600">Port of Discharge: </span>
+              <div>
+                <span className="font-bold text-gray-600">Port of Discharge: </span>
                 {editMode ? <input className="border rounded px-1 text-xs" value={editHeader.port_discharge || ""} onChange={(e) => setEditHeader((h) => ({ ...h, port_discharge: e.target.value }))} /> : "USA"}
               </div>
-              <div><span className="font-bold text-gray-600">Country of Origin: </span>
+              <div>
+                <span className="font-bold text-gray-600">Country of Origin: </span>
                 {editMode ? <input className="border rounded px-1 text-xs" value={editHeader.country_origin || ""} onChange={(e) => setEditHeader((h) => ({ ...h, country_origin: e.target.value }))} /> : "Pakistan"}
               </div>
             </div>
@@ -345,26 +361,18 @@ export default function ProformaInvoice() {
             <div>
               <div className="border-t-2 border-gray-700 pt-2 mt-10">
                 <p className="font-bold">For Union Fabrics Ltd.</p>
-                <p className="text-gray-500 mt-0.5">Authorized Signature & Stamp</p>
+                <p className="text-gray-500 mt-0.5">Authorized Signature &amp; Stamp</p>
               </div>
             </div>
             <div>
               <div className="border-t-2 border-gray-700 pt-2 mt-10">
                 <p className="font-bold">For PureCare / Buyer</p>
-                <p className="text-gray-500 mt-0.5">Authorized Signature & Date</p>
+                <p className="text-gray-500 mt-0.5">Authorized Signature &amp; Date</p>
               </div>
             </div>
           </div>
         </div>
       </div>
-
-      <style dangerouslySetInnerHTML={{__html: `
-        @media print {
-          .print-hidden { display: none !important; }
-          @page { margin: 1cm; size: A4; }
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        }
-      `}} />
-    </>
+    </div>
   );
 }
