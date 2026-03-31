@@ -58,21 +58,28 @@ export default function PurchaseOrders() {
   const handleImportExtracted = async (extracted) => {
     setImporting(true);
     try {
-      // Fetch historical POItems to enrich repeat articles
-      const [existingItems, priceList] = await Promise.all([
+      // Fetch historical data to enrich repeat articles
+      const [existingItems, priceList, historicArticles] = await Promise.all([
         base44.entities.POItem.list("-created_date", 500),
         base44.entities.PriceList.list(),
+        base44.entities.Article.list("-created_date", 500),
       ]);
 
       // Build lookup maps keyed by item_code (uppercase)
       const historyMap = {};
       existingItems.forEach((i) => {
         const key = i.item_code?.trim().toUpperCase();
-        if (key && !historyMap[key]) historyMap[key] = i; // most recent first
+        if (key && !historyMap[key]) historyMap[key] = i;
       });
       const priceMap = {};
       priceList.forEach((p) => {
         if (p.item_code) priceMap[p.item_code.trim().toUpperCase()] = p;
+      });
+      // Article history map by item_code and by article_name
+      const articleHistoryMap = {};
+      historicArticles.forEach((a) => {
+        if (a.article_code) articleHistoryMap[a.article_code.trim().toUpperCase()] = a;
+        if (a.article_name) articleHistoryMap[a.article_name.trim().toUpperCase()] = a;
       });
 
       // Build PO header
@@ -101,7 +108,6 @@ export default function PurchaseOrders() {
           const hist = historyMap[key];
           const ref = priceMap[key];
 
-          // Auto-fill from history for repeat articles
           const fabric_type = item.fabric_type || hist?.fabric_type || "";
           const gsm = Number(item.gsm) || Number(hist?.gsm) || undefined;
           const width = Number(item.width) || Number(hist?.width) || undefined;
@@ -110,7 +116,6 @@ export default function PurchaseOrders() {
           const shrinkage = item.shrinkage || hist?.shrinkage || "";
           const packing_method = hist?.packing_method || "Carton";
 
-          // CBM calculation
           const qty = Number(item.quantity) || 0;
           const unit_price = Number(item.unit_price) || Number(ref?.price_usd) || 0;
           const pieces_per_carton = Number(item.pieces_per_carton) || Number(ref?.qty_per_carton) || Number(hist?.pieces_per_carton) || 0;
@@ -127,18 +132,13 @@ export default function PurchaseOrders() {
             po_number: po.po_number,
             item_code: item.item_code || "",
             item_description: item.item_description || hist?.item_description || "",
-            fabric_type,
-            gsm,
-            width,
+            fabric_type, gsm, width,
             quantity: qty,
             unit: item.unit || hist?.unit || "Pieces",
             unit_price,
             total_price: qty * unit_price,
             delivery_date: item.delivery_date || poData.delivery_date || "",
-            fabric_construction,
-            finish,
-            shrinkage,
-            packing_method,
+            fabric_construction, finish, shrinkage, packing_method,
             pieces_per_carton: pieces_per_carton || undefined,
             num_cartons: num_cartons || undefined,
             cbm,
@@ -147,6 +147,54 @@ export default function PurchaseOrders() {
           };
         });
         await base44.entities.POItem.bulkCreate(enrichedItems);
+
+        // ---- Auto-generate Article records with fabric working ----
+        const articleRecords = enrichedItems.map((item) => {
+          const key = item.item_code?.trim().toUpperCase();
+          const desc = item.item_description || item.item_code || "";
+          const histArt = articleHistoryMap[key] || articleHistoryMap[desc.trim().toUpperCase()];
+          const qty = Number(item.quantity) || 0;
+
+          let components;
+          if (histArt?.components?.length > 0) {
+            // REPEAT ARTICLE: reuse saved components, recalculate totals with new quantity
+            components = histArt.components.map((comp) => {
+              const net = (comp.consumption_per_unit || 0) * qty;
+              const total_required = +(net * (1 + (comp.wastage_percent || 6) / 100)).toFixed(4);
+              return { ...comp, total_required };
+            });
+          } else {
+            // NEW ARTICLE: build a single component from POItem specs
+            // Estimate consumption from width & GSM if not provided
+            const widthM = (Number(item.width) || 150) / 100; // convert cm to meters, default 150cm
+            const consumption_per_unit = widthM > 0 ? +(1 / widthM).toFixed(4) : 1.5;
+            const net = consumption_per_unit * qty;
+            const wastage_percent = 6;
+            const total_required = +(net * (1 + wastage_percent / 100)).toFixed(4);
+            components = [{
+              component_type: "Front",
+              fabric_type: item.fabric_type || "",
+              gsm: item.gsm || undefined,
+              width: item.width || undefined,
+              consumption_per_unit,
+              wastage_percent,
+              total_required,
+            }];
+          }
+
+          const total_fabric_required = +components.reduce((s, c) => s + (c.total_required || 0), 0).toFixed(4);
+
+          return {
+            po_id: po.id,
+            po_item_id: "",
+            article_name: item.item_description || item.item_code || "Article",
+            article_code: item.item_code || "",
+            components,
+            order_quantity: qty,
+            total_fabric_required,
+          };
+        });
+        await base44.entities.Article.bulkCreate(articleRecords);
 
         // Update PO totals
         const total_cbm = enrichedItems.reduce((s, i) => s + (Number(i.cbm) || 0), 0);
@@ -163,7 +211,6 @@ export default function PurchaseOrders() {
       }
 
       queryClient.invalidateQueries({ queryKey: ["purchaseOrders"] });
-      // Navigate directly to PO detail
       navigate(`/PODetail?id=${po.id}`);
     } finally {
       setImporting(false);
