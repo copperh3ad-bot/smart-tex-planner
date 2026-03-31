@@ -33,6 +33,13 @@ export default function PriceVerification({ poId, items, onEditItem }) {
     setEditingPoPrice((p) => { const n = { ...p }; delete n[item.id]; return n; });
   };
 
+  const handleSaveRefPrice = async (itemCode, refId, newPrice) => {
+    const price = Number(newPrice);
+    await base44.entities.PriceList.update(refId, { price_usd: price });
+    queryClient.invalidateQueries({ queryKey: ["priceList"] });
+    setEditingRefPrice((p) => { const n = { ...p }; delete n[itemCode]; return n; });
+  };
+
   const { data: priceList = [] } = useQuery({
     queryKey: ["priceList"],
     queryFn: () => base44.entities.PriceList.list(),
