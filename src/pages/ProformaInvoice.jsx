@@ -119,7 +119,7 @@ export default function ProformaInvoice() {
   return (
     <div className="max-w-4xl mx-auto">
       {/* Toolbar */}
-      <div className="flex items-center justify-between mb-4 print:hidden gap-3 flex-wrap">
+      <div className="flex items-center justify-between mb-4 print-hidden gap-3 flex-wrap">
         <div className="flex items-center gap-3">
           <Link to="/PurchaseOrders">
             <Button variant="outline" size="sm"><ArrowLeft className="h-4 w-4 mr-1" />Back</Button>
@@ -156,12 +156,7 @@ export default function ProformaInvoice() {
           <div className="flex items-center justify-between">
             {/* Logo area */}
             <div className="flex items-center gap-3">
-              <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center flex-shrink-0">
-                <div className="text-center text-white leading-tight">
-                  <div className="text-xs font-black tracking-tight">UNION</div>
-                  <div style={{ fontSize: "7px" }} className="font-semibold tracking-widest">FABRICS</div>
-                  <div style={{ fontSize: "6px" }} className="tracking-wider">LIMITED</div>
-                </div>
+              <img src="https://media.base44.com/images/public/69ae7db4de05f431bd9ae6e1/cafccf4cf_image.png" alt="Union Fabrics Logo" className="h-20 w-auto object-contain" />
               </div>
               <div>
                 <div className="text-lg font-black text-gray-900 tracking-wide">UNION FABRICS LTD.</div>
@@ -370,13 +365,13 @@ export default function ProformaInvoice() {
         </div>
       </div>
 
-      <style>{`
+      <style dangerouslySetInnerHTML={{__html: `
         @media print {
-          .print\\:hidden { display: none !important; }
+          .print-hidden { display: none !important; }
           @page { margin: 1cm; size: A4; }
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
-      `}</style>
+      `}} />
     </div>
   );
 }
