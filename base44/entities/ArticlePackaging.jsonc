@@ -1,0 +1,191 @@
+{
+  "name": "ArticlePackaging",
+  "type": "object",
+  "properties": {
+    "article_name": {
+      "type": "string",
+      "description": "Article name (e.g. Twin Mattress Protector FT2)"
+    },
+    "article_code": {
+      "type": "string",
+      "description": "Article / SKU code"
+    },
+    "customer_name": {
+      "type": "string",
+      "description": "Customer / Brand name"
+    },
+    "labels": {
+      "type": "array",
+      "description": "All label types for this article",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label_type": {
+            "type": "string",
+            "description": "e.g. Brand Label, Care Label, Size Label, Direction Label, GOTS Label, Barcode Label, Hang Tag, Country of Origin, Composition Label, Wash Label, Price Ticket, Compliance Label"
+          },
+          "description": {
+            "type": "string"
+          },
+          "supplier": {
+            "type": "string"
+          },
+          "unit_cost": {
+            "type": "number"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "polybag": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "PVC",
+            "PP",
+            "PE",
+            "LDPE",
+            "OPP"
+          ],
+          "description": "Polybag material type"
+        },
+        "thickness_microns": {
+          "type": "number"
+        },
+        "printed": {
+          "type": "boolean"
+        },
+        "size_cm": {
+          "type": "string"
+        },
+        "supplier": {
+          "type": "string"
+        },
+        "unit_cost": {
+          "type": "number"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "stiffener": {
+      "type": "object",
+      "properties": {
+        "used": {
+          "type": "boolean"
+        },
+        "material": {
+          "type": "string"
+        },
+        "size_cm": {
+          "type": "string"
+        },
+        "supplier": {
+          "type": "string"
+        },
+        "unit_cost": {
+          "type": "number"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "carton": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "Printed",
+            "Plain",
+            "Brown",
+            "White"
+          ]
+        },
+        "quality": {
+          "type": "string",
+          "description": "e.g. 5-ply, 3-ply, B-flute"
+        },
+        "size_cm": {
+          "type": "string",
+          "description": "L x W x H in cm"
+        },
+        "pieces_per_carton": {
+          "type": "number"
+        },
+        "cbm_per_carton": {
+          "type": "number"
+        },
+        "gross_weight_kg": {
+          "type": "number"
+        },
+        "net_weight_kg": {
+          "type": "number"
+        },
+        "supplier": {
+          "type": "string"
+        },
+        "unit_cost": {
+          "type": "number"
+        }
+      }
+    },
+    "stickers": {
+      "type": "array",
+      "description": "Stickers required for this article",
+      "items": {
+        "type": "object",
+        "properties": {
+          "sticker_type": {
+            "type": "string",
+            "description": "e.g. UPC Sticker, Packaging Info, Retailer Sticker, Warning Sticker, QR Code"
+          },
+          "description": {
+            "type": "string"
+          },
+          "supplier": {
+            "type": "string"
+          },
+          "unit_cost": {
+            "type": "number"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "other_accessories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "supplier": {
+            "type": "string"
+          },
+          "unit_cost": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "article_name"
+  ]
+}
