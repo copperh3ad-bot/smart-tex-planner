@@ -19,12 +19,18 @@ function MatchBadge({ status }) {
 
 export default function PriceVerification({ poId, items, onEditItem }) {
   const queryClient = useQueryClient();
-  const [editingRefPrice, setEditingRefPrice] = useState({}); // { [item_code]: string }
+  const [editingRefPrice, setEditingRefPrice] = useState({});
+  const [editingPoPrice, setEditingPoPrice] = useState({}); // { [itemId]: string }
 
-  const handleSaveRefPrice = async (itemCode, priceListId, newPrice) => {
-    await base44.entities.PriceList.update(priceListId, { price_usd: Number(newPrice) });
-    queryClient.invalidateQueries({ queryKey: ["priceList"] });
-    setEditingRefPrice((p) => { const n = { ...p }; delete n[itemCode]; return n; });
+  const handleSavePoPrice = async (item, newPrice) => {
+    const price = Number(newPrice);
+    await base44.entities.POItem.update(item.id, {
+      unit_price: price,
+      total_price: price * (item.quantity || 0),
+      price_status: "Pending",
+    });
+    queryClient.invalidateQueries({ queryKey: ["poItems", poId] });
+    setEditingPoPrice((p) => { const n = { ...p }; delete n[item.id]; return n; });
   };
 
   const { data: priceList = [] } = useQuery({
@@ -154,7 +160,26 @@ export default function PriceVerification({ poId, items, onEditItem }) {
                 <TableRow key={item.id} className="hover:bg-muted/30">
                   <TableCell className="text-xs font-medium">{item.item_code}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{item.item_description || item.fabric_type || "—"}</TableCell>
-                  <TableCell className="text-xs">{item.unit_price != null ? `$${item.unit_price}` : "—"}</TableCell>
+                  <TableCell className="text-xs">
+                    {editingPoPrice[item.id] !== undefined ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number" step="0.01"
+                          className="w-20 border rounded px-1 py-0.5 text-xs"
+                          value={editingPoPrice[item.id]}
+                          onChange={(e) => setEditingPoPrice((p) => ({ ...p, [item.id]: e.target.value }))}
+                          autoFocus
+                        />
+                        <button className="text-emerald-600 hover:text-emerald-800" onClick={() => handleSavePoPrice(item, editingPoPrice[item.id])}><Check className="h-3 w-3" /></button>
+                        <button className="text-muted-foreground hover:text-foreground" onClick={() => setEditingPoPrice((p) => { const n={...p}; delete n[item.id]; return n; })}><X className="h-3 w-3" /></button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <span>{item.unit_price != null ? `$${item.unit_price}` : "—"}</span>
+                        <button className="text-muted-foreground hover:text-primary" onClick={() => setEditingPoPrice((p) => ({ ...p, [item.id]: item.unit_price ?? "" }))} title="Edit PO Price"><Pencil className="h-3 w-3" /></button>
+                      </div>
+                    )}
+                  </TableCell>
                   <TableCell className="text-xs">
                     {ref ? (
                       editingRefPrice[item.item_code] !== undefined ? (
