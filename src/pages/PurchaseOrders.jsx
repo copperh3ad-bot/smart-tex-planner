@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -22,6 +23,8 @@ export default function PurchaseOrders() {
   const [showForm, setShowForm] = useState(false);
   const [showEmailImport, setShowEmailImport] = useState(false);
   const [prefillData, setPrefillData] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const queryClient = useQueryClient();
@@ -33,7 +36,6 @@ export default function PurchaseOrders() {
 
   const handleCreate = async (data) => {
     const po = await base44.entities.PurchaseOrder.create(data);
-    // Auto-create line items if extracted from import
     if (prefillData?.items?.length > 0) {
       const items = prefillData.items.map((item) => ({
         ...item,
@@ -49,6 +51,123 @@ export default function PurchaseOrders() {
     }
     queryClient.invalidateQueries({ queryKey: ["purchaseOrders"] });
     setShowForm(false);
+    setPrefillData(null);
+  };
+
+  // Called when AI extraction completes — auto-create PO + items without manual editing
+  const handleImportExtracted = async (extracted) => {
+    setImporting(true);
+    try {
+      // Fetch historical POItems to enrich repeat articles
+      const [existingItems, priceList] = await Promise.all([
+        base44.entities.POItem.list("-created_date", 500),
+        base44.entities.PriceList.list(),
+      ]);
+
+      // Build lookup maps keyed by item_code (uppercase)
+      const historyMap = {};
+      existingItems.forEach((i) => {
+        const key = i.item_code?.trim().toUpperCase();
+        if (key && !historyMap[key]) historyMap[key] = i; // most recent first
+      });
+      const priceMap = {};
+      priceList.forEach((p) => {
+        if (p.item_code) priceMap[p.item_code.trim().toUpperCase()] = p;
+      });
+
+      // Build PO header
+      const poData = {
+        po_number: extracted.po_number || `IMP-${Date.now()}`,
+        customer_name: extracted.customer_name || "Unknown",
+        order_date: extracted.order_date || "",
+        delivery_date: extracted.delivery_date || "",
+        ex_factory_date: extracted.ex_factory_date || "",
+        etd: extracted.etd || "",
+        eta: extracted.eta || "",
+        currency: extracted.currency || "USD",
+        total_po_value: Number(extracted.total_po_value) || undefined,
+        total_quantity: Number(extracted.total_quantity) || undefined,
+        notes: extracted.notes || "",
+        source: extracted.source || "Email",
+        status: "PO Received",
+      };
+
+      const po = await base44.entities.PurchaseOrder.create(poData);
+
+      // Enrich & create line items
+      if (extracted.items?.length > 0) {
+        const enrichedItems = extracted.items.map((item) => {
+          const key = item.item_code?.trim().toUpperCase();
+          const hist = historyMap[key];
+          const ref = priceMap[key];
+
+          // Auto-fill from history for repeat articles
+          const fabric_type = item.fabric_type || hist?.fabric_type || "";
+          const gsm = Number(item.gsm) || Number(hist?.gsm) || undefined;
+          const width = Number(item.width) || Number(hist?.width) || undefined;
+          const fabric_construction = item.fabric_construction || hist?.fabric_construction || "";
+          const finish = item.finish || hist?.finish || "";
+          const shrinkage = item.shrinkage || hist?.shrinkage || "";
+          const packing_method = hist?.packing_method || "Carton";
+
+          // CBM calculation
+          const qty = Number(item.quantity) || 0;
+          const unit_price = Number(item.unit_price) || Number(ref?.price_usd) || 0;
+          const pieces_per_carton = Number(item.pieces_per_carton) || Number(ref?.qty_per_carton) || Number(hist?.pieces_per_carton) || 0;
+          const cbm_per_carton = Number(ref?.cbm_per_carton) || 0;
+          const num_cartons = pieces_per_carton > 0 ? Math.ceil(qty / pieces_per_carton) : 0;
+          const cbm = Number(item.cbm) || (cbm_per_carton > 0 && num_cartons > 0 ? Number((num_cartons * cbm_per_carton).toFixed(4)) : undefined);
+
+          const price_status = unit_price > 0 && ref?.price_usd
+            ? (Math.abs(unit_price - ref.price_usd) < 0.001 ? "Matched" : "Mismatch")
+            : "Pending";
+
+          return {
+            po_id: po.id,
+            po_number: po.po_number,
+            item_code: item.item_code || "",
+            item_description: item.item_description || hist?.item_description || "",
+            fabric_type,
+            gsm,
+            width,
+            quantity: qty,
+            unit: item.unit || hist?.unit || "Pieces",
+            unit_price,
+            total_price: qty * unit_price,
+            delivery_date: item.delivery_date || poData.delivery_date || "",
+            fabric_construction,
+            finish,
+            shrinkage,
+            packing_method,
+            pieces_per_carton: pieces_per_carton || undefined,
+            num_cartons: num_cartons || undefined,
+            cbm,
+            expected_price: ref?.price_usd || undefined,
+            price_status,
+          };
+        });
+        await base44.entities.POItem.bulkCreate(enrichedItems);
+
+        // Update PO totals
+        const total_cbm = enrichedItems.reduce((s, i) => s + (Number(i.cbm) || 0), 0);
+        const total_po_value = enrichedItems.reduce((s, i) => s + (Number(i.total_price) || 0), 0);
+        const total_quantity = enrichedItems.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+        if (total_cbm > 0 || total_po_value > 0) {
+          await base44.entities.PurchaseOrder.update(po.id, {
+            total_cbm: total_cbm > 0 ? Number(total_cbm.toFixed(4)) : undefined,
+            total_po_value: total_po_value > 0 ? Number(total_po_value.toFixed(2)) : poData.total_po_value,
+            total_quantity: total_quantity || poData.total_quantity,
+            status: "Items Entered",
+          });
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["purchaseOrders"] });
+      // Navigate directly to PO detail
+      navigate(`/PODetail?id=${po.id}`);
+    } finally {
+      setImporting(false);
+    }
   };
 
   const handleDelete = async (id) => {
@@ -174,10 +293,18 @@ export default function PurchaseOrders() {
         onSave={handleCreate}
         initialData={prefillData}
       />
+      {importing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-card rounded-xl p-6 shadow-xl flex flex-col items-center gap-3">
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm font-medium text-foreground">Creating PO & enriching items from history...</p>
+          </div>
+        </div>
+      )}
       <EmailImportDialog
         open={showEmailImport}
         onOpenChange={setShowEmailImport}
-        onExtracted={(data) => { setPrefillData(data); setShowForm(true); }}
+        onExtracted={handleImportExtracted}
       />
     </div>
   );
