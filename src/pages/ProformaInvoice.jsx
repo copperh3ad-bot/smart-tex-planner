@@ -117,7 +117,7 @@ export default function ProformaInvoice() {
   if (!po && pos.length > 0) return null;
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <>
       {/* Toolbar */}
       <div className="flex items-center justify-between mb-4 print-hidden gap-3 flex-wrap">
         <div className="flex items-center gap-3">
@@ -157,14 +157,7 @@ export default function ProformaInvoice() {
             {/* Logo area */}
             <div className="flex items-center gap-3">
               <img src="https://media.base44.com/images/public/69ae7db4de05f431bd9ae6e1/cafccf4cf_image.png" alt="Union Fabrics Logo" className="h-20 w-auto object-contain" />
-              </div>
               <div>
-                <div className="text-lg font-black text-gray-900 tracking-wide">UNION FABRICS LTD.</div>
-                <div className="text-xs text-gray-600">E20/B Central Avenue Site, Karachi, PK 75700</div>
-                <div className="text-xs text-gray-600">Tel: +92 21 32567881</div>
-              </div>
-            </div>
-            <div className="text-right">
               <div className="text-xl font-black text-primary uppercase tracking-widest">Proforma Invoice</div>
               <div className="text-xs text-gray-500 mt-0.5">Sales Confirmation</div>
             </div>
@@ -372,6 +365,6 @@ export default function ProformaInvoice() {
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
       `}} />
-    </div>
+    </>
   );
 }
