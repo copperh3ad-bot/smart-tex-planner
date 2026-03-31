@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, FileText, Trash2, Mail } from "lucide-react";
+import { Plus, Search, FileText, Trash2, Upload } from "lucide-react";
 import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import StatusBadge from "../components/shared/StatusBadge";
@@ -79,7 +79,7 @@ export default function PurchaseOrders() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setShowEmailImport(true)}>
-            <Mail className="h-4 w-4 mr-2" /> Import from Email
+            <Upload className="h-4 w-4 mr-2" /> Import PO
           </Button>
           <Button onClick={() => { setPrefillData(null); setShowForm(true); }} className="bg-primary hover:bg-primary/90">
             <Plus className="h-4 w-4 mr-2" /> New PO
