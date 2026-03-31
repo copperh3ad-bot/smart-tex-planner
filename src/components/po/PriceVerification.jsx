@@ -188,26 +188,27 @@ export default function PriceVerification({ poId, items, onEditItem }) {
                     )}
                   </TableCell>
                   <TableCell className="text-xs">
-                    {ref ? (
-                      editingRefPrice[item.item_code] !== undefined ? (
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            step="0.01"
-                            className="w-20 border rounded px-1 py-0.5 text-xs"
-                            value={editingRefPrice[item.item_code]}
-                            onChange={(e) => setEditingRefPrice((p) => ({ ...p, [item.item_code]: e.target.value }))}
-                          />
-                          <button className="text-emerald-600 hover:text-emerald-800" onClick={() => handleSaveRefPrice(item.item_code, ref.id, editingRefPrice[item.item_code])}><Check className="h-3 w-3" /></button>
-                          <button className="text-muted-foreground hover:text-foreground" onClick={() => setEditingRefPrice((p) => { const n={...p}; delete n[item.item_code]; return n; })}><X className="h-3 w-3" /></button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1">
-                          <span>${refPrice}</span>
-                          <button className="text-muted-foreground hover:text-primary" onClick={() => setEditingRefPrice((p) => ({ ...p, [item.item_code]: refPrice }))}><Pencil className="h-3 w-3" /></button>
-                        </div>
-                      )
-                    ) : "—"}
+                    {editingRefPrice[item.item_code] !== undefined ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          step="0.01"
+                          className="w-20 border rounded px-1 py-0.5 text-xs"
+                          value={editingRefPrice[item.item_code]}
+                          onChange={(e) => setEditingRefPrice((p) => ({ ...p, [item.item_code]: e.target.value }))}
+                          autoFocus
+                        />
+                        <button className="text-emerald-600 hover:text-emerald-800" onClick={() => handleSaveRefPrice(item.item_code, ref?.id, editingRefPrice[item.item_code])}><Check className="h-3 w-3" /></button>
+                        <button className="text-muted-foreground hover:text-foreground" onClick={() => setEditingRefPrice((p) => { const n={...p}; delete n[item.item_code]; return n; })}><X className="h-3 w-3" /></button>
+                      </div>
+                    ) : ref ? (
+                      <div className="flex items-center gap-1">
+                        <span>${refPrice}</span>
+                        <button className="text-muted-foreground hover:text-primary" onClick={() => setEditingRefPrice((p) => ({ ...p, [item.item_code]: refPrice }))}><Pencil className="h-3 w-3" /></button>
+                      </div>
+                    ) : (
+                      <button className="text-xs text-amber-600 hover:text-amber-800 underline" onClick={() => setEditingRefPrice((p) => ({ ...p, [item.item_code]: "" }))}>+ Add Price</button>
+                    )}
                   </TableCell>
                   <TableCell><MatchBadge status={priceStatus} /></TableCell>
                   <TableCell className="text-xs hidden md:table-cell">{item.cbm?.toFixed(4) ?? "—"}</TableCell>
