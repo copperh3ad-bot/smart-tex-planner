@@ -35,7 +35,11 @@ export default function PriceVerification({ poId, items, onEditItem }) {
 
   const handleSaveRefPrice = async (itemCode, refId, newPrice) => {
     const price = Number(newPrice);
-    await base44.entities.PriceList.update(refId, { price_usd: price });
+    if (refId) {
+      await base44.entities.PriceList.update(refId, { price_usd: price });
+    } else {
+      await base44.entities.PriceList.create({ item_code: itemCode, price_usd: price });
+    }
     queryClient.invalidateQueries({ queryKey: ["priceList"] });
     setEditingRefPrice((p) => { const n = { ...p }; delete n[itemCode]; return n; });
   };
