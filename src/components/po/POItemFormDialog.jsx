@@ -241,6 +241,72 @@ export default function POItemFormDialog({ open, onOpenChange, onSave, poId, poN
             </div>
           </div>
 
+          {/* Carton Dimensions */}
+          <div className="md:col-span-2">
+            <p className="text-xs text-muted-foreground mb-2">Carton Dimensions (L × W × H in cm) — used to calculate CBM if ref not available</p>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Length (cm)</Label>
+                <Input
+                  type="number" step="0.1"
+                  value={form.carton_length}
+                  onChange={(e) => {
+                    const l = e.target.value;
+                    setForm((p) => {
+                      const w = Number(p.carton_width) || 0;
+                      const h = Number(p.carton_height) || 0;
+                      const cbmCtn = (Number(l) * w * h) / 1000000;
+                      const nc = Number(p.num_cartons) || 0;
+                      return { ...p, carton_length: l, cbm: !ref && cbmCtn > 0 && nc > 0 ? Number((nc * cbmCtn).toFixed(4)) : p.cbm };
+                    });
+                  }}
+                  placeholder="e.g. 60"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Width (cm)</Label>
+                <Input
+                  type="number" step="0.1"
+                  value={form.carton_width}
+                  onChange={(e) => {
+                    const w = e.target.value;
+                    setForm((p) => {
+                      const l = Number(p.carton_length) || 0;
+                      const h = Number(p.carton_height) || 0;
+                      const cbmCtn = (l * Number(w) * h) / 1000000;
+                      const nc = Number(p.num_cartons) || 0;
+                      return { ...p, carton_width: w, cbm: !ref && cbmCtn > 0 && nc > 0 ? Number((nc * cbmCtn).toFixed(4)) : p.cbm };
+                    });
+                  }}
+                  placeholder="e.g. 40"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Height (cm)</Label>
+                <Input
+                  type="number" step="0.1"
+                  value={form.carton_height}
+                  onChange={(e) => {
+                    const h = e.target.value;
+                    setForm((p) => {
+                      const l = Number(p.carton_length) || 0;
+                      const w = Number(p.carton_width) || 0;
+                      const cbmCtn = (l * w * Number(h)) / 1000000;
+                      const nc = Number(p.num_cartons) || 0;
+                      return { ...p, carton_height: h, cbm: !ref && cbmCtn > 0 && nc > 0 ? Number((nc * cbmCtn).toFixed(4)) : p.cbm };
+                    });
+                  }}
+                  placeholder="e.g. 30"
+                />
+              </div>
+            </div>
+            {form.carton_length && form.carton_width && form.carton_height && (
+              <p className="text-xs text-muted-foreground mt-1">
+                CBM/ctn: <span className="font-medium text-foreground">{((Number(form.carton_length) * Number(form.carton_width) * Number(form.carton_height)) / 1000000).toFixed(6)}</span>
+              </p>
+            )}
+          </div>
+
           <div className="space-y-1.5">
             <Label className="text-xs font-semibold">Total CBM</Label>
             <Input
