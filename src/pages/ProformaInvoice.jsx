@@ -1,14 +1,20 @@
-import React, { useRef } from "react";
+import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Printer, ArrowLeft } from "lucide-react";
+import { Printer, ArrowLeft, Pencil, Save, X, ChevronDown } from "lucide-react";
 import { Link } from "react-router-dom";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function ProformaInvoice() {
   const urlParams = new URLSearchParams(window.location.search);
-  const poId = urlParams.get("po_id");
-  const printRef = useRef();
+  const paramPoId = urlParams.get("po_id");
+  const queryClient = useQueryClient();
+
+  const [selectedPoId, setSelectedPoId] = useState(paramPoId || "");
+  const [editMode, setEditMode] = useState(false);
+  const [editHeader, setEditHeader] = useState({});
+  const [editItems, setEditItems] = useState([]);
 
   const { data: pos = [] } = useQuery({
     queryKey: ["purchaseOrders"],
@@ -20,179 +26,345 @@ export default function ProformaInvoice() {
     queryFn: () => base44.entities.POItem.list(),
   });
 
-  // If po_id param given, use that PO; otherwise use most recent
-  const po = poId ? pos.find((p) => p.id === poId) : pos[0];
-  const items = allItems.filter((i) => i.po_id === po?.id);
+  const po = useMemo(() => {
+    if (selectedPoId) return pos.find((p) => p.id === selectedPoId);
+    return pos[0];
+  }, [pos, selectedPoId]);
+
+  const items = useMemo(
+    () => allItems.filter((i) => i.po_id === po?.id),
+    [allItems, po]
+  );
 
   const totalQty = items.reduce((s, i) => s + (i.quantity || 0), 0);
-  const totalValue = items.reduce((s, i) => s + (i.total_price || i.unit_price * i.quantity || 0), 0);
-  const totalCbm = items.reduce((s, i) => s + (i.cbm || 0), 0);
-  const totalCartons = items.reduce((s, i) => s + (i.num_cartons || (i.quantity && i.pieces_per_carton ? Math.ceil(i.quantity / i.pieces_per_carton) : 0)), 0);
+  const totalValue = items.reduce(
+    (s, i) => s + (i.total_price || i.unit_price * i.quantity || 0),
+    0
+  );
+
+  const updatePO = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.PurchaseOrder.update(id, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["purchaseOrders"] }),
+  });
+
+  const updateItem = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.POItem.update(id, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["allPoItems"] }),
+  });
+
+  const startEdit = () => {
+    setEditHeader({
+      mta_number: "MTA#2016-2026",
+      pi_date: "2026-03-06",
+      sales_order: "1201579-001",
+      cust_po: "4501439930",
+      ex_factory: po?.ex_factory_date || "2026-08-14",
+      etd: po?.etd || "2026-10-03",
+      eta: po?.eta || "2026-10-10",
+      buyer_name: "Pure Care",
+      buyer_address: "Direct to Consumer Warehouse\n1402 S 40th Ave STE A\nPhoenix, AZ 85009",
+      ship_to_name: "Bob's Discount Furniture",
+      ship_to_address: "70 Jewett City Rd, Taftville, CT 06380\nPhone: 203-799-9010",
+      port_loading: "Karachi, Pakistan",
+      port_discharge: "USA",
+      country_origin: "Pakistan",
+      terms: "NET 60 | FOB Origin",
+      ship_via: "Container Direct",
+    });
+    setEditItems(items.map((i) => ({ ...i })));
+    setEditMode(true);
+  };
+
+  const saveEdit = async () => {
+    await updatePO.mutateAsync({ id: po.id, data: { etd: editHeader.etd, eta: editHeader.eta, ex_factory_date: editHeader.ex_factory } });
+    for (const item of editItems) {
+      const orig = items.find((i) => i.id === item.id);
+      if (
+        orig.quantity !== item.quantity ||
+        orig.unit_price !== item.unit_price ||
+        orig.item_description !== item.item_description
+      ) {
+        await updateItem.mutateAsync({
+          id: item.id,
+          data: {
+            quantity: Number(item.quantity),
+            unit_price: Number(item.unit_price),
+            total_price: Number(item.quantity) * Number(item.unit_price),
+            item_description: item.item_description,
+          },
+        });
+      }
+    }
+    setEditMode(false);
+  };
+
+  const updateEditItem = (id, field, value) => {
+    setEditItems((prev) =>
+      prev.map((it) => (it.id === id ? { ...it, [field]: value } : it))
+    );
+  };
 
   const handlePrint = () => window.print();
 
-  if (!po) return (
-    <div className="p-8 text-center text-muted-foreground">
-      No purchase order found. <Link to="/PurchaseOrders" className="text-primary underline">Go to Purchase Orders</Link>
-    </div>
-  );
+  const displayItems = editMode ? editItems : items;
+  const dispTotal = editMode
+    ? editItems.reduce((s, i) => s + Number(i.quantity || 0) * Number(i.unit_price || 0), 0)
+    : totalValue;
+  const dispQty = editMode
+    ? editItems.reduce((s, i) => s + Number(i.quantity || 0), 0)
+    : totalQty;
+
+  if (!po && pos.length > 0) return null;
 
   return (
-    <div className="max-w-5xl mx-auto">
-      {/* Toolbar - hidden on print */}
-      <div className="flex items-center justify-between mb-4 print:hidden">
-        <Link to="/PurchaseOrders">
-          <Button variant="outline" size="sm"><ArrowLeft className="h-4 w-4 mr-1" /> Back</Button>
-        </Link>
+    <div className="max-w-4xl mx-auto">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between mb-4 print:hidden gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <Link to="/PurchaseOrders">
+            <Button variant="outline" size="sm"><ArrowLeft className="h-4 w-4 mr-1" />Back</Button>
+          </Link>
+          <Select value={selectedPoId || po?.id || ""} onValueChange={setSelectedPoId}>
+            <SelectTrigger className="w-56 h-8 text-xs">
+              <SelectValue placeholder="Select PO" />
+            </SelectTrigger>
+            <SelectContent>
+              {pos.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.po_number} — {p.customer_name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <div className="flex gap-2">
-          <Button size="sm" onClick={handlePrint} className="gap-2">
-            <Printer className="h-4 w-4" /> Print / Save PDF
-          </Button>
+          {editMode ? (
+            <>
+              <Button size="sm" variant="outline" onClick={() => setEditMode(false)}><X className="h-4 w-4 mr-1" />Cancel</Button>
+              <Button size="sm" onClick={saveEdit}><Save className="h-4 w-4 mr-1" />Save</Button>
+            </>
+          ) : (
+            <Button size="sm" variant="outline" onClick={startEdit}><Pencil className="h-4 w-4 mr-1" />Edit</Button>
+          )}
+          <Button size="sm" onClick={handlePrint}><Printer className="h-4 w-4 mr-1" />Print / PDF</Button>
         </div>
       </div>
 
       {/* PI Document */}
-      <div ref={printRef} className="bg-white border border-gray-300 p-8 font-sans text-sm print:border-0 print:p-6">
-        {/* Header */}
-        <div className="text-center mb-6">
-          <h1 className="text-xl font-bold uppercase tracking-wide">PROFORMA INVOICE / SALES CONFIRMATION</h1>
-        </div>
+      <div className="bg-white border border-gray-400 print:border-0" style={{ fontFamily: "Arial, sans-serif", fontSize: "11px" }}>
 
-        <div className="grid grid-cols-2 gap-4 mb-6 border border-gray-300">
-          <div className="p-3 border-r border-gray-300">
-            <table className="w-full text-xs">
-              <tbody>
-                <tr><td className="font-semibold pr-2 py-0.5">Pro. Invoice #:</td><td>MTA#2016-2026</td></tr>
-                <tr><td className="font-semibold pr-2 py-0.5">Dated:</td><td>March 06, 2026</td></tr>
-                <tr><td className="font-semibold pr-2 py-0.5">PO #:</td><td>{po.po_number}</td></tr>
-                <tr><td className="font-semibold pr-2 py-0.5">Cust PO #:</td><td>4501439930</td></tr>
-                <tr><td className="font-semibold pr-2 py-0.5">Sales Order #:</td><td>1201579-001</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <div className="p-3">
-            <table className="w-full text-xs">
-              <tbody>
-                <tr><td className="font-semibold pr-2 py-0.5">Ex-Factory:</td><td>{po.ex_factory_date || "2026-08-14"}</td></tr>
-                <tr><td className="font-semibold pr-2 py-0.5">ETD:</td><td>{po.etd || "2026-10-03"}</td></tr>
-                <tr><td className="font-semibold pr-2 py-0.5">ETA:</td><td>{po.eta || "2026-10-10"}</td></tr>
-                <tr><td className="font-semibold pr-2 py-0.5">Terms:</td><td>NET 60 | FOB Origin</td></tr>
-                <tr><td className="font-semibold pr-2 py-0.5">Ship Via:</td><td>Container Direct</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Addresses */}
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <div className="border border-gray-300 p-3">
-            <p className="font-bold text-xs mb-1 uppercase">Buyer's Name & Address:</p>
-            <p className="text-xs leading-relaxed">Pure Care<br />Direct to Consumer Warehouse<br />1402 S 40th Ave STE A<br />Phoenix, AZ 85009</p>
-          </div>
-          <div className="border border-gray-300 p-3">
-            <p className="font-bold text-xs mb-1 uppercase">Ship to Party Name & Address:</p>
-            <p className="text-xs leading-relaxed">Bob's Discount Furniture<br />70 Jewett City Rd, Taftville, CT 06380<br />Phone: 203-799-9010</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div className="border border-gray-300 p-3">
-            <p className="font-bold text-xs mb-1 uppercase">Vendor / Exporter:</p>
-            <p className="text-xs leading-relaxed">Union Fabrics Ltd.<br />E20/B Central Avenue Site<br />Karachi City, PK 75700<br />Phone: +92 21 32567881</p>
-          </div>
-          <div className="border border-gray-300 p-3 text-xs">
-            <p className="font-bold mb-1 uppercase">Shipping Details:</p>
-            <table className="w-full">
-              <tbody>
-                <tr><td className="font-semibold pr-2">Port of Loading:</td><td>Karachi, Pakistan</td></tr>
-                <tr><td className="font-semibold pr-2">Port of Discharge:</td><td>USA</td></tr>
-                <tr><td className="font-semibold pr-2">Country of Origin:</td><td>Pakistan</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Items Table */}
-        <table className="w-full border-collapse border border-gray-300 text-xs mb-4">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="border border-gray-300 p-1.5 text-left">S#</th>
-              <th className="border border-gray-300 p-1.5 text-left">Item Code</th>
-              <th className="border border-gray-300 p-1.5 text-left">Description</th>
-              <th className="border border-gray-300 p-1.5 text-center">Qty</th>
-              <th className="border border-gray-300 p-1.5 text-center">Unit</th>
-              <th className="border border-gray-300 p-1.5 text-right">Unit Price (USD)</th>
-              <th className="border border-gray-300 p-1.5 text-right">Amount (USD)</th>
-              <th className="border border-gray-300 p-1.5 text-center">Ctns</th>
-              <th className="border border-gray-300 p-1.5 text-center">CBM</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item, idx) => {
-              const ctns = item.num_cartons || (item.quantity && item.pieces_per_carton ? Math.ceil(item.quantity / item.pieces_per_carton) : "—");
-              const amount = item.total_price || (item.unit_price * item.quantity) || 0;
-              return (
-                <tr key={item.id} className={idx % 2 === 0 ? "" : "bg-gray-50"}>
-                  <td className="border border-gray-300 p-1.5">{idx + 1}</td>
-                  <td className="border border-gray-300 p-1.5 font-medium">{item.item_code}</td>
-                  <td className="border border-gray-300 p-1.5">{item.item_description}</td>
-                  <td className="border border-gray-300 p-1.5 text-center">{item.quantity?.toLocaleString()}</td>
-                  <td className="border border-gray-300 p-1.5 text-center">{item.unit || "EA"}</td>
-                  <td className="border border-gray-300 p-1.5 text-right">${item.unit_price?.toFixed(2)}</td>
-                  <td className="border border-gray-300 p-1.5 text-right font-medium">${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td className="border border-gray-300 p-1.5 text-center">{ctns}</td>
-                  <td className="border border-gray-300 p-1.5 text-center">{item.cbm?.toFixed(4) ?? "—"}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-          <tfoot>
-            <tr className="bg-gray-100 font-bold">
-              <td colSpan={3} className="border border-gray-300 p-1.5 text-right">TOTAL</td>
-              <td className="border border-gray-300 p-1.5 text-center">{totalQty.toLocaleString()}</td>
-              <td className="border border-gray-300 p-1.5"></td>
-              <td className="border border-gray-300 p-1.5"></td>
-              <td className="border border-gray-300 p-1.5 text-right">${totalValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-              <td className="border border-gray-300 p-1.5 text-center">{totalCartons || "—"}</td>
-              <td className="border border-gray-300 p-1.5 text-center">{totalCbm > 0 ? totalCbm.toFixed(4) : "—"}</td>
-            </tr>
-          </tfoot>
-        </table>
-
-        {/* Summary */}
-        <div className="grid grid-cols-3 gap-4 mb-6 text-xs">
-          <div className="border border-gray-300 p-2">
-            <p className="font-bold mb-1">Total Invoice Value:</p>
-            <p className="text-base font-bold text-blue-800">USD {totalValue.toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
-          </div>
-          <div className="border border-gray-300 p-2">
-            <p className="font-bold mb-1">Total Cartons:</p>
-            <p className="text-base font-bold">{totalCartons || "—"}</p>
-          </div>
-          <div className="border border-gray-300 p-2">
-            <p className="font-bold mb-1">Total CBM:</p>
-            <p className="text-base font-bold">{totalCbm > 0 ? totalCbm.toFixed(4) : "—"}</p>
-          </div>
-        </div>
-
-        {/* Bank / Terms */}
-        <div className="border border-gray-300 p-3 mb-4 text-xs">
-          <p className="font-bold mb-1">Payment Terms:</p>
-          <p>NET 60 days from Bill of Lading date. Payment to be made in USD.</p>
-        </div>
-
-        {/* Signatures */}
-        <div className="grid grid-cols-2 gap-8 mt-8">
-          <div className="text-xs">
-            <div className="border-t border-gray-400 pt-2 mt-8">
-              <p className="font-semibold">For Union Fabrics Ltd.</p>
-              <p className="text-muted-foreground">Authorized Signature & Stamp</p>
+        {/* Company Header */}
+        <div className="border-b-2 border-gray-800 px-6 py-4">
+          <div className="flex items-center justify-between">
+            {/* Logo area */}
+            <div className="flex items-center gap-3">
+              <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center flex-shrink-0">
+                <div className="text-center text-white leading-tight">
+                  <div className="text-xs font-black tracking-tight">UNION</div>
+                  <div style={{ fontSize: "7px" }} className="font-semibold tracking-widest">FABRICS</div>
+                  <div style={{ fontSize: "6px" }} className="tracking-wider">LIMITED</div>
+                </div>
+              </div>
+              <div>
+                <div className="text-lg font-black text-gray-900 tracking-wide">UNION FABRICS LTD.</div>
+                <div className="text-xs text-gray-600">E20/B Central Avenue Site, Karachi, PK 75700</div>
+                <div className="text-xs text-gray-600">Tel: +92 21 32567881</div>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-xl font-black text-primary uppercase tracking-widest">Proforma Invoice</div>
+              <div className="text-xs text-gray-500 mt-0.5">Sales Confirmation</div>
             </div>
           </div>
-          <div className="text-xs">
-            <div className="border-t border-gray-400 pt-2 mt-8">
-              <p className="font-semibold">For PureCare / Buyer</p>
-              <p className="text-muted-foreground">Authorized Signature</p>
+        </div>
+
+        <div className="px-6 py-4">
+          {/* PI Info Row */}
+          <div className="grid grid-cols-2 gap-0 border border-gray-400 mb-3">
+            <div className="border-r border-gray-400 p-2">
+              <table className="w-full text-xs">
+                <tbody>
+                  <tr>
+                    <td className="font-bold pr-2 py-0.5 text-gray-600 w-36">Pro. Invoice #:</td>
+                    <td className="font-semibold">{editMode ? <input className="border rounded px-1 w-full text-xs" value={editHeader.mta_number || ""} onChange={(e) => setEditHeader((h) => ({ ...h, mta_number: e.target.value }))} /> : "MTA#2016-2026"}</td>
+                  </tr>
+                  <tr>
+                    <td className="font-bold pr-2 py-0.5 text-gray-600">Dated:</td>
+                    <td>{editMode ? <input type="date" className="border rounded px-1 w-full text-xs" value={editHeader.pi_date || ""} onChange={(e) => setEditHeader((h) => ({ ...h, pi_date: e.target.value }))} /> : "March 06, 2026"}</td>
+                  </tr>
+                  <tr>
+                    <td className="font-bold pr-2 py-0.5 text-gray-600">PO #:</td>
+                    <td className="font-semibold">{po?.po_number}</td>
+                  </tr>
+                  <tr>
+                    <td className="font-bold pr-2 py-0.5 text-gray-600">Cust PO #:</td>
+                    <td>{editMode ? <input className="border rounded px-1 w-full text-xs" value={editHeader.cust_po || ""} onChange={(e) => setEditHeader((h) => ({ ...h, cust_po: e.target.value }))} /> : "4501439930"}</td>
+                  </tr>
+                  <tr>
+                    <td className="font-bold pr-2 py-0.5 text-gray-600">Sales Order #:</td>
+                    <td>{editMode ? <input className="border rounded px-1 w-full text-xs" value={editHeader.sales_order || ""} onChange={(e) => setEditHeader((h) => ({ ...h, sales_order: e.target.value }))} /> : "1201579-001"}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div className="p-2">
+              <table className="w-full text-xs">
+                <tbody>
+                  <tr>
+                    <td className="font-bold pr-2 py-0.5 text-gray-600 w-36">Ex-Factory:</td>
+                    <td>{editMode ? <input type="date" className="border rounded px-1 w-full text-xs" value={editHeader.ex_factory || ""} onChange={(e) => setEditHeader((h) => ({ ...h, ex_factory: e.target.value }))} /> : po?.ex_factory_date || "2026-08-14"}</td>
+                  </tr>
+                  <tr>
+                    <td className="font-bold pr-2 py-0.5 text-gray-600">ETD:</td>
+                    <td>{editMode ? <input type="date" className="border rounded px-1 w-full text-xs" value={editHeader.etd || ""} onChange={(e) => setEditHeader((h) => ({ ...h, etd: e.target.value }))} /> : po?.etd || "2026-10-03"}</td>
+                  </tr>
+                  <tr>
+                    <td className="font-bold pr-2 py-0.5 text-gray-600">ETA:</td>
+                    <td>{editMode ? <input type="date" className="border rounded px-1 w-full text-xs" value={editHeader.eta || ""} onChange={(e) => setEditHeader((h) => ({ ...h, eta: e.target.value }))} /> : po?.eta || "2026-10-10"}</td>
+                  </tr>
+                  <tr>
+                    <td className="font-bold pr-2 py-0.5 text-gray-600">Terms:</td>
+                    <td>{editMode ? <input className="border rounded px-1 w-full text-xs" value={editHeader.terms || ""} onChange={(e) => setEditHeader((h) => ({ ...h, terms: e.target.value }))} /> : "NET 60 | FOB Origin"}</td>
+                  </tr>
+                  <tr>
+                    <td className="font-bold pr-2 py-0.5 text-gray-600">Ship Via:</td>
+                    <td>{editMode ? <input className="border rounded px-1 w-full text-xs" value={editHeader.ship_via || ""} onChange={(e) => setEditHeader((h) => ({ ...h, ship_via: e.target.value }))} /> : "Container Direct"}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Addresses */}
+          <div className="grid grid-cols-2 gap-0 border border-gray-400 mb-3">
+            <div className="border-r border-gray-400 p-2">
+              <div className="font-bold text-gray-700 mb-1 text-xs uppercase">Buyer's Name & Address:</div>
+              {editMode ? (
+                <div className="space-y-1">
+                  <input className="border rounded px-1 w-full text-xs font-bold" value={editHeader.buyer_name || ""} onChange={(e) => setEditHeader((h) => ({ ...h, buyer_name: e.target.value }))} />
+                  <textarea rows={3} className="border rounded px-1 w-full text-xs" value={editHeader.buyer_address || ""} onChange={(e) => setEditHeader((h) => ({ ...h, buyer_address: e.target.value }))} />
+                </div>
+              ) : (
+                <p className="text-xs leading-relaxed whitespace-pre-line">
+                  <strong>Pure Care</strong>{"\n"}Direct to Consumer Warehouse{"\n"}1402 S 40th Ave STE A{"\n"}Phoenix, AZ 85009
+                </p>
+              )}
+            </div>
+            <div className="p-2">
+              <div className="font-bold text-gray-700 mb-1 text-xs uppercase">Ship to Party Name & Address:</div>
+              {editMode ? (
+                <div className="space-y-1">
+                  <input className="border rounded px-1 w-full text-xs font-bold" value={editHeader.ship_to_name || ""} onChange={(e) => setEditHeader((h) => ({ ...h, ship_to_name: e.target.value }))} />
+                  <textarea rows={3} className="border rounded px-1 w-full text-xs" value={editHeader.ship_to_address || ""} onChange={(e) => setEditHeader((h) => ({ ...h, ship_to_address: e.target.value }))} />
+                </div>
+              ) : (
+                <p className="text-xs leading-relaxed whitespace-pre-line">
+                  <strong>Bob's Discount Furniture</strong>{"\n"}70 Jewett City Rd, Taftville, CT 06380{"\n"}Phone: 203-799-9010
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Shipping / Port Info */}
+          <div className="border border-gray-400 mb-3 p-2">
+            <div className="grid grid-cols-3 gap-4 text-xs">
+              <div><span className="font-bold text-gray-600">Port of Loading: </span>
+                {editMode ? <input className="border rounded px-1 text-xs" value={editHeader.port_loading || ""} onChange={(e) => setEditHeader((h) => ({ ...h, port_loading: e.target.value }))} /> : "Karachi, Pakistan"}
+              </div>
+              <div><span className="font-bold text-gray-600">Port of Discharge: </span>
+                {editMode ? <input className="border rounded px-1 text-xs" value={editHeader.port_discharge || ""} onChange={(e) => setEditHeader((h) => ({ ...h, port_discharge: e.target.value }))} /> : "USA"}
+              </div>
+              <div><span className="font-bold text-gray-600">Country of Origin: </span>
+                {editMode ? <input className="border rounded px-1 text-xs" value={editHeader.country_origin || ""} onChange={(e) => setEditHeader((h) => ({ ...h, country_origin: e.target.value }))} /> : "Pakistan"}
+              </div>
+            </div>
+          </div>
+
+          {/* Items Table */}
+          <table className="w-full border-collapse border border-gray-400 text-xs mb-3">
+            <thead>
+              <tr className="bg-gray-200">
+                <th className="border border-gray-400 px-2 py-1.5 text-left w-8">S#</th>
+                <th className="border border-gray-400 px-2 py-1.5 text-left w-24">Item Code</th>
+                <th className="border border-gray-400 px-2 py-1.5 text-left">Description</th>
+                <th className="border border-gray-400 px-2 py-1.5 text-center w-16">Qty</th>
+                <th className="border border-gray-400 px-2 py-1.5 text-center w-12">UOM</th>
+                <th className="border border-gray-400 px-2 py-1.5 text-right w-24">Unit Price (USD)</th>
+                <th className="border border-gray-400 px-2 py-1.5 text-right w-28">Amount (USD)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayItems.map((item, idx) => {
+                const amount = editMode
+                  ? Number(item.quantity || 0) * Number(item.unit_price || 0)
+                  : item.total_price || item.unit_price * item.quantity || 0;
+                return (
+                  <tr key={item.id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                    <td className="border border-gray-300 px-2 py-1">{idx + 1}</td>
+                    <td className="border border-gray-300 px-2 py-1 font-medium">{item.item_code}</td>
+                    <td className="border border-gray-300 px-2 py-1">
+                      {editMode ? (
+                        <input className="w-full border rounded px-1 text-xs" value={item.item_description || ""} onChange={(e) => updateEditItem(item.id, "item_description", e.target.value)} />
+                      ) : item.item_description}
+                    </td>
+                    <td className="border border-gray-300 px-2 py-1 text-center">
+                      {editMode ? (
+                        <input type="number" className="w-16 border rounded px-1 text-xs text-center" value={item.quantity || ""} onChange={(e) => updateEditItem(item.id, "quantity", e.target.value)} />
+                      ) : item.quantity?.toLocaleString()}
+                    </td>
+                    <td className="border border-gray-300 px-2 py-1 text-center">{item.unit || "EA"}</td>
+                    <td className="border border-gray-300 px-2 py-1 text-right">
+                      {editMode ? (
+                        <input type="number" step="0.01" className="w-20 border rounded px-1 text-xs text-right" value={item.unit_price || ""} onChange={(e) => updateEditItem(item.id, "unit_price", e.target.value)} />
+                      ) : `$${Number(item.unit_price).toFixed(2)}`}
+                    </td>
+                    <td className="border border-gray-300 px-2 py-1 text-right font-medium">
+                      ${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="bg-gray-200 font-bold">
+                <td colSpan={3} className="border border-gray-400 px-2 py-1.5 text-right uppercase text-xs tracking-wide">TOTAL</td>
+                <td className="border border-gray-400 px-2 py-1.5 text-center">{dispQty.toLocaleString()}</td>
+                <td className="border border-gray-400 px-2 py-1.5"></td>
+                <td className="border border-gray-400 px-2 py-1.5"></td>
+                <td className="border border-gray-400 px-2 py-1.5 text-right">
+                  USD {dispTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+
+          {/* Total box */}
+          <div className="flex justify-end mb-4">
+            <div className="border-2 border-gray-800 px-6 py-2 text-xs">
+              <span className="font-bold uppercase tracking-wide">Total Invoice Value: </span>
+              <span className="text-base font-black text-primary ml-2">
+                USD {dispTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
+
+          {/* Payment Terms */}
+          <div className="border border-gray-400 p-2 mb-4 text-xs">
+            <span className="font-bold">Payment Terms: </span>
+            NET 60 days from Bill of Lading date. Payment to be made in USD via TT / Wire Transfer.
+          </div>
+
+          {/* Signatures */}
+          <div className="grid grid-cols-2 gap-12 mt-10 text-xs">
+            <div>
+              <div className="border-t-2 border-gray-700 pt-2 mt-10">
+                <p className="font-bold">For Union Fabrics Ltd.</p>
+                <p className="text-gray-500 mt-0.5">Authorized Signature & Stamp</p>
+              </div>
+            </div>
+            <div>
+              <div className="border-t-2 border-gray-700 pt-2 mt-10">
+                <p className="font-bold">For PureCare / Buyer</p>
+                <p className="text-gray-500 mt-0.5">Authorized Signature & Date</p>
+              </div>
             </div>
           </div>
         </div>
@@ -200,9 +372,9 @@ export default function ProformaInvoice() {
 
       <style>{`
         @media print {
-          body * { visibility: hidden; }
-          .print-area, .print-area * { visibility: visible; }
+          .print\\:hidden { display: none !important; }
           @page { margin: 1cm; size: A4; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
       `}</style>
     </div>
