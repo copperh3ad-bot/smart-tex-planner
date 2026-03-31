@@ -20,6 +20,7 @@ function MatchBadge({ status }) {
 export default function PriceVerification({ poId, items, onEditItem }) {
   const queryClient = useQueryClient();
   const [editingRefPrice, setEditingRefPrice] = useState({});
+  const [editingRefCbm, setEditingRefCbm] = useState({});
   const [editingPoPrice, setEditingPoPrice] = useState({}); // { [itemId]: string }
 
   const handleSavePoPrice = async (item, newPrice) => {
@@ -42,6 +43,17 @@ export default function PriceVerification({ poId, items, onEditItem }) {
     }
     queryClient.invalidateQueries({ queryKey: ["priceList"] });
     setEditingRefPrice((p) => { const n = { ...p }; delete n[itemCode]; return n; });
+  };
+
+  const handleSaveRefCbm = async (itemCode, refId, newCbm) => {
+    const cbm = Number(newCbm);
+    if (refId) {
+      await base44.entities.PriceList.update(refId, { cbm_per_carton: cbm });
+    } else {
+      await base44.entities.PriceList.create({ item_code: itemCode, cbm_per_carton: cbm });
+    }
+    queryClient.invalidateQueries({ queryKey: ["priceList"] });
+    setEditingRefCbm((p) => { const n = { ...p }; delete n[itemCode]; return n; });
   };
 
   const { data: priceList = [] } = useQuery({
@@ -216,7 +228,26 @@ export default function PriceVerification({ poId, items, onEditItem }) {
                   </TableCell>
                   <TableCell><MatchBadge status={priceStatus} /></TableCell>
                   <TableCell className="text-xs hidden md:table-cell">{item.cbm?.toFixed(4) ?? "—"}</TableCell>
-                  <TableCell className="text-xs hidden md:table-cell">{refCbm != null ? refCbm.toFixed(4) : "—"}</TableCell>
+                  <TableCell className="text-xs hidden md:table-cell">
+                    {editingRefCbm[item.item_code] !== undefined ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number" step="0.0001"
+                          className="w-20 border rounded px-1 py-0.5 text-xs"
+                          value={editingRefCbm[item.item_code]}
+                          onChange={(e) => setEditingRefCbm((p) => ({ ...p, [item.item_code]: e.target.value }))}
+                          autoFocus
+                        />
+                        <button className="text-emerald-600 hover:text-emerald-800" onClick={() => handleSaveRefCbm(item.item_code, ref?.id, editingRefCbm[item.item_code])}><Check className="h-3 w-3" /></button>
+                        <button className="text-muted-foreground hover:text-foreground" onClick={() => setEditingRefCbm((p) => { const n={...p}; delete n[item.item_code]; return n; })}><X className="h-3 w-3" /></button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <span>{refCbm != null ? refCbm.toFixed(4) : "—"}</span>
+                        <button className="text-muted-foreground hover:text-primary" onClick={() => setEditingRefCbm((p) => ({ ...p, [item.item_code]: refCbm ?? "" }))}><Pencil className="h-3 w-3" /></button>
+                      </div>
+                    )}
+                  </TableCell>
                   <TableCell><MatchBadge status={cbmStatus} /></TableCell>
                   <TableCell className="text-xs">
                     {item.num_cartons ?? (ref && item.quantity > 0 && ref.qty_per_carton > 0 ? Math.ceil(item.quantity / ref.qty_per_carton) : "—")}
