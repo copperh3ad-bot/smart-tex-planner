@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ProformaInvoice from './pages/ProformaInvoice';
 import FabricWorking from './pages/FabricWorking';
+import AccessoriesPackaging from './pages/AccessoriesPackaging';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -61,6 +62,7 @@ const AuthenticatedApp = () => {
       ))}
       <Route path="/ProformaInvoice" element={<LayoutWrapper currentPageName="ProformaInvoice"><ProformaInvoice /></LayoutWrapper>} />
       <Route path="/FabricWorking" element={<LayoutWrapper currentPageName="FabricWorking"><FabricWorking /></LayoutWrapper>} />
+      <Route path="/AccessoriesPackaging" element={<LayoutWrapper currentPageName="AccessoriesPackaging"><AccessoriesPackaging /></LayoutWrapper>} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );

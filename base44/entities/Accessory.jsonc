@@ -1,0 +1,67 @@
+{
+  "name": "Accessory",
+  "type": "object",
+  "properties": {
+    "po_id": {
+      "type": "string",
+      "description": "Reference to PurchaseOrder"
+    },
+    "item_name": {
+      "type": "string",
+      "description": "Name of accessory or packaging item"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "Label",
+        "Tag",
+        "Polybag",
+        "Carton",
+        "Hanger",
+        "Thread",
+        "Button",
+        "Zipper",
+        "Other"
+      ],
+      "default": "Label"
+    },
+    "quantity_required": {
+      "type": "number"
+    },
+    "unit": {
+      "type": "string",
+      "enum": [
+        "Pcs",
+        "Rolls",
+        "Kgs",
+        "Sets",
+        "Boxes",
+        "Meters"
+      ],
+      "default": "Pcs"
+    },
+    "supplier": {
+      "type": "string"
+    },
+    "unit_cost": {
+      "type": "number",
+      "description": "Unit cost in USD"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Pending",
+        "Ordered",
+        "Received",
+        "Approved"
+      ],
+      "default": "Pending"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "item_name"
+  ]
+}
