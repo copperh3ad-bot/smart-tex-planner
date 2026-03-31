@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, FileText, Trash2, Upload } from "lucide-react";
+import { Plus, Search, FileText, Trash2, Upload, Mail } from "lucide-react";
 import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import StatusBadge from "../components/shared/StatusBadge";
@@ -32,7 +32,21 @@ export default function PurchaseOrders() {
   });
 
   const handleCreate = async (data) => {
-    await base44.entities.PurchaseOrder.create(data);
+    const po = await base44.entities.PurchaseOrder.create(data);
+    // Auto-create line items if extracted from import
+    if (prefillData?.items?.length > 0) {
+      const items = prefillData.items.map((item) => ({
+        ...item,
+        po_id: po.id,
+        po_number: po.po_number,
+        quantity: Number(item.quantity) || 0,
+        unit_price: Number(item.unit_price) || 0,
+        total_price: (Number(item.quantity) || 0) * (Number(item.unit_price) || 0),
+        unit: item.unit || "Pieces",
+        price_status: "Pending",
+      }));
+      await base44.entities.POItem.bulkCreate(items);
+    }
     queryClient.invalidateQueries({ queryKey: ["purchaseOrders"] });
     setShowForm(false);
   };
@@ -79,7 +93,10 @@ export default function PurchaseOrders() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setShowEmailImport(true)}>
-            <Upload className="h-4 w-4 mr-2" /> Import PO
+            <Mail className="h-4 w-4 mr-2" /> Import from Email
+          </Button>
+          <Button variant="outline" onClick={() => { setShowEmailImport(true); }} className="hidden sm:flex">
+            <Upload className="h-4 w-4 mr-2" /> Import PDF / Excel
           </Button>
           <Button onClick={() => { setPrefillData(null); setShowForm(true); }} className="bg-primary hover:bg-primary/90">
             <Plus className="h-4 w-4 mr-2" /> New PO
