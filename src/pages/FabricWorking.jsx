@@ -3,7 +3,8 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Printer, Download, Pencil, Save, X, Plus, Trash2, Layers } from "lucide-react";
+import { Printer, Download, Pencil, Save, X, Plus, Layers } from "lucide-react";
+import ArticleFabricSetup from "../components/fabric/ArticleFabricSetup";
 
 const COMPONENT_TYPES = ["Front", "Skirt", "Bottom", "Piping", "Binding", "Filling", "Lamination", "Top Fabric", "Window (Outside)", "Window (Inside)"];
 
@@ -185,24 +186,32 @@ export default function FabricWorking() {
                 {poArticles.map((article, artIdx) => {
                   const isEditing = editingId === article.id;
                   const comps = isEditing ? editForm.components : (article.components || []);
-                  const rowCount = comps.length || 1;
+                  const rowCount = Math.max(comps.length, 1);
                   const artBg = artIdx % 2 === 0 ? "#EBF0FA" : "#FFFFFF";
 
                   return (
                     <React.Fragment key={article.id}>
-                      {comps.length === 0 ? (
+                      {!isEditing && comps.length === 0 ? (
+                        // NEW ARTICLE — show setup widget
                         <tr style={{ backgroundColor: artBg }}>
                           <td className="border border-gray-300 px-2 py-1.5 font-semibold text-blue-900">{article.article_name}</td>
                           <td className="border border-gray-300 px-2 py-1.5 text-gray-500">{article.article_code}</td>
-                          <td className="border border-gray-300 px-2 py-1.5 text-center">{article.order_quantity}</td>
-                          <td colSpan={7} className="border border-gray-300 px-2 py-1.5 text-muted-foreground italic">No components. Click Edit.</td>
-                          <td className="border border-gray-300 px-2 py-1.5 text-center print-hidden">
-                            <button onClick={() => startEdit(article)} className="text-blue-600 hover:text-blue-800"><Pencil className="h-3 w-3" /></button>
-                          </td>
+                          <td className="border border-gray-300 px-2 py-1.5 text-center">{article.order_quantity?.toLocaleString()}</td>
+                          <ArticleFabricSetup
+                            article={article}
+                            onEdit={() => startEdit(article)}
+                            onSetup={async (components) => {
+                              const total_fabric_required = +components.reduce((s, c) => s + (c.total_required || 0), 0).toFixed(4);
+                              await base44.entities.Article.update(article.id, { components, total_fabric_required });
+                              queryClient.invalidateQueries({ queryKey: ["articles"] });
+                            }}
+                          />
+                          <td className="border border-gray-300 px-2 py-1.5 text-center print-hidden" />
                         </tr>
                       ) : (
                         comps.map((comp, idx) => {
-                          const net = (comp.consumption_per_unit || 0) * ((isEditing ? editForm.order_quantity : article.order_quantity) || 0);
+                          const qty = (isEditing ? editForm.order_quantity : article.order_quantity) || 0;
+                          const net = (comp.consumption_per_unit || 0) * qty;
                           const total = comp.total_required || net * (1 + (comp.wastage_percent || 0) / 100);
                           return (
                             <tr key={idx} style={{ backgroundColor: artBg }}>
@@ -221,8 +230,6 @@ export default function FabricWorking() {
                                   </td>
                                 </>
                               )}
-
-                              {/* Component cells */}
                               <td className="border border-gray-300 px-2 py-1">
                                 {isEditing ? (
                                   <select className="w-full text-xs border rounded px-1 py-0.5" value={comp.component_type} onChange={(e) => updateComp(idx, "component_type", e.target.value)}>
@@ -252,8 +259,6 @@ export default function FabricWorking() {
                                 ) : `${comp.wastage_percent ?? 6}%`}
                               </td>
                               <td className="border border-gray-300 px-2 py-1 text-center font-bold" style={{ backgroundColor: "#FFF2CC" }}>{total.toFixed(2)}</td>
-
-                              {/* Actions — only in first row */}
                               {idx === 0 && (
                                 <td rowSpan={rowCount} className="border border-gray-300 px-2 py-1 text-center align-top print-hidden">
                                   {isEditing ? (
@@ -283,9 +288,6 @@ export default function FabricWorking() {
                           <td className="border border-gray-300" />
                         </tr>
                       )}
-
-                      {/* Delete row for editing */}
-                      {isEditing && comps.map((_, idx) => null)}
                     </React.Fragment>
                   );
                 })}

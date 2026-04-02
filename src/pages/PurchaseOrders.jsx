@@ -164,22 +164,8 @@ export default function PurchaseOrders() {
               return { ...comp, total_required };
             });
           } else {
-            // NEW ARTICLE: build a single component from POItem specs
-            // Estimate consumption from width & GSM if not provided
-            const widthM = (Number(item.width) || 150) / 100; // convert cm to meters, default 150cm
-            const consumption_per_unit = widthM > 0 ? +(1 / widthM).toFixed(4) : 1.5;
-            const net = consumption_per_unit * qty;
-            const wastage_percent = 6;
-            const total_required = +(net * (1 + wastage_percent / 100)).toFixed(4);
-            components = [{
-              component_type: "Front",
-              fabric_type: item.fabric_type || "",
-              gsm: item.gsm || undefined,
-              width: item.width || undefined,
-              consumption_per_unit,
-              wastage_percent,
-              total_required,
-            }];
+            // NEW ARTICLE: leave components empty — user will fill via Fabric Working sheet
+            components = [];
           }
 
           const total_fabric_required = +components.reduce((s, c) => s + (c.total_required || 0), 0).toFixed(4);
