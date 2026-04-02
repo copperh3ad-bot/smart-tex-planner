@@ -54,8 +54,9 @@ export default function ProformaInvoice() {
 
   const startEdit = () => {
     setEditHeader({
+      pi_number: po?.pi_number || "",
       mta_number: "MTA#2016-2026",
-      pi_date: "2026-03-06",
+      pi_date: po?.pi_date || "2026-03-06",
       sales_order: "1201579-001",
       cust_po: "4501439930",
       ex_factory: po?.ex_factory_date || "2026-08-14",
@@ -76,7 +77,7 @@ export default function ProformaInvoice() {
   };
 
   const saveEdit = async () => {
-    await updatePO.mutateAsync({ id: po.id, data: { etd: editHeader.etd, eta: editHeader.eta, ex_factory_date: editHeader.ex_factory } });
+    await updatePO.mutateAsync({ id: po.id, data: { etd: editHeader.etd, eta: editHeader.eta, ex_factory_date: editHeader.ex_factory, pi_number: editHeader.pi_number, pi_date: editHeader.pi_date } });
     for (const item of editItems) {
       const orig = items.find((i) => i.id === item.id);
       if (
@@ -185,7 +186,7 @@ export default function ProformaInvoice() {
                 <tbody>
                   <tr>
                     <td className="font-bold pr-2 py-0.5 text-gray-600 w-36">Pro. Invoice #:</td>
-                    <td className="font-semibold">{editMode ? <input className="border rounded px-1 w-full text-xs" value={editHeader.mta_number || ""} onChange={(e) => setEditHeader((h) => ({ ...h, mta_number: e.target.value }))} /> : "MTA#2016-2026"}</td>
+                    <td className="font-semibold">{editMode ? <input className="border rounded px-1 w-full text-xs" value={editHeader.pi_number || ""} onChange={(e) => setEditHeader((h) => ({ ...h, pi_number: e.target.value }))} placeholder="e.g. PI-2026-001" /> : (po?.pi_number || <span className="text-red-500 italic">Not set — click Edit</span>)}</td>
                   </tr>
                   <tr>
                     <td className="font-bold pr-2 py-0.5 text-gray-600">Dated:</td>

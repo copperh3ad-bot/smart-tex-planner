@@ -1,0 +1,107 @@
+{
+  "name": "PurchaseOrder",
+  "type": "object",
+  "properties": {
+    "po_number": {
+      "type": "string",
+      "description": "Purchase Order Number"
+    },
+    "pi_number": {
+      "type": "string",
+      "description": "Proforma Invoice Number"
+    },
+    "pi_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Proforma Invoice Date"
+    },
+    "customer_name": {
+      "type": "string",
+      "description": "Customer / Buyer / Brand Name"
+    },
+    "order_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Order received date"
+    },
+    "delivery_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Expected delivery date"
+    },
+    "ex_factory_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Ex-factory date"
+    },
+    "etd": {
+      "type": "string",
+      "format": "date",
+      "description": "Estimated Time of Departure"
+    },
+    "eta": {
+      "type": "string",
+      "format": "date",
+      "description": "Estimated Time of Arrival"
+    },
+    "currency": {
+      "type": "string",
+      "enum": [
+        "USD",
+        "EUR",
+        "GBP",
+        "INR",
+        "CNY",
+        "PKR",
+        "BDT"
+      ],
+      "default": "USD"
+    },
+    "total_po_value": {
+      "type": "number",
+      "description": "Total PO value"
+    },
+    "total_quantity": {
+      "type": "number",
+      "description": "Total quantity ordered"
+    },
+    "total_cbm": {
+      "type": "number",
+      "description": "Total Cubic Meters"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "PO Received",
+        "Items Entered",
+        "Price Verification",
+        "Price Approved",
+        "CBM Calculated",
+        "FWS Prepared",
+        "Yarn Planned",
+        "In Production",
+        "Completed",
+        "Shipped"
+      ],
+      "default": "PO Received"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "Email",
+        "WhatsApp",
+        "PDF",
+        "Manual"
+      ],
+      "default": "Manual"
+    }
+  },
+  "required": [
+    "po_number",
+    "customer_name"
+  ]
+}
