@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Search, Tag, Box, Package, Layers, CheckCircle } from "lucide-react";
+import UploadPackagingSheet from "../components/packaging/UploadPackagingSheet";
 import ArticlePackagingForm from "../components/packaging/ArticlePackagingForm";
 import ArticlePackagingCard from "../components/packaging/ArticlePackagingCard";
 
@@ -64,9 +65,12 @@ export default function AccessoriesPackaging() {
             Define packaging instructions once per article — auto-applied on repeat orders
           </p>
         </div>
-        <Button onClick={() => { setEditingItem(null); setShowForm(true); }}>
+        <div className="flex gap-2">
+          <UploadPackagingSheet onSuccess={() => queryClient.invalidateQueries({ queryKey: ["articlePackaging"] })} />
+          <Button onClick={() => { setEditingItem(null); setShowForm(true); }}>
           <Plus className="h-4 w-4 mr-1.5" /> New Article Template
         </Button>
+        </div>
       </div>
 
       {/* Stats */}

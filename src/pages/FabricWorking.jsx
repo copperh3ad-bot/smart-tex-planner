@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Printer, Download, Pencil, Save, X, Plus, Layers } from "lucide-react";
+import UploadFabricSheet from "../components/fabric/UploadFabricSheet";
 import ArticleFabricSetup from "../components/fabric/ArticleFabricSetup";
 
 const COMPONENT_TYPES = ["Front", "Skirt", "Bottom", "Piping", "Binding", "Filling", "Lamination", "Top Fabric", "Window (Outside)", "Window (Inside)"];
@@ -140,10 +141,8 @@ export default function FabricWorking() {
           </Select>
         </div>
         <div className="flex gap-2">
+          <UploadFabricSheet onSuccess={() => queryClient.invalidateQueries({ queryKey: ["articles"] })} />
           <Button size="sm" variant="outline" onClick={handleDownload} className="gap-1.5 text-xs">
-            <Download className="h-3.5 w-3.5" /> Download CSV
-          </Button>
-          <Button size="sm" onClick={handlePrint} className="gap-1.5 text-xs">
             <Printer className="h-3.5 w-3.5" /> Print
           </Button>
         </div>
