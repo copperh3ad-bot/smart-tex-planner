@@ -19,26 +19,32 @@ export default function UploadPackagingSheet({ onSuccess }) {
   const handleProcess = async () => {
     if (!file) return;
     setStatus("uploading");
-    setMessage("Uploading file...");
+    setMessage("Reading file...");
 
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
+    const text = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = reject;
+      reader.readAsText(file);
+    });
 
     setStatus("extracting");
     setMessage("Extracting packaging data with AI...");
 
     const extracted = await base44.integrations.Core.InvokeLLM({
-      prompt: `Extract accessories and packaging specification data from this file. For each article/product row, extract:
+      prompt: `Extract accessories and packaging specification data from this CSV/spreadsheet content. For each article/product row extract:
 - article_name
 - article_code (SKU if present)
 - customer_name (brand/buyer if present)
-- labels: array of label objects with label_type, description, supplier, unit_cost, notes
-- polybag: object with type (PVC/PP/PE/LDPE/OPP), thickness_microns, printed (bool), size_cm, supplier, unit_cost, notes
-- stiffener: object with used (bool), material, size_cm, supplier, unit_cost, notes
-- carton: object with type (Printed/Plain/Brown/White), quality, size_cm, pieces_per_carton, gross_weight_kg, net_weight_kg, supplier, unit_cost
-- stickers: array of sticker objects with sticker_type, description, supplier, unit_cost, notes
-- notes: any additional notes
-Return as JSON array.`,
-      file_urls: [file_url],
+- labels: array of { label_type, description, supplier, unit_cost, notes }
+- polybag: { type (PVC/PP/PE/LDPE/OPP), thickness_microns, printed (bool), size_cm, supplier, unit_cost, notes }
+- stiffener: { used (bool), material, size_cm, supplier, unit_cost, notes }
+- carton: { type, quality, size_cm, pieces_per_carton, gross_weight_kg, net_weight_kg, supplier, unit_cost }
+- stickers: array of { sticker_type, description, supplier, unit_cost, notes }
+- notes
+
+Content:
+${text.substring(0, 15000)}`,
       response_json_schema: {
         type: "object",
         properties: {
@@ -61,7 +67,7 @@ Return as JSON array.`,
     const articles = extracted?.articles || [];
     if (articles.length === 0) {
       setStatus("error");
-      setMessage("Could not extract any packaging data. Please check the file format.");
+      setMessage("Could not extract any data. Please save as CSV and try again.");
       return;
     }
 
@@ -71,14 +77,16 @@ Return as JSON array.`,
     let created = 0, updated = 0;
     for (const art of articles) {
       if (!art.article_name) continue;
-      const existing = await base44.entities.ArticlePackaging.filter({ article_code: art.article_code || "" });
-      if (existing && existing.length > 0) {
-        await base44.entities.ArticlePackaging.update(existing[0].id, art);
-        updated++;
-      } else {
-        await base44.entities.ArticlePackaging.create(art);
-        created++;
-      }
+      try {
+        const existing = await base44.entities.ArticlePackaging.filter({ article_code: art.article_code || "" });
+        if (existing && existing.length > 0) {
+          await base44.entities.ArticlePackaging.update(existing[0].id, art);
+          updated++;
+        } else {
+          await base44.entities.ArticlePackaging.create(art);
+          created++;
+        }
+      } catch { continue; }
     }
 
     setStatus("done");
@@ -114,8 +122,8 @@ Return as JSON array.`,
               >
                 <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                 <p className="text-sm font-medium">{file ? file.name : "Click to select file"}</p>
-                <p className="text-xs text-muted-foreground mt-1">Supports .xlsx, .xls, .csv</p>
-                <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
+                <p className="text-xs text-muted-foreground mt-1">Please save your Excel file as <strong>CSV</strong> before uploading (.csv)</p>
+                <input ref={inputRef} type="file" accept=".csv,.txt" className="hidden" onChange={handleFile} />
               </div>
             )}
 

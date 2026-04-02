@@ -22,27 +22,34 @@ export default function UploadFabricSheet({ onSuccess }) {
   const handleProcess = async () => {
     if (!file) return;
     setStatus("uploading");
-    setMessage("Uploading file...");
+    setMessage("Reading file...");
 
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
+    // Read file as text
+    const text = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = reject;
+      reader.readAsText(file);
+    });
 
     setStatus("extracting");
     setMessage("Extracting fabric data with AI...");
 
     const extracted = await base44.integrations.Core.InvokeLLM({
-      prompt: `Extract fabric working sheet data from this Excel file. For each row that represents an article/item, extract:
-- item_code (SKU code like GPMP33, GPTE50, etc.)
+      prompt: `Extract fabric working sheet data from this CSV/spreadsheet content. For each row that represents an article/item (has an item code like GPMP33, GPTE50, GPFRIOMP33, etc.), extract:
+- item_code (SKU code column)
 - article_name
-- order_quantity (PO Qty column if present)
-- components: array of objects with:
-  - component_type (e.g. Front, Skirt, Bottom, Piping, Binding, Filling, Lamination, Window (Inside), Window (Outside))
-  - fabric_type (the fabric description from the column header)
-  - width (in cm, from the Width in cm row or inferred from fabric description)
-  - consumption_per_unit (the numeric value in the cell for that component column)
-  - wastage_percent (default 6 if not specified)
-Only include components where the cell has a non-zero numeric value.
-Return as JSON array of article objects.`,
-      file_urls: [file_url],
+- order_quantity (PO Qty column if present, as number)
+- components: array where each component has:
+  - component_type: from Version column (e.g. Front, Skirt, Bottom, Piping, Binding, Filling, Lamination, Window (Inside), Window (Outside))
+  - fabric_type: from the fabric column header that has a non-zero value
+  - width: from Width in cm column (number)
+  - consumption_per_unit: the numeric cell value for that fabric column (only include if > 0)
+  - wastage_percent: 6 (default)
+Only include rows with valid item codes. Only include components with consumption_per_unit > 0.
+
+Spreadsheet content:
+${text.substring(0, 15000)}`,
       response_json_schema: {
         type: "object",
         properties: {
@@ -77,7 +84,7 @@ Return as JSON array of article objects.`,
     const articles = extracted?.articles || [];
     if (articles.length === 0) {
       setStatus("error");
-      setMessage("Could not extract any article data from the file. Please check the format.");
+      setMessage("Could not extract any article data. Please save the file as CSV and try again.");
       return;
     }
 
@@ -88,21 +95,21 @@ Return as JSON array of article objects.`,
     let skipped = 0;
     for (const art of articles) {
       if (!art.item_code) { skipped++; continue; }
-      // Recalculate total_required for each component
       const components = (art.components || []).map(c => ({
         ...c,
         total_required: +(((c.consumption_per_unit || 0) * (art.order_quantity || 0)) * (1 + (c.wastage_percent || 6) / 100)).toFixed(4)
       }));
       const updateData = { components };
       if (art.order_quantity) updateData.order_quantity = art.order_quantity;
-      await base44.entities.Article.filter({ article_code: art.item_code }).then(async (matches) => {
+      try {
+        const matches = await base44.entities.Article.filter({ article_code: art.item_code });
         if (matches && matches.length > 0) {
           for (const m of matches) {
             await base44.entities.Article.update(m.id, updateData);
             updated++;
           }
         } else skipped++;
-      }).catch(() => { skipped++; });
+      } catch { skipped++; }
     }
 
     setStatus("done");
@@ -138,8 +145,8 @@ Return as JSON array of article objects.`,
               >
                 <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                 <p className="text-sm font-medium">{file ? file.name : "Click to select file"}</p>
-                <p className="text-xs text-muted-foreground mt-1">Supports .xlsx, .xls, .csv</p>
-                <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
+                <p className="text-xs text-muted-foreground mt-1">Please save your Excel file as <strong>CSV</strong> before uploading (.csv)</p>
+                <input ref={inputRef} type="file" accept=".csv,.txt" className="hidden" onChange={handleFile} />
               </div>
             )}
 
