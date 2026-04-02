@@ -208,6 +208,22 @@ export default function FabricWorking() {
                           />
                           <td className="border border-gray-300 px-2 py-1.5 text-center print-hidden" />
                         </tr>
+                      ) : comps.length === 0 && isEditing ? (
+                        // Editing new article with no components yet — show placeholder row
+                        <tr style={{ backgroundColor: artBg }}>
+                          <td className="border border-gray-300 px-2 py-1.5 font-semibold text-blue-900">{article.article_name}</td>
+                          <td className="border border-gray-300 px-2 py-1.5 text-gray-600">{article.article_code}</td>
+                          <td className="border border-gray-300 px-2 py-1.5 text-center">
+                            <input type="number" className="w-14 border rounded px-1 py-0.5 text-center" value={editForm.order_quantity || ""} onChange={(e) => setEditForm((f) => ({ ...f, order_quantity: Number(e.target.value) }))} />
+                          </td>
+                          <td colSpan={7} className="border border-gray-300 px-2 py-1.5 text-muted-foreground italic text-xs">Click "Add Component" below to define fabric specs</td>
+                          <td className="border border-gray-300 px-2 py-1 text-center">
+                            <div className="flex flex-col gap-1 items-center">
+                              <button onClick={saveEdit} className="text-green-600 hover:text-green-800" title="Save"><Save className="h-3.5 w-3.5" /></button>
+                              <button onClick={() => setEditingId(null)} className="text-gray-400 hover:text-gray-600" title="Cancel"><X className="h-3.5 w-3.5" /></button>
+                            </div>
+                          </td>
+                        </tr>
                       ) : (
                         comps.map((comp, idx) => {
                           const qty = (isEditing ? editForm.order_quantity : article.order_quantity) || 0;
