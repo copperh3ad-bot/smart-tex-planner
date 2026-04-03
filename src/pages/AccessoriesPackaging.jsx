@@ -60,7 +60,7 @@ export default function AccessoriesPackaging() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-bold text-foreground">Accessories & Packaging</h1>
+          <h1 className="text-xl font-bold text-foreground">Packaging</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Define packaging instructions once per article — auto-applied on repeat orders
           </p>

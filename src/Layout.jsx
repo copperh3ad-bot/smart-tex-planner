@@ -24,7 +24,9 @@ const navItems = [
   { name: "Fabric Working", icon: Shirt, page: "FabricWorking" },
   { name: "Articles", icon: Layers, page: "Articles" },
   { name: "Yarn Planning", icon: Scissors, page: "YarnPlanning" },
-  { name: "Accessories & Packaging", icon: Tag, page: "AccessoriesPackaging" },
+  { name: "Packaging", icon: Tag, page: "AccessoriesPackaging" },
+  { name: "Accessories", icon: Scissors, page: "Accessories" },
+  { name: "Shipping Docs", icon: FileText, page: "ShippingDocuments" },
   { name: "Production", icon: Factory, page: "Production" },
   { name: "Job Cards", icon: ClipboardList, page: "JobCards" },
 ];

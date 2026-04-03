@@ -1,0 +1,88 @@
+{
+  "name": "AccessoryItem",
+  "type": "object",
+  "properties": {
+    "po_id": {
+      "type": "string",
+      "description": "Reference to PurchaseOrder"
+    },
+    "po_number": {
+      "type": "string"
+    },
+    "article_name": {
+      "type": "string"
+    },
+    "article_code": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "Zipper",
+        "Slider",
+        "Elastic",
+        "Button",
+        "Dori",
+        "Eyelet",
+        "Stitching Thread",
+        "Other"
+      ],
+      "default": "Other"
+    },
+    "item_description": {
+      "type": "string"
+    },
+    "color": {
+      "type": "string"
+    },
+    "size_spec": {
+      "type": "string",
+      "description": "Size or specification e.g. 5mm, #3, 10cm"
+    },
+    "quantity_required": {
+      "type": "number"
+    },
+    "unit": {
+      "type": "string",
+      "enum": [
+        "Pcs",
+        "Meters",
+        "Kgs",
+        "Rolls",
+        "Dozens",
+        "Gross",
+        "Sets"
+      ],
+      "default": "Pcs"
+    },
+    "consumption_per_unit": {
+      "type": "number"
+    },
+    "supplier": {
+      "type": "string"
+    },
+    "unit_cost": {
+      "type": "number"
+    },
+    "total_cost": {
+      "type": "number"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Planned",
+        "Ordered",
+        "Received",
+        "Approved"
+      ],
+      "default": "Planned"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "category",
+    "item_description"
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "name": "ShippingDocument",
+  "type": "object",
+  "properties": {
+    "po_id": {
+      "type": "string",
+      "description": "Reference to PurchaseOrder"
+    },
+    "po_number": {
+      "type": "string"
+    },
+    "customer_name": {
+      "type": "string"
+    },
+    "document_type": {
+      "type": "string",
+      "enum": [
+        "Bill of Lading",
+        "Commercial Invoice",
+        "Packing List",
+        "Certificate of Origin",
+        "Inspection Certificate",
+        "Insurance Certificate",
+        "Phytosanitary Certificate",
+        "GOTS Certificate",
+        "Test Report",
+        "Other"
+      ],
+      "default": "Commercial Invoice"
+    },
+    "document_number": {
+      "type": "string"
+    },
+    "document_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "file_url": {
+      "type": "string",
+      "description": "Uploaded file URL"
+    },
+    "file_name": {
+      "type": "string"
+    },
+    "shipment_status": {
+      "type": "string",
+      "enum": [
+        "Before Shipment",
+        "After Shipment"
+      ],
+      "default": "Before Shipment"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "document_type"
+  ]
+}
