@@ -98,6 +98,50 @@
         "Manual"
       ],
       "default": "Manual"
+    },
+    "cust_po": {
+      "type": "string",
+      "description": "Customer PO number"
+    },
+    "sales_order": {
+      "type": "string",
+      "description": "Internal Sales Order number"
+    },
+    "buyer_name": {
+      "type": "string",
+      "description": "Buyer name for PI"
+    },
+    "buyer_address": {
+      "type": "string",
+      "description": "Buyer address for PI"
+    },
+    "ship_to_name": {
+      "type": "string",
+      "description": "Ship-To party name"
+    },
+    "ship_to_address": {
+      "type": "string",
+      "description": "Ship-To address"
+    },
+    "port_loading": {
+      "type": "string",
+      "description": "Port of Loading"
+    },
+    "port_discharge": {
+      "type": "string",
+      "description": "Port of Discharge"
+    },
+    "country_origin": {
+      "type": "string",
+      "description": "Country of Origin"
+    },
+    "payment_terms": {
+      "type": "string",
+      "description": "Payment terms e.g. NET 60 | FOB Origin"
+    },
+    "ship_via": {
+      "type": "string",
+      "description": "Shipping method"
     }
   },
   "required": [

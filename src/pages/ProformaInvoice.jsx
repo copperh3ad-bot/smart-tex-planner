@@ -55,29 +55,48 @@ export default function ProformaInvoice() {
   const startEdit = () => {
     setEditHeader({
       pi_number: po?.pi_number || "",
-      mta_number: "MTA#2016-2026",
-      pi_date: po?.pi_date || "2026-03-06",
-      sales_order: "1201579-001",
-      cust_po: "4501439930",
-      ex_factory: po?.ex_factory_date || "2026-08-14",
-      etd: po?.etd || "2026-10-03",
-      eta: po?.eta || "2026-10-10",
-      buyer_name: "Pure Care",
-      buyer_address: "Direct to Consumer Warehouse\n1402 S 40th Ave STE A\nPhoenix, AZ 85009",
-      ship_to_name: "Bob's Discount Furniture",
-      ship_to_address: "70 Jewett City Rd, Taftville, CT 06380\nPhone: 203-799-9010",
-      port_loading: "Karachi, Pakistan",
-      port_discharge: "USA",
-      country_origin: "Pakistan",
-      terms: "NET 60 | FOB Origin",
-      ship_via: "Container Direct",
+      pi_date: po?.pi_date || "",
+      sales_order: po?.sales_order || "",
+      cust_po: po?.cust_po || "",
+      ex_factory: po?.ex_factory_date || "",
+      etd: po?.etd || "",
+      eta: po?.eta || "",
+      buyer_name: po?.buyer_name || po?.customer_name || "",
+      buyer_address: po?.buyer_address || "",
+      ship_to_name: po?.ship_to_name || "",
+      ship_to_address: po?.ship_to_address || "",
+      port_loading: po?.port_loading || "Karachi, Pakistan",
+      port_discharge: po?.port_discharge || "USA",
+      country_origin: po?.country_origin || "Pakistan",
+      payment_terms: po?.payment_terms || "NET 60 | FOB Origin",
+      ship_via: po?.ship_via || "Container Direct",
     });
     setEditItems(items.map((i) => ({ ...i })));
     setEditMode(true);
   };
 
   const saveEdit = async () => {
-    await updatePO.mutateAsync({ id: po.id, data: { etd: editHeader.etd, eta: editHeader.eta, ex_factory_date: editHeader.ex_factory, pi_number: editHeader.pi_number, pi_date: editHeader.pi_date } });
+    await updatePO.mutateAsync({
+      id: po.id,
+      data: {
+        etd: editHeader.etd,
+        eta: editHeader.eta,
+        ex_factory_date: editHeader.ex_factory,
+        pi_number: editHeader.pi_number,
+        pi_date: editHeader.pi_date,
+        cust_po: editHeader.cust_po,
+        sales_order: editHeader.sales_order,
+        buyer_name: editHeader.buyer_name,
+        buyer_address: editHeader.buyer_address,
+        ship_to_name: editHeader.ship_to_name,
+        ship_to_address: editHeader.ship_to_address,
+        port_loading: editHeader.port_loading,
+        port_discharge: editHeader.port_discharge,
+        country_origin: editHeader.country_origin,
+        payment_terms: editHeader.payment_terms,
+        ship_via: editHeader.ship_via,
+      },
+    });
     for (const item of editItems) {
       const orig = items.find((i) => i.id === item.id);
       if (
@@ -190,7 +209,7 @@ export default function ProformaInvoice() {
                   </tr>
                   <tr>
                     <td className="font-bold pr-2 py-0.5 text-gray-600">Dated:</td>
-                    <td>{editMode ? <input type="date" className="border rounded px-1 w-full text-xs" value={editHeader.pi_date || ""} onChange={(e) => setEditHeader((h) => ({ ...h, pi_date: e.target.value }))} /> : "March 06, 2026"}</td>
+                    <td>{editMode ? <input type="date" className="border rounded px-1 w-full text-xs" value={editHeader.pi_date || ""} onChange={(e) => setEditHeader((h) => ({ ...h, pi_date: e.target.value }))} /> : (po?.pi_date || "—")}</td>
                   </tr>
                   <tr>
                     <td className="font-bold pr-2 py-0.5 text-gray-600">PO #:</td>
@@ -198,11 +217,11 @@ export default function ProformaInvoice() {
                   </tr>
                   <tr>
                     <td className="font-bold pr-2 py-0.5 text-gray-600">Cust PO #:</td>
-                    <td>{editMode ? <input className="border rounded px-1 w-full text-xs" value={editHeader.cust_po || ""} onChange={(e) => setEditHeader((h) => ({ ...h, cust_po: e.target.value }))} /> : "4501439930"}</td>
+                    <td>{editMode ? <input className="border rounded px-1 w-full text-xs" value={editHeader.cust_po || ""} onChange={(e) => setEditHeader((h) => ({ ...h, cust_po: e.target.value }))} /> : (po?.cust_po || "—")}</td>
                   </tr>
                   <tr>
                     <td className="font-bold pr-2 py-0.5 text-gray-600">Sales Order #:</td>
-                    <td>{editMode ? <input className="border rounded px-1 w-full text-xs" value={editHeader.sales_order || ""} onChange={(e) => setEditHeader((h) => ({ ...h, sales_order: e.target.value }))} /> : "1201579-001"}</td>
+                    <td>{editMode ? <input className="border rounded px-1 w-full text-xs" value={editHeader.sales_order || ""} onChange={(e) => setEditHeader((h) => ({ ...h, sales_order: e.target.value }))} /> : (po?.sales_order || "—")}</td>
                   </tr>
                 </tbody>
               </table>
@@ -224,11 +243,11 @@ export default function ProformaInvoice() {
                   </tr>
                   <tr>
                     <td className="font-bold pr-2 py-0.5 text-gray-600">Terms:</td>
-                    <td>{editMode ? <input className="border rounded px-1 w-full text-xs" value={editHeader.terms || ""} onChange={(e) => setEditHeader((h) => ({ ...h, terms: e.target.value }))} /> : "NET 60 | FOB Origin"}</td>
+                    <td>{editMode ? <input className="border rounded px-1 w-full text-xs" value={editHeader.payment_terms || ""} onChange={(e) => setEditHeader((h) => ({ ...h, payment_terms: e.target.value }))} /> : (po?.payment_terms || "NET 60 | FOB Origin")}</td>
                   </tr>
                   <tr>
                     <td className="font-bold pr-2 py-0.5 text-gray-600">Ship Via:</td>
-                    <td>{editMode ? <input className="border rounded px-1 w-full text-xs" value={editHeader.ship_via || ""} onChange={(e) => setEditHeader((h) => ({ ...h, ship_via: e.target.value }))} /> : "Container Direct"}</td>
+                    <td>{editMode ? <input className="border rounded px-1 w-full text-xs" value={editHeader.ship_via || ""} onChange={(e) => setEditHeader((h) => ({ ...h, ship_via: e.target.value }))} /> : (po?.ship_via || "Container Direct")}</td>
                   </tr>
                 </tbody>
               </table>
@@ -246,7 +265,8 @@ export default function ProformaInvoice() {
                 </div>
               ) : (
                 <p className="text-xs leading-relaxed whitespace-pre-line">
-                  <strong>Pure Care</strong>{"\n"}Direct to Consumer Warehouse{"\n"}1402 S 40th Ave STE A{"\n"}Phoenix, AZ 85009
+                  <strong>{po?.buyer_name || po?.customer_name || "—"}</strong>
+                  {po?.buyer_address ? "\n" + po.buyer_address : ""}
                 </p>
               )}
             </div>
@@ -259,7 +279,10 @@ export default function ProformaInvoice() {
                 </div>
               ) : (
                 <p className="text-xs leading-relaxed whitespace-pre-line">
-                  <strong>Bob's Discount Furniture</strong>{"\n"}70 Jewett City Rd, Taftville, CT 06380{"\n"}Phone: 203-799-9010
+                  {po?.ship_to_name
+                    ? <><strong>{po.ship_to_name}</strong>{po?.ship_to_address ? "\n" + po.ship_to_address : ""}</>
+                    : <span className="text-red-500 italic">Not set — click Edit</span>
+                  }
                 </p>
               )}
             </div>
@@ -270,15 +293,15 @@ export default function ProformaInvoice() {
             <div className="grid grid-cols-3 gap-4 text-xs">
               <div>
                 <span className="font-bold text-gray-600">Port of Loading: </span>
-                {editMode ? <input className="border rounded px-1 text-xs" value={editHeader.port_loading || ""} onChange={(e) => setEditHeader((h) => ({ ...h, port_loading: e.target.value }))} /> : "Karachi, Pakistan"}
+                {editMode ? <input className="border rounded px-1 text-xs" value={editHeader.port_loading || ""} onChange={(e) => setEditHeader((h) => ({ ...h, port_loading: e.target.value }))} /> : (po?.port_loading || "Karachi, Pakistan")}
               </div>
               <div>
                 <span className="font-bold text-gray-600">Port of Discharge: </span>
-                {editMode ? <input className="border rounded px-1 text-xs" value={editHeader.port_discharge || ""} onChange={(e) => setEditHeader((h) => ({ ...h, port_discharge: e.target.value }))} /> : "USA"}
+                {editMode ? <input className="border rounded px-1 text-xs" value={editHeader.port_discharge || ""} onChange={(e) => setEditHeader((h) => ({ ...h, port_discharge: e.target.value }))} /> : (po?.port_discharge || "USA")}
               </div>
               <div>
                 <span className="font-bold text-gray-600">Country of Origin: </span>
-                {editMode ? <input className="border rounded px-1 text-xs" value={editHeader.country_origin || ""} onChange={(e) => setEditHeader((h) => ({ ...h, country_origin: e.target.value }))} /> : "Pakistan"}
+                {editMode ? <input className="border rounded px-1 text-xs" value={editHeader.country_origin || ""} onChange={(e) => setEditHeader((h) => ({ ...h, country_origin: e.target.value }))} /> : (po?.country_origin || "Pakistan")}
               </div>
             </div>
           </div>
