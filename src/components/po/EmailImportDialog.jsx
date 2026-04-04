@@ -18,6 +18,8 @@ const FULL_SCHEMA = {
   properties: {
     po_number: { type: "string" },
     customer_name: { type: "string" },
+    ship_to_name: { type: "string", description: "Ship-to party name — the warehouse, distribution center, or retailer receiving the goods. Often different from the buyer/brand name." },
+    ship_to_address: { type: "string", description: "Full ship-to address including street, city, state, zip, country. Extract exactly as written in the PO." },
     order_date: { type: "string" },
     delivery_date: { type: "string" },
     ex_factory_date: { type: "string" },
@@ -55,7 +57,8 @@ const FULL_SCHEMA = {
 
 const EXTRACT_PROMPT = `Extract the full purchase order details from the provided content. 
 Extract BOTH the PO header info AND every line item/article with all available details.
-For dates use YYYY-MM-DD format. 
+For dates use YYYY-MM-DD format.
+IMPORTANT: Always extract ship_to_name and ship_to_address — these are the destination warehouse or distribution center details, which are often different from the buyer/brand name. Look for labels like "Ship To", "Deliver To", "Consignee", "DC Address", "Warehouse", "Destination".
 For each item extract: item code/SKU, description, fabric type, GSM, width, quantity, unit, unit price, delivery date, fabric construction, finish, shrinkage, CBM, pieces per carton.
 Be thorough — extract every article/product row you can find.`;
 
@@ -132,7 +135,6 @@ export default function EmailImportDialog({ open, onOpenChange, onExtracted }) {
 
         {!result ? (
           <>
-            {/* Tabs */}
             <div className="flex gap-1 bg-muted p-1 rounded-lg">
               {TABS.map(({ id, label, icon: Icon }) => (
                 <button
@@ -221,7 +223,6 @@ export default function EmailImportDialog({ open, onOpenChange, onExtracted }) {
             </DialogFooter>
           </>
         ) : (
-          /* Extraction Result Preview */
           <div className="space-y-4 py-2">
             <div className="flex items-center gap-2 text-emerald-600">
               <CheckCircle2 className="h-5 w-5" />
@@ -231,6 +232,8 @@ export default function EmailImportDialog({ open, onOpenChange, onExtracted }) {
             <div className="bg-muted/50 rounded-lg p-3 space-y-2 text-sm">
               {result.po_number && <div className="flex justify-between"><span className="text-muted-foreground">PO Number</span><span className="font-medium">{result.po_number}</span></div>}
               {result.customer_name && <div className="flex justify-between"><span className="text-muted-foreground">Customer</span><span className="font-medium">{result.customer_name}</span></div>}
+              {result.ship_to_name && <div className="flex justify-between"><span className="text-muted-foreground">Ship To</span><span className="font-medium">{result.ship_to_name}</span></div>}
+              {result.ship_to_address && <div className="flex justify-between gap-4"><span className="text-muted-foreground shrink-0">Ship To Address</span><span className="font-medium text-right text-xs">{result.ship_to_address}</span></div>}
               {result.delivery_date && <div className="flex justify-between"><span className="text-muted-foreground">Delivery Date</span><span className="font-medium">{result.delivery_date}</span></div>}
               {result.total_po_value && <div className="flex justify-between"><span className="text-muted-foreground">Total Value</span><span className="font-medium">{result.currency || "USD"} {result.total_po_value?.toLocaleString()}</span></div>}
               {result.total_quantity && <div className="flex justify-between"><span className="text-muted-foreground">Total Qty</span><span className="font-medium">{result.total_quantity?.toLocaleString()}</span></div>}
