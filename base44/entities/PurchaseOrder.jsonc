@@ -19,6 +19,14 @@
       "type": "string",
       "description": "Customer / Buyer / Brand Name"
     },
+    "ship_to_name": {
+      "type": "string",
+      "description": "Ship-to party name \u2014 warehouse, DC, or retailer receiving goods"
+    },
+    "ship_to_address": {
+      "type": "string",
+      "description": "Full ship-to address"
+    },
     "order_date": {
       "type": "string",
       "format": "date",

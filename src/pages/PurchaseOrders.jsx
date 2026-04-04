@@ -86,6 +86,8 @@ export default function PurchaseOrders() {
       const poData = {
         po_number: extracted.po_number || `IMP-${Date.now()}`,
         customer_name: extracted.customer_name || "Unknown",
+        ship_to_name: extracted.ship_to_name || "",
+        ship_to_address: extracted.ship_to_address || "",
         order_date: extracted.order_date || "",
         delivery_date: extracted.delivery_date || "",
         ex_factory_date: extracted.ex_factory_date || "",
