@@ -18,8 +18,6 @@ export default function POFormDialog({ open, onOpenChange, onSave, initialData }
     initialData || {
       po_number: "",
       customer_name: "",
-      ship_to_name: "",
-      ship_to_address: "",
       order_date: "",
       delivery_date: "",
       ex_factory_date: "",
@@ -63,14 +61,6 @@ export default function POFormDialog({ open, onOpenChange, onSave, initialData }
           <div className="space-y-1.5">
             <Label className="text-xs">Customer / Brand *</Label>
             <Input value={form.customer_name} onChange={(e) => update("customer_name", e.target.value)} placeholder="Brand name" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Ship To Party Name</Label>
-            <Input value={form.ship_to_name} onChange={(e) => update("ship_to_name", e.target.value)} placeholder="e.g. Warehouse / DC name" />
-          </div>
-          <div className="md:col-span-2 space-y-1.5">
-            <Label className="text-xs">Ship To Address</Label>
-            <Textarea value={form.ship_to_address} onChange={(e) => update("ship_to_address", e.target.value)} placeholder="Full destination address (warehouse / distribution center)" rows={2} />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Order Date</Label>

@@ -19,14 +19,6 @@
       "type": "string",
       "description": "Customer / Buyer / Brand Name"
     },
-    "ship_to_name": {
-      "type": "string",
-      "description": "Ship To Party Name (warehouse / destination)"
-    },
-    "ship_to_address": {
-      "type": "string",
-      "description": "Ship To Address (full warehouse/destination address)"
-    },
     "order_date": {
       "type": "string",
       "format": "date",
