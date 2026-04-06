@@ -170,6 +170,7 @@ export default function FabricWorking() {
                 <tr style={{ backgroundColor: "#1F3864", color: "white" }}>
                   <th className="border border-gray-400 px-2 py-2 text-left min-w-[160px]">Article Name</th>
                   <th className="border border-gray-400 px-2 py-2 text-left min-w-[100px]">Article Code</th>
+                  <th className="border border-gray-400 px-2 py-2 text-left min-w-[80px]">Size</th>
                   <th className="border border-gray-400 px-2 py-2 text-center w-16">Ord Qty</th>
                   <th className="border border-gray-400 px-2 py-2 text-left min-w-[80px]">Part</th>
                   <th className="border border-gray-400 px-2 py-2 text-left min-w-[200px]">Fabrication</th>
@@ -195,6 +196,7 @@ export default function FabricWorking() {
                         <tr style={{ backgroundColor: artBg }}>
                           <td className="border border-gray-300 px-2 py-1.5 font-semibold text-blue-900">{article.article_name}</td>
                           <td className="border border-gray-300 px-2 py-1.5 text-gray-500">{article.article_code}</td>
+                          <td className="border border-gray-300 px-2 py-1.5 text-gray-500 text-xs">{article.article_name?.split(' - ').pop() || '—'}</td>
                           <td className="border border-gray-300 px-2 py-1.5 text-center">{article.order_quantity?.toLocaleString()}</td>
                           <ArticleFabricSetup
                             article={article}
@@ -212,9 +214,7 @@ export default function FabricWorking() {
                         <tr style={{ backgroundColor: artBg }}>
                           <td className="border border-gray-300 px-2 py-1.5 font-semibold text-blue-900">{article.article_name}</td>
                           <td className="border border-gray-300 px-2 py-1.5 text-gray-600">{article.article_code}</td>
-                          <td className="border border-gray-300 px-2 py-1.5 text-center">
-                            <input type="number" className="w-14 border rounded px-1 py-0.5 text-center" value={editForm.order_quantity || ""} onChange={(e) => setEditForm((f) => ({ ...f, order_quantity: Number(e.target.value) }))} />
-                          </td>
+                          <td className="border border-gray-300 px-2 py-1.5 text-gray-500 text-xs">{article.article_name?.split(' - ').pop() || '—'}</td>
                           <td colSpan={7} className="border border-gray-300 px-2 py-1.5 text-muted-foreground italic text-xs">Click "Add Component" below to define fabric specs</td>
                           <td className="border border-gray-300 px-2 py-1 text-center">
                             <div className="flex flex-col gap-1 items-center">
@@ -238,10 +238,8 @@ export default function FabricWorking() {
                                   <td rowSpan={rowCount} className="border border-gray-300 px-2 py-1.5 text-gray-600 align-top">
                                     {article.article_code}
                                   </td>
-                                  <td rowSpan={rowCount} className="border border-gray-300 px-2 py-1.5 text-center font-semibold align-top">
-                                    {isEditing ? (
-                                      <input type="number" className="w-14 border rounded px-1 py-0.5 text-center" value={editForm.order_quantity || ""} onChange={(e) => setEditForm((f) => ({ ...f, order_quantity: Number(e.target.value) }))} />
-                                    ) : article.order_quantity?.toLocaleString()}
+                                  <td rowSpan={rowCount} className="border border-gray-300 px-2 py-1.5 text-gray-700 text-xs align-top font-medium">
+                                    {article.article_name?.split(' - ').pop() || '—'}
                                   </td>
                                 </>
                               )}
@@ -294,7 +292,7 @@ export default function FabricWorking() {
                       {/* Add component row when editing */}
                       {isEditing && (
                         <tr style={{ backgroundColor: artBg }}>
-                          <td colSpan={3} />
+                          <td colSpan={4} />
                           <td colSpan={7} className="border border-gray-300 px-2 py-1">
                             <button onClick={addComponent} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs font-medium">
                               <Plus className="h-3 w-3" /> Add Component
