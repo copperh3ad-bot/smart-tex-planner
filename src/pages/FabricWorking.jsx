@@ -151,7 +151,7 @@ export default function FabricWorking() {
       {/* PO Info */}
       {activePo && (
         <div className="text-xs bg-blue-50 border border-blue-200 rounded px-3 py-1.5 text-blue-800 font-medium print:bg-transparent print:border-gray-300 print:text-black">
-          Fabric Working For: <strong>{activePo.po_number}</strong> | Customer: {activePo.customer_name} | MTA#2016-2026 | ETD: {activePo.etd || "—"} | Ex-Factory: {activePo.ex_factory_date || "—"}
+          Fabric Working For: <strong>{activePo.po_number}</strong>{activePo.pi_number ? <> | PI: <strong>{activePo.pi_number}</strong></> : ""} | Customer: {activePo.customer_name} | ETD: {activePo.etd || "—"} | Ex-Factory: {activePo.ex_factory_date || "—"}
         </div>
       )}
 
