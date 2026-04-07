@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Printer, Download, FileText, Pencil, Save, X, Plus, Layers } from "lucide-react";
 import UploadFabricSheet from "../components/fabric/UploadFabricSheet";
 
-const COMPONENT_TYPES = ["Flat Sheet", "Fitted Sheet", "Fitted Sheet (2pc Split)", "Fitted Sheet (Split Head)", "Pillow Case (2pc)", "Front", "Back", "Skirt", "Bottom", "Piping", "Binding", "Filling", "Lamination", "Top Fabric", "Other"];
+const COMPONENT_TYPES = ["Flat Sheet", "Fitted Sheet", "Fitted Sheet (2pc Split)", "Fitted Sheet (Split Head)", "Pillow Case (1pc)", "Pillow Case (2pc)", "Fabric Bag", "Front", "Back", "Skirt", "Bottom", "Piping", "Binding", "Filling", "Lamination", "Top Fabric", "Other"];
 const COLORS = ["Cloud Gray", "Misty Blue", "White"];
 const COLOR_TABS = ["Combined", "Cloud Gray", "Misty Blue", "White"];
 
@@ -101,7 +101,7 @@ export default function FabricWorking() {
       return { ...f, components: comps };
     });
   };
-  const addComponent = () => setEditForm((f) => ({ ...f, components: [...(f.components || []), { component_type: "Flat Sheet", fabric_type: "100% Modal Jersey Knit", gsm: 160, width: 112, consumption_per_unit: 0, wastage_percent: 13, product_size: "", direction: "WXL", total_required: 0 }] }));
+  const addComponent = () => setEditForm((f) => ({ ...f, components: [...(f.components || []), { component_type: "Flat Sheet", fabric_type: "100% Modal Jersey Knit", gsm: 160, width: 112, consumption_per_unit: 0, wastage_percent: 13, product_size: "", direction: "WXL", total_required: 0, remarks: "" }] })); fabric_type: "100% Modal Jersey Knit", gsm: 160, width: 112, consumption_per_unit: 0, wastage_percent: 13, product_size: "", direction: "WXL", total_required: 0 }] }));
   const removeComponent = (idx) => setEditForm((f) => ({ ...f, components: f.components.filter((_, i) => i !== idx) }));
   const saveEdit = () => updateArticle.mutate({ id: editingId, data: editForm });
 
@@ -124,7 +124,7 @@ export default function FabricWorking() {
           comp.width ? `${comp.width}cm` : "",
           comp.product_size || "", comp.direction || "",
           comp.consumption_per_unit?.toFixed(4) || "",
-          net.toFixed(2), `${comp.wastage_percent ?? 13}%`, total.toFixed(2),
+          net.toFixed(2), `${comp.wastage_percent ?? 13}%`, total.toFixed(2), comp.remarks || "",
         ]);
       });
       rows.push(Array(13).fill(""));
@@ -225,6 +225,7 @@ export default function FabricWorking() {
             <th className="border border-gray-400 px-2 py-2 text-center w-20">Net Mtrs</th>
             <th className="border border-gray-400 px-2 py-2 text-center w-16">Wst%</th>
             <th className="border border-gray-400 px-2 py-2 text-center w-24 font-bold">Total Mtrs</th>
+            <th className="border border-gray-400 px-2 py-2 text-left w-32">Remarks</th>
             <th className="border border-gray-400 px-2 py-2 text-center w-16 print-hidden">Edit</th>
           </tr>
         </thead>
@@ -281,6 +282,9 @@ export default function FabricWorking() {
                         {isEditing ? <input type="number" className="w-14 text-xs border rounded px-1 py-0.5 text-center" value={comp.wastage_percent ?? 13} onChange={(e) => updateComp(idx, "wastage_percent", Number(e.target.value))} /> : `${comp.wastage_percent ?? 13}%`}
                       </td>
                       <td className="border border-gray-300 px-2 py-1 text-center font-bold" style={{ backgroundColor: "#FFF2CC" }}>{total.toFixed(2)}</td>
+                      <td className="border border-gray-300 px-2 py-1 text-xs">
+                        {isEditing ? <input className="w-full text-xs border rounded px-1 py-0.5" value={comp.remarks || ""} onChange={(e) => updateComp(idx, "remarks", e.target.value)} placeholder="Remarks..." /> : (comp.remarks || "")}
+                      </td>
                       {idx === 0 && (
                         <td rowSpan={rowCount} className="border border-gray-300 px-2 py-1 text-center align-top print-hidden">
                           {isEditing ? (
