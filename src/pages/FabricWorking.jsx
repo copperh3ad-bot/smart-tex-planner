@@ -86,8 +86,10 @@ export default function FabricWorking() {
   });
 
   const startEdit = (article) => {
+    // In combined mode, find the actual source article by id
+    const sourceArticle = articles.find((a) => a.id === article.id) || article;
     setEditingId(article.id);
-    setEditForm({ ...article, components: JSON.parse(JSON.stringify(article.components || [])) });
+    setEditForm({ ...sourceArticle, components: JSON.parse(JSON.stringify(sourceArticle.components || [])) });
   };
   const updateComp = (idx, field, value) => {
     setEditForm((f) => {
@@ -103,7 +105,48 @@ export default function FabricWorking() {
   };
   const addComponent = () => setEditForm((f) => ({ ...f, components: [...(f.components || []), { component_type: "Flat Sheet", fabric_type: "100% Modal Jersey Knit", gsm: 160, width: 112, consumption_per_unit: 0, wastage_percent: 13, product_size: "", direction: "WXL", total_required: 0, remarks: "" }] }));
   const removeComponent = (idx) => setEditForm((f) => ({ ...f, components: f.components.filter((_, i) => i !== idx) }));
-  const saveEdit = () => updateArticle.mutate({ id: editingId, data: editForm });
+  const saveEdit = async () => {
+    const editedBase = parseArticle(editForm.article_name).base || editForm.article_name;
+    const editedComps = editForm.components;
+
+    // Build a map of component settings by component_type for propagation
+    const compSettingsByType = {};
+    editedComps.forEach((c) => {
+      compSettingsByType[c.component_type] = {
+        fabric_type: c.fabric_type,
+        gsm: c.gsm,
+        width: c.width,
+        product_size: c.product_size,
+        direction: c.direction,
+        consumption_per_unit: c.consumption_per_unit,
+        wastage_percent: c.wastage_percent,
+      };
+    });
+
+    // Save the directly edited article
+    await base44.entities.Article.update(editingId, editForm);
+
+    // Propagate product_size, direction, consumption, wastage to ALL articles
+    // with the same base name (other POs = repeat orders)
+    const siblings = articles.filter((a) => {
+      const base = parseArticle(a.article_name).base || a.article_name;
+      return base === editedBase && a.id !== editingId;
+    });
+
+    await Promise.all(siblings.map((sib) => {
+      const updatedComps = (sib.components || []).map((c) => {
+        const settings = compSettingsByType[c.component_type];
+        if (!settings) return c;
+        const net = (settings.consumption_per_unit || 0) * (sib.order_quantity || 0);
+        const total_required = +(net * (1 + (settings.wastage_percent || 13) / 100)).toFixed(4);
+        return { ...c, ...settings, total_required };
+      });
+      return base44.entities.Article.update(sib.id, { ...sib, components: updatedComps });
+    }));
+
+    queryClient.invalidateQueries({ queryKey: ["articles"] });
+    setEditingId(null);
+  };
 
   // ─── EXCEL EXPORT ────────────────────────────────────────────
   const handleDownloadExcel = () => {
