@@ -101,7 +101,7 @@ export default function FabricWorking() {
       return { ...f, components: comps };
     });
   };
-  const addComponent = () => setEditForm((f) => ({ ...f, components: [...(f.components || []), { component_type: "Flat Sheet", fabric_type: "100% Modal Jersey Knit", gsm: 160, width: 112, consumption_per_unit: 0, wastage_percent: 13, product_size: "", direction: "WXL", total_required: 0, remarks: "" }] })); fabric_type: "100% Modal Jersey Knit", gsm: 160, width: 112, consumption_per_unit: 0, wastage_percent: 13, product_size: "", direction: "WXL", total_required: 0 }] }));
+  const addComponent = () => setEditForm((f) => ({ ...f, components: [...(f.components || []), { component_type: "Flat Sheet", fabric_type: "100% Modal Jersey Knit", gsm: 160, width: 112, consumption_per_unit: 0, wastage_percent: 13, product_size: "", direction: "WXL", total_required: 0, remarks: "" }] }));
   const removeComponent = (idx) => setEditForm((f) => ({ ...f, components: f.components.filter((_, i) => i !== idx) }));
   const saveEdit = () => updateArticle.mutate({ id: editingId, data: editForm });
 
