@@ -8,7 +8,19 @@ import { Printer, Download, FileText, Pencil, Save, X, Plus, Layers } from "luci
 import UploadFabricSheet from "../components/fabric/UploadFabricSheet";
 import ArticleFabricSetup from "../components/fabric/ArticleFabricSetup";
 
-const COMPONENT_TYPES = ["Front", "Skirt", "Bottom", "Piping", "Binding", "Filling", "Lamination", "Top Fabric", "Window (Outside)", "Window (Inside)"];
+const COMPONENT_TYPES = ["Front", "Skirt", "Bottom", "Piping", "Binding", "Filling", "Lamination", "Top Fabric", "Window (Outside)", "Window (Inside)", "Flat Sheet", "Fitted Sheet", "Fitted Sheet (Split)", "Pillow Case (x2)"];
+
+// ─── helpers ────────────────────────────────────────────────────
+const COLOR_KEYWORDS = ["Cloud Gray", "Misty Blue", "White", "Dove Gray", "Light Blue", "Grey", "Blue", "Red", "Green", "Black", "Beige", "Navy"];
+const SIZE_KEYWORDS  = ["Twin XL", "Twin", "Full", "Queen", "King", "Cal King", "Split Cal King", "Split Head Cal King", "Split Head King", "Split Head Queen", "Split King"];
+
+function parseArticleColorSize(name) {
+  const n = name || "";
+  const color = COLOR_KEYWORDS.find(c => n.toLowerCase().includes(c.toLowerCase())) || "";
+  const size  = SIZE_KEYWORDS.find(s => n.toLowerCase().includes(s.toLowerCase())) || "";
+  const base  = color ? n.replace(new RegExp(color, "i"), "").trim() : n;
+  return { color, size, base: base.replace(/\s+/g, " ").trim() };
+}
 
 export default function FabricWorking() {
   const queryClient = useQueryClient();
@@ -16,6 +28,7 @@ export default function FabricWorking() {
   const [selectedPoId, setSelectedPoId] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(null);
+  const [viewMode, setViewMode] = useState("combined"); // "combined" | "bycolor"
 
   const { data: pos = [] } = useQuery({ queryKey: ["purchaseOrders"], queryFn: () => base44.entities.PurchaseOrder.list() });
   const { data: articles = [] } = useQuery({ queryKey: ["articles"], queryFn: () => base44.entities.Article.list() });
@@ -26,21 +39,54 @@ export default function FabricWorking() {
     return articles.filter((a) => a.po_id === activePo.id).sort((a, b) => a.article_name.localeCompare(b.article_name));
   }, [articles, activePo]);
 
-  // Fabric summary across all articles
-  const fabricSummary = useMemo(() => {
+  // Grouped by-color/size: each article row with its color/size parsed
+  const byColorRows = useMemo(() => {
+    return poArticles.map(art => {
+      const { color, size } = parseArticleColorSize(art.article_name);
+      return { ...art, parsed_color: color, parsed_size: size };
+    });
+  }, [poArticles]);
+
+  // Combined view: merge articles with same "base" name (sum quantities, keep components from first)
+  const combinedArticles = useMemo(() => {
     const map = {};
-    poArticles.forEach((art) => {
+    poArticles.forEach(art => {
+      const { base, color } = parseArticleColorSize(art.article_name);
+      const key = base || art.article_name;
+      if (!map[key]) {
+        map[key] = { ...art, _baseKey: key, _colors: [] };
+      }
+      map[key].order_quantity = (map[key].order_quantity || 0) + (art.order_quantity || 0);
+      if (color && !map[key]._colors.includes(color)) map[key]._colors.push(color);
+      // Merge components: sum total_required for same component_type
+      (art.components || []).forEach(comp => {
+        const existing = map[key].components?.find(c => c.component_type === comp.component_type);
+        if (existing) {
+          existing.total_required = (existing.total_required || 0) + (comp.total_required || 0);
+        }
+      });
+    });
+    return Object.values(map);
+  }, [poArticles]);
+
+  // Fabric summary
+  const buildFabricSummary = (artList) => {
+    const map = {};
+    artList.forEach((art) => {
       (art.components || []).forEach((comp) => {
         const key = `${comp.fabric_type}||${comp.width}`;
         if (!map[key]) map[key] = { fabric_type: comp.fabric_type, width: comp.width, net_total: 0, total_with_wastage: 0 };
-        const net = (comp.consumption_per_unit || 0) * (art.order_quantity || 0);
+        const qty = art.order_quantity || 0;
+        const net = (comp.consumption_per_unit || 0) * qty;
         const total = comp.total_required || net * (1 + (comp.wastage_percent || 0) / 100);
         map[key].net_total += net;
         map[key].total_with_wastage += total;
       });
     });
     return Object.values(map);
-  }, [poArticles]);
+  };
+
+  const fabricSummary = useMemo(() => buildFabricSummary(viewMode === "combined" ? combinedArticles : byColorRows), [combinedArticles, byColorRows, viewMode]);
 
   const updateArticle = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Article.update(id, data),
@@ -73,69 +119,67 @@ export default function FabricWorking() {
   };
 
   const removeComponent = (idx) => setEditForm((f) => ({ ...f, components: f.components.filter((_, i) => i !== idx) }));
-
   const saveEdit = () => updateArticle.mutate({ id: editingId, data: editForm });
-
   const handlePrint = () => window.print();
 
+  // ─── EXCEL DOWNLOAD ──────────────────────────────────────────
   const handleDownloadExcel = () => {
-    const rows = [["Article Name", "Article Code", "Order Qty", "Part", "Fabrication", "Width (cm)", "Cut/Unit (m)", "Net Mtrs", "Wastage %", "Total Mtrs"]];
-    poArticles.forEach((art) => {
+    const displayArticles = viewMode === "combined" ? combinedArticles : byColorRows;
+    const rows = [["Article Name", viewMode === "bycolor" ? "Color" : "Colors", viewMode === "bycolor" ? "Size" : "", "Order Qty", "Part", "Fabrication", "Width (cm)", "Cut/Unit (m)", "Net Mtrs", "Wastage %", "Total Mtrs"]];
+    displayArticles.forEach((art) => {
       (art.components || []).forEach((comp, i) => {
-        const net = (comp.consumption_per_unit || 0) * (art.order_quantity || 0);
+        const qty = art.order_quantity || 0;
+        const net = (comp.consumption_per_unit || 0) * qty;
         const total = comp.total_required || net * (1 + (comp.wastage_percent || 0) / 100);
         rows.push([
           i === 0 ? art.article_name : "",
-          i === 0 ? (art.article_code || "") : "",
-          i === 0 ? (art.order_quantity || "") : "",
+          i === 0 ? (art._colors?.join(", ") || art.parsed_color || "") : "",
+          i === 0 ? (art.parsed_size || "") : "",
+          i === 0 ? qty : "",
           comp.component_type, comp.fabric_type, comp.width || "",
           comp.consumption_per_unit?.toFixed(4) || "",
           net.toFixed(2), (comp.wastage_percent ?? 6) + "%", total.toFixed(2),
         ]);
       });
-      rows.push(Array(10).fill(""));
+      rows.push(Array(11).fill(""));
     });
-    rows.push(["FABRIC SUMMARY", ...Array(9).fill("")]);
-    rows.push(["Fabric Type", "", "", "", "", "Width (cm)", "", "Net Mtrs", "", "Total Mtrs"]);
-    fabricSummary.forEach((f) => {
-      rows.push([f.fabric_type, "", "", "", "", f.width ? f.width + "cm" : "", "", f.net_total.toFixed(2), "", f.total_with_wastage.toFixed(2)]);
-    });
-    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    rows.push(["FABRIC SUMMARY", ...Array(10).fill("")]);
+    rows.push(["Fabric Type", "", "", "", "", "", "Width (cm)", "", "Net Mtrs", "", "Total Mtrs"]);
+    fabricSummary.forEach((f) => rows.push([f.fabric_type, "", "", "", "", "", f.width ? f.width + "cm" : "", "", f.net_total.toFixed(2), "", f.total_with_wastage.toFixed(2)]));
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url;
-    a.download = `FabricWorking_${activePo?.po_number || "PO"}.csv`;
+    a.download = `FabricWorking_${activePo?.po_number || "PO"}_${viewMode}.csv`;
     a.click(); URL.revokeObjectURL(url);
   };
 
+  // ─── PDF DOWNLOAD ────────────────────────────────────────────
   const handleDownloadPDF = () => {
+    const displayArticles = viewMode === "combined" ? combinedArticles : byColorRows;
     const doc = new jsPDF({ orientation: "landscape", format: "a3" });
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.text(`Fabric Working Sheet — ${activePo?.po_number || ""}`, 14, 15);
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "normal");
+    const isByColor = viewMode === "bycolor";
+    doc.setFontSize(13); doc.setFont("helvetica", "bold");
+    doc.text(`Fabric Working Sheet — ${activePo?.po_number || ""} [${isByColor ? "By Color/Size" : "Combined"}]`, 14, 15);
+    doc.setFontSize(8); doc.setFont("helvetica", "normal");
     doc.text(`Customer: ${activePo?.customer_name || ""} | PI: ${activePo?.pi_number || "—"} | ETD: ${activePo?.etd || "—"}`, 14, 22);
     let y = 30;
-    const cols = ["Article", "Code", "Qty", "Part", "Fabrication", "Width", "Cut/Unit", "Net Mtrs", "Wastage", "Total Mtrs"];
-    const widths = [35, 22, 12, 20, 45, 14, 16, 16, 14, 18];
+    const cols = isByColor
+      ? ["Article", "Color", "Size", "Qty", "Part", "Fabrication", "Width", "Cut/Unit", "Net Mtrs", "Wastage", "Total Mtrs"]
+      : ["Article", "Colors", "Qty", "Part", "Fabrication", "Width", "Cut/Unit", "Net Mtrs", "Wastage", "Total Mtrs"];
+    const widths = isByColor ? [30, 20, 22, 12, 20, 40, 14, 16, 16, 14, 18] : [35, 30, 12, 20, 45, 14, 16, 16, 14, 18];
     doc.setFillColor(31, 56, 100); doc.setTextColor(255, 255, 255);
     let x = 14;
     cols.forEach((col, i) => { doc.rect(x, y - 4, widths[i], 7, "F"); doc.setFontSize(7); doc.text(col, x + 1, y); x += widths[i]; });
     y += 5; doc.setTextColor(0, 0, 0);
-    poArticles.forEach((art, artIdx) => {
+    displayArticles.forEach((art, artIdx) => {
       (art.components || []).forEach((comp, ci) => {
-        const net = (comp.consumption_per_unit || 0) * (art.order_quantity || 0);
+        const qty = art.order_quantity || 0;
+        const net = (comp.consumption_per_unit || 0) * qty;
         const total = comp.total_required || net * (1 + (comp.wastage_percent || 0) / 100);
-        const rowData = [
-          ci === 0 ? (art.article_name || "").substring(0, 22) : "",
-          ci === 0 ? (art.article_code || "") : "",
-          ci === 0 ? String(art.order_quantity || "") : "",
-          comp.component_type || "", (comp.fabric_type || "").substring(0, 28),
-          comp.width ? `${comp.width}cm` : "",
-          comp.consumption_per_unit?.toFixed(4) || "",
-          net.toFixed(2), `${comp.wastage_percent ?? 6}%`, total.toFixed(2),
-        ];
+        const rowData = isByColor
+          ? [ci === 0 ? (art.article_name || "").substring(0, 20) : "", ci === 0 ? (art.parsed_color || "") : "", ci === 0 ? (art.parsed_size || "") : "", ci === 0 ? String(qty) : "", comp.component_type || "", (comp.fabric_type || "").substring(0, 28), comp.width ? `${comp.width}cm` : "", comp.consumption_per_unit?.toFixed(4) || "", net.toFixed(2), `${comp.wastage_percent ?? 6}%`, total.toFixed(2)]
+          : [ci === 0 ? (art.article_name || "").substring(0, 24) : "", ci === 0 ? (art._colors?.join(", ") || "").substring(0, 22) : "", ci === 0 ? String(qty) : "", comp.component_type || "", (comp.fabric_type || "").substring(0, 28), comp.width ? `${comp.width}cm` : "", comp.consumption_per_unit?.toFixed(4) || "", net.toFixed(2), `${comp.wastage_percent ?? 6}%`, total.toFixed(2)];
         if (artIdx % 2 === 0) { doc.setFillColor(235, 240, 250); x = 14; widths.forEach(w => { doc.rect(x, y - 3.5, w, 6, "F"); x += w; }); }
         doc.setFontSize(7); x = 14;
         rowData.forEach((val, i) => { doc.text(String(val), x + 1, y); x += widths[i]; });
@@ -145,20 +189,144 @@ export default function FabricWorking() {
     });
     y += 4;
     doc.setFillColor(31, 56, 100); doc.setTextColor(255, 255, 255);
-    doc.rect(14, y - 4, 140, 7, "F");
+    doc.rect(14, y - 4, 160, 7, "F");
     doc.setFontSize(8); doc.text("FABRIC REQUIREMENT SUMMARY", 15, y);
     y += 8; doc.setTextColor(0, 0, 0);
     fabricSummary.forEach((f, idx) => {
-      if (idx % 2 === 0) { doc.setFillColor(235, 240, 250); doc.rect(14, y - 3.5, 140, 6, "F"); }
+      if (idx % 2 === 0) { doc.setFillColor(235, 240, 250); doc.rect(14, y - 3.5, 160, 6, "F"); }
       doc.setFontSize(7);
       doc.text(f.fabric_type || "", 15, y);
-      doc.text(f.width ? `${f.width}cm` : "", 85, y);
-      doc.text(f.net_total.toFixed(2), 105, y);
-      doc.text(f.total_with_wastage.toFixed(2), 130, y);
+      doc.text(f.width ? `${f.width}cm` : "", 95, y);
+      doc.text(f.net_total.toFixed(2), 115, y);
+      doc.text(f.total_with_wastage.toFixed(2), 145, y);
       y += 6;
     });
-    doc.save(`FabricWorking_${activePo?.po_number || "PO"}.pdf`);
+    doc.save(`FabricWorking_${activePo?.po_number || "PO"}_${viewMode}.pdf`);
   };
+
+  // ─── ARTICLE TABLE RENDERER ──────────────────────────────────
+  const renderArticleTable = (artList, showColorCol, showSizeCol) => (
+    <div className="overflow-x-auto rounded border border-gray-300 shadow-sm">
+      <table className="w-full text-xs border-collapse" style={{ fontFamily: "Arial, sans-serif" }}>
+        <thead>
+          <tr style={{ backgroundColor: "#1F3864", color: "white" }}>
+            <th className="border border-gray-400 px-2 py-2 text-left min-w-[160px]">Article Name</th>
+            {showColorCol && <th className="border border-gray-400 px-2 py-2 text-left w-28">Color</th>}
+            {showSizeCol && <th className="border border-gray-400 px-2 py-2 text-left w-28">Size</th>}
+            <th className="border border-gray-400 px-2 py-2 text-center w-16">Ord Qty</th>
+            <th className="border border-gray-400 px-2 py-2 text-left min-w-[80px]">Part</th>
+            <th className="border border-gray-400 px-2 py-2 text-left min-w-[200px]">Fabrication</th>
+            <th className="border border-gray-400 px-2 py-2 text-center w-20">Width (cm)</th>
+            <th className="border border-gray-400 px-2 py-2 text-center w-24">Cut/Unit (m)</th>
+            <th className="border border-gray-400 px-2 py-2 text-center w-24">Net Mtrs</th>
+            <th className="border border-gray-400 px-2 py-2 text-center w-20">Wastage %</th>
+            <th className="border border-gray-400 px-2 py-2 text-center w-24 font-bold">Total Mtrs</th>
+            <th className="border border-gray-400 px-2 py-2 text-center w-20 print-hidden">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {artList.map((article, artIdx) => {
+            const isEditing = editingId === article.id;
+            const comps = isEditing ? editForm.components : (article.components || []);
+            const rowCount = Math.max(comps.length, 1);
+            const artBg = artIdx % 2 === 0 ? "#EBF0FA" : "#FFFFFF";
+            const colorLabel = article._colors?.join(", ") || article.parsed_color || "";
+
+            return (
+              <React.Fragment key={article.id || artIdx}>
+                {!isEditing && comps.length === 0 ? (
+                  <tr style={{ backgroundColor: artBg }}>
+                    <td className="border border-gray-300 px-2 py-1.5 font-semibold text-blue-900">{article.article_name}</td>
+                    {showColorCol && <td className="border border-gray-300 px-2 py-1.5 text-xs">{colorLabel}</td>}
+                    {showSizeCol && <td className="border border-gray-300 px-2 py-1.5 text-xs">{article.parsed_size}</td>}
+                    <td className="border border-gray-300 px-2 py-1.5 text-center">{article.order_quantity?.toLocaleString()}</td>
+                    <ArticleFabricSetup
+                      article={article}
+                      onEdit={() => startEdit(article)}
+                      onSetup={async (components) => {
+                        const total_fabric_required = +components.reduce((s, c) => s + (c.total_required || 0), 0).toFixed(4);
+                        await base44.entities.Article.update(article.id, { components, total_fabric_required });
+                        queryClient.invalidateQueries({ queryKey: ["articles"] });
+                      }}
+                    />
+                    <td className="border border-gray-300 px-2 py-1.5 text-center print-hidden" />
+                  </tr>
+                ) : (
+                  comps.map((comp, idx) => {
+                    const qty = (isEditing ? editForm.order_quantity : article.order_quantity) || 0;
+                    const net = (comp.consumption_per_unit || 0) * qty;
+                    const total = comp.total_required || net * (1 + (comp.wastage_percent || 0) / 100);
+                    return (
+                      <tr key={idx} style={{ backgroundColor: artBg }}>
+                        {idx === 0 && (
+                          <>
+                            <td rowSpan={rowCount} className="border border-gray-300 px-2 py-1.5 font-semibold text-blue-900 align-top">{article.article_name}</td>
+                            {showColorCol && <td rowSpan={rowCount} className="border border-gray-300 px-2 py-1.5 text-xs align-top">{colorLabel}</td>}
+                            {showSizeCol && <td rowSpan={rowCount} className="border border-gray-300 px-2 py-1.5 text-xs align-top">{article.parsed_size}</td>}
+                            <td rowSpan={rowCount} className="border border-gray-300 px-2 py-1.5 text-center font-semibold align-top">
+                              {isEditing ? (
+                                <input type="number" className="w-14 border rounded px-1 py-0.5 text-center" value={editForm.order_quantity || ""} onChange={(e) => setEditForm((f) => ({ ...f, order_quantity: Number(e.target.value) }))} />
+                              ) : article.order_quantity?.toLocaleString()}
+                            </td>
+                          </>
+                        )}
+                        <td className="border border-gray-300 px-2 py-1">
+                          {isEditing ? (
+                            <select className="w-full text-xs border rounded px-1 py-0.5" value={comp.component_type} onChange={(e) => updateComp(idx, "component_type", e.target.value)}>
+                              {COMPONENT_TYPES.map((t) => <option key={t}>{t}</option>)}
+                            </select>
+                          ) : <span className="font-medium">{comp.component_type}</span>}
+                        </td>
+                        <td className="border border-gray-300 px-2 py-1">
+                          {isEditing ? <input className="w-full text-xs border rounded px-1 py-0.5" value={comp.fabric_type || ""} onChange={(e) => updateComp(idx, "fabric_type", e.target.value)} /> : comp.fabric_type}
+                        </td>
+                        <td className="border border-gray-300 px-2 py-1 text-center">
+                          {isEditing ? <input type="number" className="w-16 text-xs border rounded px-1 py-0.5 text-center" value={comp.width || ""} onChange={(e) => updateComp(idx, "width", Number(e.target.value))} /> : comp.width ? `${comp.width}cm` : "—"}
+                        </td>
+                        <td className="border border-gray-300 px-2 py-1 text-center">
+                          {isEditing ? <input type="number" step="0.0001" className="w-20 text-xs border rounded px-1 py-0.5 text-center" value={comp.consumption_per_unit || ""} onChange={(e) => updateComp(idx, "consumption_per_unit", Number(e.target.value))} /> : comp.consumption_per_unit?.toFixed(4)}
+                        </td>
+                        <td className="border border-gray-300 px-2 py-1 text-center">{net.toFixed(2)}</td>
+                        <td className="border border-gray-300 px-2 py-1 text-center">
+                          {isEditing ? <input type="number" className="w-14 text-xs border rounded px-1 py-0.5 text-center" value={comp.wastage_percent ?? 6} onChange={(e) => updateComp(idx, "wastage_percent", Number(e.target.value))} /> : `${comp.wastage_percent ?? 6}%`}
+                        </td>
+                        <td className="border border-gray-300 px-2 py-1 text-center font-bold" style={{ backgroundColor: "#FFF2CC" }}>{total.toFixed(2)}</td>
+                        {idx === 0 && (
+                          <td rowSpan={rowCount} className="border border-gray-300 px-2 py-1 text-center align-top print-hidden">
+                            {isEditing ? (
+                              <div className="flex flex-col gap-1 items-center">
+                                <button onClick={saveEdit} className="text-green-600 hover:text-green-800"><Save className="h-3.5 w-3.5" /></button>
+                                <button onClick={() => setEditingId(null)} className="text-gray-400 hover:text-gray-600"><X className="h-3.5 w-3.5" /></button>
+                              </div>
+                            ) : (
+                              <button onClick={() => startEdit(article)} className="text-blue-600 hover:text-blue-800"><Pencil className="h-3.5 w-3.5" /></button>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })
+                )}
+                {isEditing && (
+                  <tr style={{ backgroundColor: artBg }}>
+                    <td colSpan={3 + (showColorCol ? 1 : 0) + (showSizeCol ? 1 : 0)} />
+                    <td colSpan={7} className="border border-gray-300 px-2 py-1">
+                      <button onClick={addComponent} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs font-medium">
+                        <Plus className="h-3 w-3" /> Add Component
+                      </button>
+                    </td>
+                    <td className="border border-gray-300" />
+                  </tr>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const currentSummary = fabricSummary;
 
   return (
     <div className="space-y-3">
@@ -184,7 +352,7 @@ export default function FabricWorking() {
             </SelectContent>
           </Select>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <UploadFabricSheet onSuccess={() => queryClient.invalidateQueries({ queryKey: ["articles"] })} />
           <Button size="sm" variant="outline" onClick={handleDownloadExcel} className="gap-1.5 text-xs">
             <Download className="h-3.5 w-3.5" /> Excel
@@ -205,6 +373,22 @@ export default function FabricWorking() {
         </div>
       )}
 
+      {/* View Toggle */}
+      {poArticles.length > 0 && (
+        <div className="flex gap-2 print-hidden">
+          <button
+            onClick={() => setViewMode("combined")}
+            className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${viewMode === "combined" ? "bg-primary text-white border-primary" : "bg-white border-gray-300 text-gray-600 hover:border-primary"}`}>
+            Combined (All Colors)
+          </button>
+          <button
+            onClick={() => setViewMode("bycolor")}
+            className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${viewMode === "bycolor" ? "bg-primary text-white border-primary" : "bg-white border-gray-300 text-gray-600 hover:border-primary"}`}>
+            By Color &amp; Size
+          </button>
+        </div>
+      )}
+
       {poArticles.length === 0 ? (
         <div className="py-16 text-center text-muted-foreground">
           <Layers className="h-12 w-12 mx-auto mb-3 opacity-20" />
@@ -212,175 +396,25 @@ export default function FabricWorking() {
         </div>
       ) : (
         <div ref={tableRef}>
-          {/* Main Excel Table */}
-          <div className="overflow-x-auto rounded border border-gray-300 shadow-sm">
-            <table className="w-full text-xs border-collapse" style={{ fontFamily: "Arial, sans-serif" }}>
-              {/* Header */}
-              <thead>
-                <tr style={{ backgroundColor: "#1F3864", color: "white" }}>
-                  <th className="border border-gray-400 px-2 py-2 text-left min-w-[160px]">Article Name</th>
-                  <th className="border border-gray-400 px-2 py-2 text-left min-w-[100px]">Article Code</th>
-                  <th className="border border-gray-400 px-2 py-2 text-center w-16">Ord Qty</th>
-                  <th className="border border-gray-400 px-2 py-2 text-left min-w-[80px]">Part</th>
-                  <th className="border border-gray-400 px-2 py-2 text-left min-w-[200px]">Fabrication</th>
-                  <th className="border border-gray-400 px-2 py-2 text-center w-20">Width (cm)</th>
-                  <th className="border border-gray-400 px-2 py-2 text-center w-24">Cut/Unit (m)</th>
-                  <th className="border border-gray-400 px-2 py-2 text-center w-24">Net Mtrs</th>
-                  <th className="border border-gray-400 px-2 py-2 text-center w-20">Wastage %</th>
-                  <th className="border border-gray-400 px-2 py-2 text-center w-24 font-bold">Total Mtrs</th>
-                  <th className="border border-gray-400 px-2 py-2 text-center w-20 print-hidden">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {poArticles.map((article, artIdx) => {
-                  const isEditing = editingId === article.id;
-                  const comps = isEditing ? editForm.components : (article.components || []);
-                  const rowCount = Math.max(comps.length, 1);
-                  const artBg = artIdx % 2 === 0 ? "#EBF0FA" : "#FFFFFF";
-
-                  return (
-                    <React.Fragment key={article.id}>
-                      {!isEditing && comps.length === 0 ? (
-                        // NEW ARTICLE — show setup widget
-                        <tr style={{ backgroundColor: artBg }}>
-                          <td className="border border-gray-300 px-2 py-1.5 font-semibold text-blue-900">{article.article_name}</td>
-                          <td className="border border-gray-300 px-2 py-1.5 text-gray-500">{article.article_code}</td>
-                          <td className="border border-gray-300 px-2 py-1.5 text-center">{article.order_quantity?.toLocaleString()}</td>
-                          <ArticleFabricSetup
-                            article={article}
-                            onEdit={() => startEdit(article)}
-                            onSetup={async (components) => {
-                              const total_fabric_required = +components.reduce((s, c) => s + (c.total_required || 0), 0).toFixed(4);
-                              await base44.entities.Article.update(article.id, { components, total_fabric_required });
-                              queryClient.invalidateQueries({ queryKey: ["articles"] });
-                            }}
-                          />
-                          <td className="border border-gray-300 px-2 py-1.5 text-center print-hidden" />
-                        </tr>
-                      ) : comps.length === 0 && isEditing ? (
-                        // Editing new article with no components yet — show placeholder row
-                        <tr style={{ backgroundColor: artBg }}>
-                          <td className="border border-gray-300 px-2 py-1.5 font-semibold text-blue-900">{article.article_name}</td>
-                          <td className="border border-gray-300 px-2 py-1.5 text-gray-600">{article.article_code}</td>
-                          <td className="border border-gray-300 px-2 py-1.5 text-center">
-                            <input type="number" className="w-14 border rounded px-1 py-0.5 text-center" value={editForm.order_quantity || ""} onChange={(e) => setEditForm((f) => ({ ...f, order_quantity: Number(e.target.value) }))} />
-                          </td>
-                          <td colSpan={7} className="border border-gray-300 px-2 py-1.5 text-muted-foreground italic text-xs">Click "Add Component" below to define fabric specs</td>
-                          <td className="border border-gray-300 px-2 py-1 text-center">
-                            <div className="flex flex-col gap-1 items-center">
-                              <button onClick={saveEdit} className="text-green-600 hover:text-green-800" title="Save"><Save className="h-3.5 w-3.5" /></button>
-                              <button onClick={() => setEditingId(null)} className="text-gray-400 hover:text-gray-600" title="Cancel"><X className="h-3.5 w-3.5" /></button>
-                            </div>
-                          </td>
-                        </tr>
-                      ) : (
-                        comps.map((comp, idx) => {
-                          const qty = (isEditing ? editForm.order_quantity : article.order_quantity) || 0;
-                          const net = (comp.consumption_per_unit || 0) * qty;
-                          const total = comp.total_required || net * (1 + (comp.wastage_percent || 0) / 100);
-                          return (
-                            <tr key={idx} style={{ backgroundColor: artBg }}>
-                              {idx === 0 && (
-                                <>
-                                  <td rowSpan={rowCount} className="border border-gray-300 px-2 py-1.5 font-semibold text-blue-900 align-top">
-                                    {article.article_name}
-                                  </td>
-                                  <td rowSpan={rowCount} className="border border-gray-300 px-2 py-1.5 text-gray-600 align-top">
-                                    {article.article_code}
-                                  </td>
-                                  <td rowSpan={rowCount} className="border border-gray-300 px-2 py-1.5 text-center font-semibold align-top">
-                                    {isEditing ? (
-                                      <input type="number" className="w-14 border rounded px-1 py-0.5 text-center" value={editForm.order_quantity || ""} onChange={(e) => setEditForm((f) => ({ ...f, order_quantity: Number(e.target.value) }))} />
-                                    ) : article.order_quantity?.toLocaleString()}
-                                  </td>
-                                </>
-                              )}
-                              <td className="border border-gray-300 px-2 py-1">
-                                {isEditing ? (
-                                  <select className="w-full text-xs border rounded px-1 py-0.5" value={comp.component_type} onChange={(e) => updateComp(idx, "component_type", e.target.value)}>
-                                    {COMPONENT_TYPES.map((t) => <option key={t}>{t}</option>)}
-                                  </select>
-                                ) : <span className="font-medium">{comp.component_type}</span>}
-                              </td>
-                              <td className="border border-gray-300 px-2 py-1">
-                                {isEditing ? (
-                                  <input className="w-full text-xs border rounded px-1 py-0.5" value={comp.fabric_type || ""} onChange={(e) => updateComp(idx, "fabric_type", e.target.value)} />
-                                ) : comp.fabric_type}
-                              </td>
-                              <td className="border border-gray-300 px-2 py-1 text-center">
-                                {isEditing ? (
-                                  <input type="number" className="w-16 text-xs border rounded px-1 py-0.5 text-center" value={comp.width || ""} onChange={(e) => updateComp(idx, "width", Number(e.target.value))} />
-                                ) : comp.width ? `${comp.width}cm` : "—"}
-                              </td>
-                              <td className="border border-gray-300 px-2 py-1 text-center">
-                                {isEditing ? (
-                                  <input type="number" step="0.0001" className="w-20 text-xs border rounded px-1 py-0.5 text-center" value={comp.consumption_per_unit || ""} onChange={(e) => updateComp(idx, "consumption_per_unit", Number(e.target.value))} />
-                                ) : comp.consumption_per_unit?.toFixed(4)}
-                              </td>
-                              <td className="border border-gray-300 px-2 py-1 text-center">{net.toFixed(2)}</td>
-                              <td className="border border-gray-300 px-2 py-1 text-center">
-                                {isEditing ? (
-                                  <input type="number" className="w-14 text-xs border rounded px-1 py-0.5 text-center" value={comp.wastage_percent ?? 6} onChange={(e) => updateComp(idx, "wastage_percent", Number(e.target.value))} />
-                                ) : `${comp.wastage_percent ?? 6}%`}
-                              </td>
-                              <td className="border border-gray-300 px-2 py-1 text-center font-bold" style={{ backgroundColor: "#FFF2CC" }}>{total.toFixed(2)}</td>
-                              {idx === 0 && (
-                                <td rowSpan={rowCount} className="border border-gray-300 px-2 py-1 text-center align-top print-hidden">
-                                  {isEditing ? (
-                                    <div className="flex flex-col gap-1 items-center">
-                                      <button onClick={saveEdit} className="text-green-600 hover:text-green-800" title="Save"><Save className="h-3.5 w-3.5" /></button>
-                                      <button onClick={() => setEditingId(null)} className="text-gray-400 hover:text-gray-600" title="Cancel"><X className="h-3.5 w-3.5" /></button>
-                                    </div>
-                                  ) : (
-                                    <button onClick={() => startEdit(article)} className="text-blue-600 hover:text-blue-800" title="Edit"><Pencil className="h-3.5 w-3.5" /></button>
-                                  )}
-                                </td>
-                              )}
-                            </tr>
-                          );
-                        })
-                      )}
-
-                      {/* Add component row when editing */}
-                      {isEditing && (
-                        <tr style={{ backgroundColor: artBg }}>
-                          <td colSpan={3} />
-                          <td colSpan={7} className="border border-gray-300 px-2 py-1">
-                            <button onClick={addComponent} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs font-medium">
-                              <Plus className="h-3 w-3" /> Add Component
-                            </button>
-                          </td>
-                          <td className="border border-gray-300" />
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Delete buttons shown inline — we overlay them via a separate pass */}
-          {editingId && (() => {
-            const art = poArticles.find(a => a.id === editingId);
-            if (!art || !editForm) return null;
-            return null; // Handled inline above
-          })()}
+          {viewMode === "combined"
+            ? renderArticleTable(combinedArticles, true, false)
+            : renderArticleTable(byColorRows, true, true)
+          }
 
           {/* Fabric Summary Table */}
-          {fabricSummary.length > 0 && (
+          {currentSummary.length > 0 && (
             <div className="mt-4 overflow-x-auto rounded border border-gray-300 shadow-sm">
               <table className="w-full text-xs border-collapse" style={{ fontFamily: "Arial, sans-serif" }}>
                 <thead>
                   <tr style={{ backgroundColor: "#1F3864", color: "white" }}>
-                    <th className="border border-gray-400 px-3 py-2 text-left" colSpan={2}>FABRIC REQUIREMENT SUMMARY — {activePo?.po_number}</th>
+                    <th className="border border-gray-400 px-3 py-2 text-left" colSpan={2}>FABRIC REQUIREMENT SUMMARY — {activePo?.po_number} [{viewMode === "combined" ? "Combined" : "By Color/Size"}]</th>
                     <th className="border border-gray-400 px-3 py-2 text-center">Width</th>
                     <th className="border border-gray-400 px-3 py-2 text-right">Net Mtrs (100%)</th>
                     <th className="border border-gray-400 px-3 py-2 text-right">Total Mtrs (with wastage)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {fabricSummary.map((f, idx) => (
+                  {currentSummary.map((f, idx) => (
                     <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? "#EBF0FA" : "white" }}>
                       <td className="border border-gray-300 px-3 py-1.5" colSpan={2}>{f.fabric_type}</td>
                       <td className="border border-gray-300 px-3 py-1.5 text-center">{f.width ? `${f.width}cm` : "—"}</td>
@@ -390,8 +424,8 @@ export default function FabricWorking() {
                   ))}
                   <tr style={{ backgroundColor: "#1F3864", color: "white", fontWeight: "bold" }}>
                     <td className="border border-gray-400 px-3 py-1.5" colSpan={3}>GRAND TOTAL</td>
-                    <td className="border border-gray-400 px-3 py-1.5 text-right">{fabricSummary.reduce((s, f) => s + f.net_total, 0).toFixed(2)}</td>
-                    <td className="border border-gray-400 px-3 py-1.5 text-right">{fabricSummary.reduce((s, f) => s + f.total_with_wastage, 0).toFixed(2)}</td>
+                    <td className="border border-gray-400 px-3 py-1.5 text-right">{currentSummary.reduce((s, f) => s + f.net_total, 0).toFixed(2)}</td>
+                    <td className="border border-gray-400 px-3 py-1.5 text-right">{currentSummary.reduce((s, f) => s + f.total_with_wastage, 0).toFixed(2)}</td>
                   </tr>
                 </tbody>
               </table>
