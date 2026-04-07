@@ -1,4 +1,5 @@
 import React, { useState, useRef } from "react";
+import { jsPDF } from "jspdf";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Printer, Upload, Trash2, Edit2, X, CheckCircle } from "lucide-react";
+import { Plus, Search, Printer, Upload, Trash2, Edit2, X, CheckCircle, Download, FileText } from "lucide-react";
 
 const CATEGORIES = ["Zipper", "Slider", "Elastic", "Button", "Dori", "Eyelet", "Stitching Thread", "Other"];
 const UNITS = ["Pcs", "Meters", "Kgs", "Rolls", "Dozens", "Gross", "Sets"];
@@ -131,8 +132,54 @@ export default function Accessories() {
     fileRef.current.value = "";
   };
 
-  const handlePrint = () => {
-    window.print();
+  const handlePrint = () => window.print();
+
+  const handleDownloadExcel = () => {
+    const rows = [["Category", "Description", "Color", "Size/Spec", "Article", "Article Code", "PO#", "Qty", "Unit", "Consumption/Unit", "Supplier", "Unit Cost", "Total Cost", "Status"]];
+    filtered.forEach(item => {
+      rows.push([
+        item.category || "", item.item_description || "", item.color || "", item.size_spec || "",
+        item.article_name || "", item.article_code || "", item.po_number || "",
+        item.quantity_required || "", item.unit || "", item.consumption_per_unit || "",
+        item.supplier || "", item.unit_cost || "", item.total_cost || "", item.status || "",
+      ]);
+    });
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url;
+    a.download = `Accessories.csv`; a.click(); URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadPDF = () => {
+    const doc = new jsPDF({ orientation: "landscape", format: "a4" });
+    doc.setFontSize(13); doc.setFont("helvetica", "bold");
+    doc.text("Accessories / Trims", 14, 15);
+    doc.setFontSize(8); doc.setFont("helvetica", "normal");
+    doc.text(`Total: ${filtered.length} items${filterCat !== "All" ? ` | Category: ${filterCat}` : ""}`, 14, 22);
+    const cols = ["Category", "Description", "Color/Spec", "Article", "PO#", "Qty", "Unit", "Supplier", "Cost", "Status"];
+    const widths = [22, 50, 25, 30, 18, 14, 12, 30, 14, 18];
+    let y = 30;
+    doc.setFillColor(31, 56, 100); doc.setTextColor(255, 255, 255);
+    let x = 14;
+    cols.forEach((col, i) => { doc.rect(x, y - 4, widths[i], 7, "F"); doc.setFontSize(7); doc.text(col, x + 1, y); x += widths[i]; });
+    y += 5; doc.setTextColor(0, 0, 0);
+    filtered.forEach((item, idx) => {
+      if (y > 185) { doc.addPage(); y = 20; }
+      if (idx % 2 === 0) { doc.setFillColor(245, 245, 250); x = 14; widths.forEach(w => { doc.rect(x, y - 3.5, w, 6, "F"); x += w; }); }
+      const rowData = [
+        item.category || "", (item.item_description || "").substring(0, 32),
+        [item.color, item.size_spec].filter(Boolean).join(" / ").substring(0, 18),
+        (item.article_code || item.article_name || "").substring(0, 20),
+        item.po_number || "", item.quantity_required?.toLocaleString() || "",
+        item.unit || "", (item.supplier || "").substring(0, 20),
+        item.unit_cost ? `$${item.unit_cost}` : "", item.status || "",
+      ];
+      doc.setFontSize(7); x = 14;
+      rowData.forEach((val, i) => { doc.text(String(val), x + 1, y); x += widths[i]; });
+      y += 6;
+    });
+    doc.save(`Accessories.pdf`);
   };
 
   // Summary by category
@@ -153,6 +200,12 @@ export default function Accessories() {
           <Button variant="outline" size="sm" onClick={() => fileRef.current.click()} disabled={uploading}>
             <Upload className="h-4 w-4 mr-1.5" />
             {uploading ? uploadMsg : "Upload CSV Sheet"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleDownloadExcel}>
+            <Download className="h-4 w-4 mr-1.5" /> Excel
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleDownloadPDF}>
+            <FileText className="h-4 w-4 mr-1.5" /> PDF
           </Button>
           <Button variant="outline" size="sm" onClick={handlePrint}>
             <Printer className="h-4 w-4 mr-1.5" /> Print

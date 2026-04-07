@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useRef } from "react";
+import { jsPDF } from "jspdf";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Printer, Download, Pencil, Save, X, Plus, Layers } from "lucide-react";
+import { Printer, Download, FileText, Pencil, Save, X, Plus, Layers } from "lucide-react";
 import UploadFabricSheet from "../components/fabric/UploadFabricSheet";
 import ArticleFabricSetup from "../components/fabric/ArticleFabricSetup";
 
@@ -77,7 +78,7 @@ export default function FabricWorking() {
 
   const handlePrint = () => window.print();
 
-  const handleDownload = () => {
+  const handleDownloadExcel = () => {
     const rows = [["Article Name", "Article Code", "Order Qty", "Part", "Fabrication", "Width (cm)", "Cut/Unit (m)", "Net Mtrs", "Wastage %", "Total Mtrs"]];
     poArticles.forEach((art) => {
       (art.components || []).forEach((comp, i) => {
@@ -87,33 +88,76 @@ export default function FabricWorking() {
           i === 0 ? art.article_name : "",
           i === 0 ? (art.article_code || "") : "",
           i === 0 ? (art.order_quantity || "") : "",
-          comp.component_type,
-          comp.fabric_type,
-          comp.width || "",
+          comp.component_type, comp.fabric_type, comp.width || "",
           comp.consumption_per_unit?.toFixed(4) || "",
-          net.toFixed(2),
-          (comp.wastage_percent ?? 6) + "%",
-          total.toFixed(2),
+          net.toFixed(2), (comp.wastage_percent ?? 6) + "%", total.toFixed(2),
         ]);
       });
-      rows.push(["", "", "", "", "", "", "", "", "", ""]);
+      rows.push(Array(10).fill(""));
     });
-
-    // Summary
-    rows.push(["FABRIC SUMMARY", "", "", "", "", "", "", "", "", ""]);
+    rows.push(["FABRIC SUMMARY", ...Array(9).fill("")]);
     rows.push(["Fabric Type", "", "", "", "", "Width (cm)", "", "Net Mtrs", "", "Total Mtrs"]);
     fabricSummary.forEach((f) => {
       rows.push([f.fabric_type, "", "", "", "", f.width ? f.width + "cm" : "", "", f.net_total.toFixed(2), "", f.total_with_wastage.toFixed(2)]);
     });
-
     const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
+    const a = document.createElement("a"); a.href = url;
     a.download = `FabricWorking_${activePo?.po_number || "PO"}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadPDF = () => {
+    const doc = new jsPDF({ orientation: "landscape", format: "a3" });
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Fabric Working Sheet — ${activePo?.po_number || ""}`, 14, 15);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Customer: ${activePo?.customer_name || ""} | PI: ${activePo?.pi_number || "—"} | ETD: ${activePo?.etd || "—"}`, 14, 22);
+    let y = 30;
+    const cols = ["Article", "Code", "Qty", "Part", "Fabrication", "Width", "Cut/Unit", "Net Mtrs", "Wastage", "Total Mtrs"];
+    const widths = [35, 22, 12, 20, 45, 14, 16, 16, 14, 18];
+    doc.setFillColor(31, 56, 100); doc.setTextColor(255, 255, 255);
+    let x = 14;
+    cols.forEach((col, i) => { doc.rect(x, y - 4, widths[i], 7, "F"); doc.setFontSize(7); doc.text(col, x + 1, y); x += widths[i]; });
+    y += 5; doc.setTextColor(0, 0, 0);
+    poArticles.forEach((art, artIdx) => {
+      (art.components || []).forEach((comp, ci) => {
+        const net = (comp.consumption_per_unit || 0) * (art.order_quantity || 0);
+        const total = comp.total_required || net * (1 + (comp.wastage_percent || 0) / 100);
+        const rowData = [
+          ci === 0 ? (art.article_name || "").substring(0, 22) : "",
+          ci === 0 ? (art.article_code || "") : "",
+          ci === 0 ? String(art.order_quantity || "") : "",
+          comp.component_type || "", (comp.fabric_type || "").substring(0, 28),
+          comp.width ? `${comp.width}cm` : "",
+          comp.consumption_per_unit?.toFixed(4) || "",
+          net.toFixed(2), `${comp.wastage_percent ?? 6}%`, total.toFixed(2),
+        ];
+        if (artIdx % 2 === 0) { doc.setFillColor(235, 240, 250); x = 14; widths.forEach(w => { doc.rect(x, y - 3.5, w, 6, "F"); x += w; }); }
+        doc.setFontSize(7); x = 14;
+        rowData.forEach((val, i) => { doc.text(String(val), x + 1, y); x += widths[i]; });
+        y += 6;
+        if (y > 185) { doc.addPage(); y = 20; }
+      });
+    });
+    y += 4;
+    doc.setFillColor(31, 56, 100); doc.setTextColor(255, 255, 255);
+    doc.rect(14, y - 4, 140, 7, "F");
+    doc.setFontSize(8); doc.text("FABRIC REQUIREMENT SUMMARY", 15, y);
+    y += 8; doc.setTextColor(0, 0, 0);
+    fabricSummary.forEach((f, idx) => {
+      if (idx % 2 === 0) { doc.setFillColor(235, 240, 250); doc.rect(14, y - 3.5, 140, 6, "F"); }
+      doc.setFontSize(7);
+      doc.text(f.fabric_type || "", 15, y);
+      doc.text(f.width ? `${f.width}cm` : "", 85, y);
+      doc.text(f.net_total.toFixed(2), 105, y);
+      doc.text(f.total_with_wastage.toFixed(2), 130, y);
+      y += 6;
+    });
+    doc.save(`FabricWorking_${activePo?.po_number || "PO"}.pdf`);
   };
 
   return (
@@ -142,7 +186,13 @@ export default function FabricWorking() {
         </div>
         <div className="flex gap-2">
           <UploadFabricSheet onSuccess={() => queryClient.invalidateQueries({ queryKey: ["articles"] })} />
-          <Button size="sm" variant="outline" onClick={handleDownload} className="gap-1.5 text-xs">
+          <Button size="sm" variant="outline" onClick={handleDownloadExcel} className="gap-1.5 text-xs">
+            <Download className="h-3.5 w-3.5" /> Excel
+          </Button>
+          <Button size="sm" variant="outline" onClick={handleDownloadPDF} className="gap-1.5 text-xs">
+            <FileText className="h-3.5 w-3.5" /> PDF
+          </Button>
+          <Button size="sm" variant="outline" onClick={handlePrint} className="gap-1.5 text-xs">
             <Printer className="h-3.5 w-3.5" /> Print
           </Button>
         </div>

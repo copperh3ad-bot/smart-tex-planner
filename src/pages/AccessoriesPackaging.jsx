@@ -1,10 +1,11 @@
 import React, { useState } from "react";
+import { jsPDF } from "jspdf";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Search, Tag, Box, Package, Layers, CheckCircle } from "lucide-react";
+import { Plus, Search, Tag, Box, Package, Layers, CheckCircle, Download, FileText } from "lucide-react";
 import UploadPackagingSheet from "../components/packaging/UploadPackagingSheet";
 import ArticlePackagingForm from "../components/packaging/ArticlePackagingForm";
 import ArticlePackagingCard from "../components/packaging/ArticlePackagingCard";
@@ -26,6 +27,53 @@ export default function AccessoriesPackaging() {
     t.article_code?.toLowerCase().includes(search.toLowerCase()) ||
     t.customer_name?.toLowerCase().includes(search.toLowerCase())
   );
+
+  const handleDownloadExcel = () => {
+    const rows = [["Article Name", "Article Code", "Customer", "Labels", "Polybag", "Polybag Size", "Stiffener", "Carton Type", "Carton Quality", "Pcs/Carton", "CBM/Carton"]];
+    templates.forEach(t => {
+      rows.push([
+        t.article_name || "",
+        t.article_code || "",
+        t.customer_name || "",
+        (t.labels || []).map(l => l.label_type).join("; "),
+        t.polybag?.type || "",
+        t.polybag?.size_cm || "",
+        t.stiffener?.used ? "Yes" : "No",
+        t.carton?.type || "",
+        t.carton?.quality || "",
+        t.carton?.pieces_per_carton || "",
+        t.carton?.cbm_per_carton || "",
+      ]);
+    });
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url;
+    a.download = `Packaging_Templates.csv`; a.click(); URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadPDF = () => {
+    const doc = new jsPDF({ orientation: "portrait", format: "a4" });
+    doc.setFontSize(14); doc.setFont("helvetica", "bold");
+    doc.text("Packaging Templates", 14, 15);
+    doc.setFontSize(9); doc.setFont("helvetica", "normal");
+    doc.text(`Total: ${templates.length} templates`, 14, 22);
+    let y = 30;
+    templates.forEach((t, idx) => {
+      if (y > 260) { doc.addPage(); y = 20; }
+      doc.setFillColor(31, 56, 100); doc.setTextColor(255, 255, 255);
+      doc.rect(14, y - 4, 182, 7, "F");
+      doc.setFontSize(9); doc.setFont("helvetica", "bold");
+      doc.text(`${t.article_name || "Unnamed"} ${t.article_code ? `(${t.article_code})` : ""}  —  ${t.customer_name || ""}`, 16, y);
+      y += 7; doc.setTextColor(0, 0, 0); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+      if (t.labels?.length) { doc.text(`Labels: ${t.labels.map(l => l.label_type).join(", ")}`, 16, y); y += 5; }
+      if (t.polybag?.type) { doc.text(`Polybag: ${t.polybag.type} ${t.polybag.size_cm ? `(${t.polybag.size_cm})` : ""}`, 16, y); y += 5; }
+      if (t.stiffener?.used) { doc.text(`Stiffener: ${t.stiffener.material || "Yes"} ${t.stiffener.size_cm || ""}`, 16, y); y += 5; }
+      if (t.carton?.type) { doc.text(`Carton: ${t.carton.type} ${t.carton.quality || ""} | Pcs: ${t.carton.pieces_per_carton || "—"} | CBM: ${t.carton.cbm_per_carton || "—"}`, 16, y); y += 5; }
+      y += 4;
+    });
+    doc.save("Packaging_Templates.pdf");
+  };
 
   const handleSave = async (data) => {
     if (editingItem) {
@@ -67,6 +115,12 @@ export default function AccessoriesPackaging() {
         </div>
         <div className="flex gap-2">
           <UploadPackagingSheet onSuccess={() => queryClient.invalidateQueries({ queryKey: ["articlePackaging"] })} />
+          <Button variant="outline" onClick={handleDownloadExcel}>
+            <Download className="h-4 w-4 mr-1.5" /> Excel
+          </Button>
+          <Button variant="outline" onClick={handleDownloadPDF}>
+            <FileText className="h-4 w-4 mr-1.5" /> PDF
+          </Button>
           <Button onClick={() => { setEditingItem(null); setShowForm(true); }}>
           <Plus className="h-4 w-4 mr-1.5" /> New Article Template
         </Button>
