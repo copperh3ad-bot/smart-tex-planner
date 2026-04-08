@@ -3,13 +3,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { format } from "date-fns";
 import StatusBadge from "../shared/StatusBadge";
 
+const safeDate = (d, fmt) => { try { const dt = new Date(d); return isNaN(dt) ? "—" : format(dt, fmt); } catch { return "—"; } };
+
 export default function POInfoHeader({ po }) {
   const fields = [
     { label: "Customer", value: po.customer_name },
-    { label: "Order Date", value: po.order_date ? format(new Date(po.order_date), "dd MMM yyyy") : "—" },
-    { label: "Delivery Date", value: po.delivery_date ? format(new Date(po.delivery_date), "dd MMM yyyy") : "—" },
-    { label: "Ex-Factory", value: po.ex_factory_date ? format(new Date(po.ex_factory_date), "dd MMM yyyy") : "—" },
-    { label: "ETD / ETA", value: `${po.etd ? format(new Date(po.etd), "dd MMM") : "—"} / ${po.eta ? format(new Date(po.eta), "dd MMM") : "—"}` },
+    { label: "Order Date", value: po.order_date ? safeDate(po.order_date, "dd MMM yyyy") : "—" },
+    { label: "Delivery Date", value: po.delivery_date ? safeDate(po.delivery_date, "dd MMM yyyy") : "—" },
+    { label: "Ex-Factory", value: po.ex_factory_date ? safeDate(po.ex_factory_date, "dd MMM yyyy") : "—" },
+    { label: "ETD / ETA", value: `${po.etd ? safeDate(po.etd, "dd MMM") : "—"} / ${po.eta ? safeDate(po.eta, "dd MMM") : "—"}` },
     { label: "Value", value: `${po.currency || ""} ${po.total_po_value?.toLocaleString() || "—"}` },
     { label: "Quantity", value: po.total_quantity?.toLocaleString() || "—" },
     { label: "CBM", value: po.total_cbm?.toFixed(2) || "—" },
