@@ -4,15 +4,17 @@ import { format } from "date-fns";
 import StatusBadge from "../shared/StatusBadge";
 
 export default function POInfoHeader({ po }) {
+  const fmt = (d) => d && !isNaN(new Date(d)) ? format(new Date(d), "dd MMM yyyy") : "\u2014";
+  const fmtShort = (d) => d && !isNaN(new Date(d)) ? format(new Date(d), "dd MMM") : "\u2014";
   const fields = [
     { label: "Customer", value: po.customer_name },
-    { label: "Order Date", value: po.order_date ? format(new Date(po.order_date), "dd MMM yyyy") : "—" },
-    { label: "Delivery Date", value: po.delivery_date ? format(new Date(po.delivery_date), "dd MMM yyyy") : "—" },
-    { label: "Ex-Factory", value: po.ex_factory_date ? format(new Date(po.ex_factory_date), "dd MMM yyyy") : "—" },
-    { label: "ETD / ETA", value: `${po.etd ? format(new Date(po.etd), "dd MMM") : "—"} / ${po.eta ? format(new Date(po.eta), "dd MMM") : "—"}` },
-    { label: "Value", value: `${po.currency || ""} ${po.total_po_value?.toLocaleString() || "—"}` },
-    { label: "Quantity", value: po.total_quantity?.toLocaleString() || "—" },
-    { label: "CBM", value: po.total_cbm?.toFixed(2) || "—" },
+    { label: "Order Date", value: fmt(po.order_date) },
+    { label: "Delivery Date", value: fmt(po.delivery_date) },
+    { label: "Ex-Factory", value: fmt(po.ex_factory_date) },
+    { label: "ETD / ETA", value: `${fmtShort(po.etd)} / ${fmtShort(po.eta)}` },
+    { label: "Value", value: `${po.currency || ""} ${po.total_po_value?.toLocaleString() || "\u2014"}` },
+    { label: "Quantity", value: po.total_quantity?.toLocaleString() || "\u2014" },
+    { label: "CBM", value: po.total_cbm?.toFixed(2) || "\u2014" },
   ];
 
   return (
