@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { CheckCircle2, AlertTriangle, HelpCircle } from "lucide-react";
 
-const units = ["Meters", "Yards", "Kgs", "Pieces", "Rolls"];
+const units = ["Meters", "Yards", "Kgs", "Pieces", "Rolls", "Sets"];
 const packingMethods = ["Roll", "Bale", "Carton", "Pallet"];
 
 const defaultForm = {
