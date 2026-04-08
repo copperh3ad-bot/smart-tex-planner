@@ -295,13 +295,13 @@ export default function PurchaseOrders() {
                       </TableCell>
                       <TableCell className="text-xs">{po.customer_name}</TableCell>
                       <TableCell className="text-xs text-muted-foreground hidden md:table-cell">
-                        {po.order_date ? format(new Date(po.order_date), "dd MMM yyyy") : "—"}
+                                         {po.order_date && !isNaN(new Date(po.order_date)) ? format(new Date(po.order_date), "dd MMM yyyy") : "—"}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground hidden lg:table-cell">
-                        {po.delivery_date ? format(new Date(po.delivery_date), "dd MMM yyyy") : "—"}
+                                         {po.delivery_date && !isNaN(new Date(po.delivery_date)) ? format(new Date(po.delivery_date), "dd MMM yyyy") : "—"}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground hidden xl:table-cell">
-                        {po.etd ? format(new Date(po.etd), "dd MMM yyyy") : "—"}
+                                         {po.etd && !isNaN(new Date(po.etd)) ? format(new Date(po.etd), "dd MMM yyyy") : "—"}
                       </TableCell>
                       <TableCell className="text-xs font-medium">
                         {po.currency} {po.total_po_value?.toLocaleString() || "—"}
