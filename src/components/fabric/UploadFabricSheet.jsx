@@ -36,16 +36,19 @@ export default function UploadFabricSheet({ onSuccess }) {
     setMessage("Extracting fabric data with AI...");
 
     const extracted = await base44.integrations.Core.InvokeLLM({
-      prompt: `Extract fabric working sheet data from this CSV/spreadsheet content. For each row that represents an article/item (has an item code like GPMP33, GPTE50, GPFRIOMP33, etc.), extract:
-- item_code (SKU code column)
-- article_name
-- order_quantity (PO Qty column if present, as number)
+      prompt: `Extract fabric working sheet data from this CSV/spreadsheet content. For each row that represents an article/item with a SKU/item code, extract:
+- item_code (SKU code like PCSJMO-T-CG, GPMP33, etc.)
+- article_name (full description)
+- color (e.g. Cloud Gray, Misty Blue, White — extract from item description or code suffix -CG=Cloud Gray, -MB=Misty Blue, -WH=White)
+- order_quantity (total qty across all colors if available, as number)
 - components: array where each component has:
-  - component_type: from Version column (e.g. Front, Skirt, Bottom, Piping, Binding, Filling, Lamination, Window (Inside), Window (Outside))
-  - fabric_type: from the fabric column header that has a non-zero value
-  - width: from Width in cm column (number)
-  - consumption_per_unit: the numeric cell value for that fabric column (only include if > 0)
-  - wastage_percent: 6 (default)
+  - component_type: e.g. Flat Sheet, Fitted Sheet, Pillow Case, Front, Skirt, Bottom, Piping, Filling
+  - product_size: the size/dimension string e.g. '70x96+4', '39x75+16', '20x30+4'
+  - direction: knitting/fabric direction e.g. WXL, LXL, WXW (from Direction column)
+  - fabric_type: fabric description from header column
+  - width: fabric width in cm (number, from F/width or Width column)
+  - consumption_per_unit: consumption in meters per unit (number, from Con MTR column)
+  - wastage_percent: wastage as whole number e.g. 20 for 20% (from Wastage % column, default 6 if not present)
 Only include rows with valid item codes. Only include components with consumption_per_unit > 0.
 
 Spreadsheet content:
@@ -60,6 +63,7 @@ ${text.substring(0, 15000)}`,
               properties: {
                 item_code: { type: "string" },
                 article_name: { type: "string" },
+                color: { type: "string" },
                 order_quantity: { type: "number" },
                 components: {
                   type: "array",
@@ -67,6 +71,8 @@ ${text.substring(0, 15000)}`,
                     type: "object",
                     properties: {
                       component_type: { type: "string" },
+                      product_size: { type: "string" },
+                      direction: { type: "string" },
                       fabric_type: { type: "string" },
                       width: { type: "number" },
                       consumption_per_unit: { type: "number" },
@@ -101,6 +107,7 @@ ${text.substring(0, 15000)}`,
       }));
       const updateData = { components };
       if (art.order_quantity) updateData.order_quantity = art.order_quantity;
+      if (art.color) updateData.color = art.color;
       try {
         const matches = await base44.entities.Article.filter({ article_code: art.item_code });
         if (matches && matches.length > 0) {

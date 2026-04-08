@@ -1,0 +1,82 @@
+{
+  "name": "Article",
+  "type": "object",
+  "properties": {
+    "po_id": {
+      "type": "string",
+      "description": "Reference to PurchaseOrder"
+    },
+    "po_item_id": {
+      "type": "string",
+      "description": "Reference to POItem"
+    },
+    "article_name": {
+      "type": "string",
+      "description": "Article / Product name"
+    },
+    "article_code": {
+      "type": "string"
+    },
+    "color": {
+      "type": "string",
+      "description": "Color variant e.g. Cloud Gray, Misty Blue, White"
+    },
+    "size_label": {
+      "type": "string",
+      "description": "Size label e.g. Twin, Queen, King"
+    },
+    "components": {
+      "type": "array",
+      "description": "Fabric components in the article",
+      "items": {
+        "type": "object",
+        "properties": {
+          "component_type": {
+            "type": "string",
+            "description": "e.g. Flat Sheet, Fitted Sheet, Pillow Case, Front, Skirt, Bottom"
+          },
+          "product_size": {
+            "type": "string",
+            "description": "Product dimensions e.g. 70x96+4, 39x75+16"
+          },
+          "direction": {
+            "type": "string",
+            "description": "Knitting direction e.g. WXL, LXL, WXW"
+          },
+          "fabric_type": {
+            "type": "string"
+          },
+          "gsm": {
+            "type": "number"
+          },
+          "width": {
+            "type": "number",
+            "description": "Fabric width in cm"
+          },
+          "consumption_per_unit": {
+            "type": "number",
+            "description": "Fabric consumption per unit in meters"
+          },
+          "wastage_percent": {
+            "type": "number",
+            "description": "Wastage percentage"
+          },
+          "total_required": {
+            "type": "number",
+            "description": "Total fabric required"
+          }
+        }
+      }
+    },
+    "order_quantity": {
+      "type": "number"
+    },
+    "total_fabric_required": {
+      "type": "number",
+      "description": "Sum of all component requirements"
+    }
+  },
+  "required": [
+    "article_name"
+  ]
+}
