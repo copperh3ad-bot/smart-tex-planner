@@ -11,6 +11,7 @@ import Accessories from './pages/Accessories';
 import ShippingDocuments from './pages/ShippingDocuments';
 import FabricWorking from './pages/FabricWorking';
 import AccessoriesPackaging from './pages/AccessoriesPackaging';
+import AccessoryPurchaseOrders from './pages/AccessoryPurchaseOrders';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -67,6 +68,7 @@ const AuthenticatedApp = () => {
       <Route path="/AccessoriesPackaging" element={<LayoutWrapper currentPageName="AccessoriesPackaging"><AccessoriesPackaging /></LayoutWrapper>} />
       <Route path="/Accessories" element={<LayoutWrapper currentPageName="Accessories"><Accessories /></LayoutWrapper>} />
       <Route path="/ShippingDocuments" element={<LayoutWrapper currentPageName="ShippingDocuments"><ShippingDocuments /></LayoutWrapper>} />
+      <Route path="/AccessoryPurchaseOrders" element={<LayoutWrapper currentPageName="AccessoryPurchaseOrders"><AccessoryPurchaseOrders /></LayoutWrapper>} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );

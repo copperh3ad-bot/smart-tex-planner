@@ -1,0 +1,93 @@
+{
+  "name": "AccessoryPurchaseOrder",
+  "type": "object",
+  "properties": {
+    "apo_number": {
+      "type": "string",
+      "description": "Accessory PO Number"
+    },
+    "po_ref": {
+      "type": "string",
+      "description": "Reference Production PO Number"
+    },
+    "po_id": {
+      "type": "string",
+      "description": "Reference to PurchaseOrder"
+    },
+    "supplier": {
+      "type": "string"
+    },
+    "order_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Draft",
+        "Issued",
+        "Confirmed",
+        "Received",
+        "Cancelled"
+      ],
+      "default": "Draft"
+    },
+    "items": {
+      "type": "array",
+      "description": "Line items pulled from AccessoryItem records",
+      "items": {
+        "type": "object",
+        "properties": {
+          "accessory_item_id": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "item_description": {
+            "type": "string"
+          },
+          "article_name": {
+            "type": "string"
+          },
+          "article_code": {
+            "type": "string"
+          },
+          "size_spec": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "unit_cost": {
+            "type": "number"
+          },
+          "total_cost": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "total_cost": {
+      "type": "number"
+    },
+    "currency": {
+      "type": "string",
+      "enum": [
+        "PKR",
+        "USD",
+        "EUR"
+      ],
+      "default": "PKR"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "apo_number"
+  ]
+}
