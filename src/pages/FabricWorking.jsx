@@ -91,8 +91,22 @@ export default function FabricWorking() {
   }, [poArticles]);
 
   const updateArticle = useMutation({
-    mutationFn: async ({ id, data }) => {
-      await base44.entities.Article.update(id, data);
+    mutationFn: async ({ id, data, siblingIds }) => {
+      const total_fabric_required = +(data.components || []).reduce((s, c) => s + (c.total_required || 0), 0).toFixed(4);
+      // Update the primary article
+      await base44.entities.Article.update(id, { ...data, total_fabric_required });
+      // Update all sibling articles (same base code, different colors) with same components
+      if (siblingIds && siblingIds.length > 0) {
+        const masterComponents = (data.components || []).map(({ total_required, ...rest }) => rest);
+        await Promise.all(siblingIds.map((sibId) => {
+          const sibTotal = +(masterComponents.reduce((s, c) => {
+            // recalculate total_required per sibling if needed — use components as-is
+            return s + (c.consumption_per_unit || 0);
+          }, 0)).toFixed(4);
+          return base44.entities.Article.update(sibId, { components: data.components, total_fabric_required });
+        }));
+      }
+      // Update FabricTemplate master
       if (data.article_code) {
         const masterComponents = (data.components || []).map(({ total_required, ...rest }) => rest);
         const existing = await base44.entities.FabricTemplate.filter({ article_code: data.article_code });
@@ -108,8 +122,13 @@ export default function FabricWorking() {
 
   const startEdit = (article) => setEditingArticle(article);
   const saveEdit = (formData) => {
-    const total_fabric_required = +( formData.components || []).reduce((s, c) => s + (c.total_required || 0), 0).toFixed(4);
-    updateArticle.mutate({ id: formData.id, data: { ...formData, total_fabric_required } });
+    const total_fabric_required = +(formData.components || []).reduce((s, c) => s + (c.total_required || 0), 0).toFixed(4);
+    // Find sibling articles (same base code, different id) to propagate changes
+    const baseCode = getBaseCode(formData);
+    const siblingIds = poArticles
+      .filter((a) => getBaseCode(a) === baseCode && a.id !== formData.id)
+      .map((a) => a.id);
+    updateArticle.mutate({ id: formData.id, data: { ...formData, total_fabric_required }, siblingIds });
   };
 
   const handleDownloadExcel = () => {
