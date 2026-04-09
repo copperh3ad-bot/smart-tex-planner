@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Save, Plus, Trash2 } from "lucide-react";
+import { Save, Plus, Trash2, Upload, Download, Printer } from "lucide-react";
+import { jsPDF } from "jspdf";
 
 // ─── Tab config ───────────────────────────────────────────────────────────────
 const TAB_CONFIG = {
@@ -152,6 +153,7 @@ export default function UnifiedPackagingPlanning() {
   const [selectedPoId, setSelectedPoId] = useState("");
   const [subTab, setSubTab] = useState("Labels");
   const [saving, setSaving] = useState(false);
+  const fileInputRef = useRef(null);
 
   // allRows[tabName][artId] = [ { type, quality, wastage_percent, existing_id } ]
   const [allRows, setAllRows] = useState({});
@@ -183,6 +185,136 @@ export default function UnifiedPackagingPlanning() {
 
   const handleChange = (tab, artId, newRows) => {
     setAllRows(prev => ({ ...prev, [tab]: { ...prev[tab], [artId]: newRows } }));
+  };
+
+  // ─── Upload: parse CSV pre-fill ──────────────────────────────────────────
+  const handleUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const text = evt.target.result;
+      const lines = text.split("\n").map(l => l.split(",").map(c => c.replace(/^"|"$/g, "").trim()));
+      const headers = lines[0].map(h => h.toLowerCase());
+      const getCol = (row, ...names) => { for (const n of names) { const i = headers.indexOf(n); if (i >= 0) return row[i] || ""; } return ""; };
+      const newRows = {};
+      SUB_TABS.forEach(tab => { newRows[tab] = {}; poArticles.forEach(art => { newRows[tab][art.id] = [defaultRow(TAB_CONFIG[tab])]; }); });
+      lines.slice(1).forEach(row => {
+        if (row.length < 3) return;
+        const artCode = getCol(row, "article_code", "article code");
+        const cat = getCol(row, "category");
+        const type = getCol(row, "type", "item_description", "description");
+        const quality = getCol(row, "quality", "size_spec", "spec");
+        const wastage = getCol(row, "wastage_percent", "wastage");
+        const art = poArticles.find(a => a.article_code === artCode || a.article_name === artCode);
+        const tabEntry = Object.entries(TAB_CONFIG).find(([, c]) => c.category.toLowerCase() === cat.toLowerCase());
+        if (!art || !tabEntry) return;
+        const [tab] = tabEntry;
+        const existing = newRows[tab][art.id];
+        const emptyIdx = existing.findIndex(r => !r.quality && !r.type.includes(" "));
+        const newRow = { type: type || TAB_CONFIG[tab].typeOptions[0], quality, wastage_percent: parseFloat(wastage) || TAB_CONFIG[tab].defaultWastage, existing_id: null };
+        if (emptyIdx >= 0) existing[emptyIdx] = newRow;
+        else existing.push(newRow);
+      });
+      setAllRows(prev => {
+        const merged = { ...prev };
+        SUB_TABS.forEach(tab => { merged[tab] = { ...(prev[tab] || {}), ...newRows[tab] }; });
+        return merged;
+      });
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  // ─── Download current data as CSV ─────────────────────────────────────────
+  const handleDownloadCSV = () => {
+    const rows = [["PO Number", "Article Name", "Article Code", "Category", "Type", "Quality", "Order Qty", "Wastage %", "Incl. Wastage Qty"]];
+    SUB_TABS.forEach(tab => {
+      const cfg = TAB_CONFIG[tab];
+      poArticles.forEach(art => {
+        const artRows = allRows[tab]?.[art.id] || [];
+        artRows.forEach(row => {
+          if (!row.type && !row.quality) return;
+          rows.push([
+            activePo?.po_number || "", art.article_name, art.article_code || "",
+            cfg.category, row.type, row.quality,
+            art.order_quantity || 0, row.wastage_percent,
+            calcInclWastage(art.order_quantity || 0, row.wastage_percent)
+          ]);
+        });
+      });
+    });
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url;
+    a.download = `Accessories_${activePo?.po_number || "Planning"}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  // ─── Download PDF ──────────────────────────────────────────────────────────
+  const handleDownloadPDF = () => {
+    const doc = new jsPDF({ orientation: "landscape", format: "a4" });
+    doc.setFillColor(31, 56, 100); doc.rect(0, 0, 297, 22, "F");
+    doc.setTextColor(255, 255, 255); doc.setFontSize(13); doc.setFont("helvetica", "bold");
+    doc.text("Accessories & Packaging Planning", 14, 10);
+    doc.setFontSize(9); doc.setFont("helvetica", "normal");
+    doc.text(`PO: ${activePo?.po_number || ""} — ${activePo?.customer_name || ""}  |  Date: ${new Date().toLocaleDateString()}`, 14, 18);
+    let y = 30; doc.setTextColor(0, 0, 0);
+    SUB_TABS.forEach(tab => {
+      const cfg = TAB_CONFIG[tab];
+      const tabHasData = poArticles.some(art => (allRows[tab]?.[art.id] || []).some(r => r.quality || r.type));
+      if (!tabHasData) return;
+      if (y > 170) { doc.addPage(); y = 20; }
+      doc.setFillColor(61, 90, 153); doc.rect(14, y - 4, 269, 7, "F");
+      doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+      doc.text(tab.toUpperCase(), 16, y); y += 7; doc.setTextColor(0, 0, 0);
+      const colW = [60, 50, 35, 22, 22, 35];
+      const colX = [14];
+      colW.forEach((w, i) => colX.push(colX[i] + colW[i]));
+      const headers = ["Article", cfg.typeLabel, cfg.qualityLabel, "Qty", "Wastage %", "Incl. Wastage"];
+      doc.setFillColor(235, 240, 250); doc.rect(14, y - 3.5, 269, 6, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);
+      headers.forEach((h, i) => doc.text(h, colX[i] + 1, y));
+      y += 6; doc.setFont("helvetica", "normal");
+      poArticles.forEach(art => {
+        const artRows = allRows[tab]?.[art.id] || [];
+        artRows.forEach((row, idx) => {
+          if (y > 185) { doc.addPage(); y = 20; }
+          if (idx % 2 === 0) { doc.setFillColor(249, 250, 251); doc.rect(14, y - 3.5, 269, 6, "F"); }
+          const vals = [
+            idx === 0 ? `${art.article_name}${art.article_code ? ` (${art.article_code})` : ""}` : "",
+            row.type || "", row.quality || "",
+            String(art.order_quantity || 0), String(row.wastage_percent || 0),
+            String(calcInclWastage(art.order_quantity || 0, row.wastage_percent))
+          ];
+          vals.forEach((v, i) => doc.text(v.substring(0, 28), colX[i] + 1, y));
+          y += 6;
+        });
+      });
+      y += 5;
+    });
+    doc.save(`Accessories_${activePo?.po_number || "Planning"}.pdf`);
+  };
+
+  // ─── Print ─────────────────────────────────────────────────────────────────
+  const handlePrint = () => {
+    const rows = [];
+    SUB_TABS.forEach(tab => {
+      const cfg = TAB_CONFIG[tab];
+      const tabRows = poArticles.flatMap(art =>
+        (allRows[tab]?.[art.id] || []).map(row => ({ art, row, cfg, tab }))
+      ).filter(({ row }) => row.quality || row.type);
+      if (tabRows.length === 0) return;
+      rows.push(`<tr style="background:#1F3864"><td colspan="7" style="color:white;font-weight:bold;padding:6px 8px">${tab.toUpperCase()}</td></tr>`);
+      rows.push(`<tr style="background:#EBF0FA;font-weight:bold"><td>Article</td><td>${cfg.typeLabel}</td><td>${cfg.qualityLabel}</td><td>Order Qty</td><td>Wastage %</td><td style="background:#FFF2CC">Incl. Wastage Qty</td><td>Unit</td></tr>`);
+      tabRows.forEach(({ art, row }, i) => {
+        const bg = i % 2 === 0 ? "#fff" : "#F9FAFB";
+        rows.push(`<tr style="background:${bg}"><td>${art.article_name}${art.article_code ? ` (${art.article_code})` : ""}</td><td>${row.type}</td><td>${row.quality}</td><td>${art.order_quantity || 0}</td><td>${row.wastage_percent}%</td><td style="background:#FFF2CC;font-weight:bold">${calcInclWastage(art.order_quantity || 0, row.wastage_percent)}</td><td>Pcs</td></tr>`);
+      });
+    });
+    const html = `<html><head><title>Accessories & Packaging — ${activePo?.po_number || ""}</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px}h2{color:#1F3864}table{width:100%;border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 6px}</style></head><body><h2>Accessories & Packaging Planning</h2><p><b>PO:</b> ${activePo?.po_number || ""} &nbsp; <b>Customer:</b> ${activePo?.customer_name || ""} &nbsp; <b>Date:</b> ${new Date().toLocaleDateString()}</p><table>${rows.join("")}</table></body></html>`;
+    const w = window.open("", "_blank"); w.document.write(html); w.document.close(); w.print();
   };
 
   const handleSave = async () => {
@@ -219,8 +351,8 @@ export default function UnifiedPackagingPlanning() {
 
   return (
     <div className="space-y-4">
-      {/* PO selector + Save */}
-      <div className="flex items-center gap-3 flex-wrap">
+      {/* PO selector + actions */}
+      <div className="flex items-center gap-2 flex-wrap">
         <Select value={selectedPoId || activePo?.id || ""} onValueChange={setSelectedPoId}>
           <SelectTrigger className="w-72 h-8 text-xs"><SelectValue placeholder="Select Purchase Order" /></SelectTrigger>
           <SelectContent>{pos.map(p => <SelectItem key={p.id} value={p.id}>{p.po_number} – {p.customer_name}</SelectItem>)}</SelectContent>
@@ -228,6 +360,21 @@ export default function UnifiedPackagingPlanning() {
         <Button size="sm" onClick={handleSave} disabled={saving || !activePo} className="gap-1.5">
           <Save className="h-3.5 w-3.5" /> {saving ? "Saving..." : "Save All"}
         </Button>
+        <div className="flex gap-1.5 ml-auto">
+          <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleUpload} />
+          <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={!activePo} className="gap-1.5">
+            <Upload className="h-3.5 w-3.5" /> Upload CSV
+          </Button>
+          <Button size="sm" variant="outline" onClick={handleDownloadCSV} disabled={!activePo || poArticles.length === 0} className="gap-1.5">
+            <Download className="h-3.5 w-3.5" /> CSV
+          </Button>
+          <Button size="sm" variant="outline" onClick={handleDownloadPDF} disabled={!activePo || poArticles.length === 0} className="gap-1.5">
+            <Download className="h-3.5 w-3.5" /> PDF
+          </Button>
+          <Button size="sm" variant="outline" onClick={handlePrint} disabled={!activePo || poArticles.length === 0} className="gap-1.5">
+            <Printer className="h-3.5 w-3.5" /> Print
+          </Button>
+        </div>
       </div>
 
       {/* Sub-tabs */}
