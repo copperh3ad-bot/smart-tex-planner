@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { jsPDF } from "jspdf";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import InsertCardPlanning from "../components/packaging/InsertCardPlanning";
+import UnifiedPackagingPlanning from "../components/packaging/UnifiedPackagingPlanning";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,11 +11,11 @@ import UploadPackagingSheet from "../components/packaging/UploadPackagingSheet";
 import ArticlePackagingForm from "../components/packaging/ArticlePackagingForm";
 import ArticlePackagingCard from "../components/packaging/ArticlePackagingCard";
 
-const TABS = ["Packaging Templates", "Insert Cards"];
+const TABS = ["Planning", "Packaging Templates"];
 
 export default function AccessoriesPackaging() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState("Packaging Templates");
+  const [activeTab, setActiveTab] = useState("Planning");
   const [showForm, setShowForm] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [search, setSearch] = useState("");
@@ -121,7 +121,7 @@ export default function AccessoriesPackaging() {
         ))}
       </div>
 
-      {activeTab === "Insert Cards" && <InsertCardPlanning />}
+      {activeTab === "Planning" && <UnifiedPackagingPlanning />}
 
       {activeTab === "Packaging Templates" && (<>
       {/* Header */}
