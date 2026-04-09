@@ -22,8 +22,9 @@ export default function FabricEditDialog({ open, onOpenChange, article, onSave, 
       comps[idx] = { ...comps[idx], [field]: value };
       if (["consumption_per_unit", "wastage_percent"].includes(field)) {
         const c = comps[idx];
-        const net = (c.consumption_per_unit || 0) * (f.order_quantity || 0);
-        comps[idx].total_required = +(net * (1 + (c.wastage_percent || 0) / 100)).toFixed(4);
+        const cpu = parseFloat(c.consumption_per_unit) || 0;
+        const net = cpu * (f.order_quantity || 0);
+        comps[idx].total_required = +(net * (1 + (parseFloat(c.wastage_percent) || 0) / 100)).toFixed(4);
       }
       return { ...f, components: comps };
     });
@@ -97,7 +98,7 @@ export default function FabricEditDialog({ open, onOpenChange, article, onSave, 
                       <input type="number" className={inputCls} value={comp.width || ""} onChange={(e) => updateComp(idx, "width", Number(e.target.value))} />
                     </td>
                     <td className="border px-1.5 py-1">
-                      <input type="number" step="any" className={inputCls} value={comp.consumption_per_unit || ""} onChange={(e) => updateComp(idx, "consumption_per_unit", parseFloat(e.target.value) || 0)} />
+                      <input type="number" step="any" min="0" className={inputCls} value={comp.consumption_per_unit ?? ""} onChange={(e) => updateComp(idx, "consumption_per_unit", e.target.value)} />
                     </td>
                     <td className="border px-1.5 py-1">
                       <input type="number" className={inputCls} value={comp.wastage_percent ?? 6} onChange={(e) => updateComp(idx, "wastage_percent", Number(e.target.value))} />
