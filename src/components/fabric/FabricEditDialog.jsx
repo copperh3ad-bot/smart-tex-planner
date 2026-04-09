@@ -97,7 +97,7 @@ export default function FabricEditDialog({ open, onOpenChange, article, onSave, 
                       <input type="number" className={inputCls} value={comp.width || ""} onChange={(e) => updateComp(idx, "width", Number(e.target.value))} />
                     </td>
                     <td className="border px-1.5 py-1">
-                      <input type="number" step="0.0001" className={inputCls} value={comp.consumption_per_unit || ""} onChange={(e) => updateComp(idx, "consumption_per_unit", Number(e.target.value))} />
+                      <input type="number" step="any" className={inputCls} value={comp.consumption_per_unit || ""} onChange={(e) => updateComp(idx, "consumption_per_unit", parseFloat(e.target.value) || 0)} />
                     </td>
                     <td className="border px-1.5 py-1">
                       <input type="number" className={inputCls} value={comp.wastage_percent ?? 6} onChange={(e) => updateComp(idx, "wastage_percent", Number(e.target.value))} />
