@@ -160,6 +160,8 @@ export default function FabricWorking() {
     URL.revokeObjectURL(url);
   };
 
+  const handlePrint = () => window.print();
+
   const handleDownloadPDF = () => {
     const doc = new jsPDF({ orientation: "landscape", format: "a3" });
     const title = viewMode === "combined" ? "Fabric Working — Combined (All Colors/Sizes)" : "Fabric Working — Separate (By Color)";
