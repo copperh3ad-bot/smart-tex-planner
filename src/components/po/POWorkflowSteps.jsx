@@ -12,6 +12,8 @@ const steps = [
   "CBM Calculated",
   "FWS Prepared",
   "Yarn Planned",
+  "Accessories Planned",
+  "Packaging Planned",
   "In Production",
   "Completed",
   "Shipped",

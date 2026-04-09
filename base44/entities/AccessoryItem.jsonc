@@ -25,6 +25,7 @@
         "Dori",
         "Eyelet",
         "Stitching Thread",
+        "Insert Card",
         "Other"
       ],
       "default": "Other"
@@ -41,6 +42,10 @@
     },
     "quantity_required": {
       "type": "number"
+    },
+    "wastage_percent": {
+      "type": "number",
+      "description": "Wastage percentage"
     },
     "unit": {
       "type": "string",
@@ -62,7 +67,8 @@
       "type": "string"
     },
     "unit_cost": {
-      "type": "number"
+      "type": "number",
+      "description": "Unit cost in PKR"
     },
     "total_cost": {
       "type": "number"

@@ -21,7 +21,7 @@
     },
     "ship_to_name": {
       "type": "string",
-      "description": "Ship-to party name \u2014 warehouse, DC, or retailer receiving goods"
+      "description": "Ship-to party name"
     },
     "ship_to_address": {
       "type": "string",
@@ -87,6 +87,8 @@
         "CBM Calculated",
         "FWS Prepared",
         "Yarn Planned",
+        "Accessories Planned",
+        "Packaging Planned",
         "In Production",
         "Completed",
         "Shipped"

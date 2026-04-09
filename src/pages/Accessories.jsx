@@ -10,6 +10,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Plus, Search, Printer, Upload, Trash2, Edit2, X, CheckCircle, Download, FileText } from "lucide-react";
+import InsertCardPlanning from "../components/accessories/InsertCardPlanning";
 
 const CATEGORIES = ["Zipper", "Slider", "Elastic", "Button", "Dori", "Eyelet", "Stitching Thread", "Other"];
 const UNITS = ["Pcs", "Meters", "Kgs", "Rolls", "Dozens", "Gross", "Sets"];
@@ -34,8 +35,11 @@ const emptyForm = {
   total_cost: "", status: "Planned", notes: ""
 };
 
+const TABS = ["Trims & Accessories", "Insert Cards"];
+
 export default function Accessories() {
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState("Trims & Accessories");
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState("All");
   const [showForm, setShowForm] = useState(false);
@@ -173,7 +177,7 @@ export default function Accessories() {
         (item.article_code || item.article_name || "").substring(0, 20),
         item.po_number || "", item.quantity_required?.toLocaleString() || "",
         item.unit || "", (item.supplier || "").substring(0, 20),
-        item.unit_cost ? `$${item.unit_cost}` : "", item.status || "",
+        item.unit_cost ? `PKR ${item.unit_cost}` : "", item.status || "",
       ];
       doc.setFontSize(7); x = 14;
       rowData.forEach((val, i) => { doc.text(String(val), x + 1, y); x += widths[i]; });
@@ -189,6 +193,21 @@ export default function Accessories() {
 
   return (
     <div className="space-y-5">
+      {/* Tabs */}
+      <div className="flex gap-0 border-b border-border">
+        {TABS.map(tab => (
+          <button key={tab} onClick={() => setActiveTab(tab)}
+            className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === tab ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}>
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "Insert Cards" && <InsertCardPlanning />}
+
+      {activeTab === "Trims & Accessories" && (<>
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -252,7 +271,7 @@ export default function Accessories() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/40">
-                  {["Category", "Description", "Color/Spec", "Article", "PO#", "Qty", "Unit", "Supplier", "Unit Cost", "Status", "Actions"].map(h => (
+                  {["Category", "Description", "Color/Spec", "Article", "PO#", "Qty", "Unit", "Supplier", "Unit Cost (PKR)", "Status", "Actions"].map(h => (
                     <th key={h} className="text-left px-3 py-2.5 text-xs font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -271,7 +290,7 @@ export default function Accessories() {
                     <td className="px-3 py-2 text-xs font-mono">{item.quantity_required?.toLocaleString() || "—"}</td>
                     <td className="px-3 py-2 text-xs">{item.unit}</td>
                     <td className="px-3 py-2 text-xs">{item.supplier || "—"}</td>
-                    <td className="px-3 py-2 text-xs font-mono">{item.unit_cost ? `$${item.unit_cost}` : "—"}</td>
+                    <td className="px-3 py-2 text-xs font-mono">{item.unit_cost ? `PKR ${item.unit_cost.toLocaleString()}` : "—"}</td>
                     <td className="px-3 py-2">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[item.status] || ""}`}>{item.status}</span>
                     </td>
@@ -311,7 +330,7 @@ export default function Accessories() {
                 { label: "Supplier", key: "supplier" },
                 { label: "Qty Required", key: "quantity_required", inputType: "number" },
                 { label: "Consumption/Unit", key: "consumption_per_unit", inputType: "number" },
-                { label: "Unit Cost ($)", key: "unit_cost", inputType: "number" },
+                { label: "Unit Cost (PKR)", key: "unit_cost", inputType: "number" },
                 { label: "Notes", key: "notes", span: true },
               ].map(({ label, key, type, options, span, inputType }) => (
                 <div key={key} className={span ? "col-span-2" : ""}>
@@ -334,6 +353,7 @@ export default function Accessories() {
           </div>
         </div>
       )}
+      </>)}
     </div>
   );
 }
