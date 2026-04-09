@@ -8,9 +8,16 @@ const CONTAINER_SIZES = [
   { name: "40ft HC Container", cbm: 76, color: "bg-violet-50 border-violet-200 text-violet-800" },
 ];
 
+const getCartons = (item) => {
+  if (item.pieces_per_carton && item.quantity) {
+    return Math.ceil(item.quantity / item.pieces_per_carton);
+  }
+  return item.num_cartons || 0;
+};
+
 export default function CBMSummary({ items }) {
   const totalCbm = items.reduce((sum, item) => sum + (Number(item.cbm) || 0), 0);
-  const totalCartons = items.reduce((sum, item) => sum + (Number(item.num_cartons) || 0), 0);
+  const totalCartons = items.reduce((sum, item) => sum + getCartons(item), 0);
   const totalQty = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
 
   if (!totalCbm) return null;
@@ -45,7 +52,7 @@ export default function CBMSummary({ items }) {
                   <td className="p-2 text-muted-foreground">{item.item_description || item.fabric_type || "—"}</td>
                   <td className="p-2 text-right">{item.quantity?.toLocaleString()}</td>
                   <td className="p-2 text-right">{item.pieces_per_carton || "—"}</td>
-                  <td className="p-2 text-right">{item.num_cartons || "—"}</td>
+                  <td className="p-2 text-right font-medium">{getCartons(item) || "—"}</td>
                   <td className="p-2 text-right font-medium">{Number(item.cbm).toFixed(4)}</td>
                   <td className="p-2 text-right text-muted-foreground">
                     {totalCbm > 0 ? ((item.cbm / totalCbm) * 100).toFixed(1) + "%" : "—"}

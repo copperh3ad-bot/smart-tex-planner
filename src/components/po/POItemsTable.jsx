@@ -26,6 +26,7 @@ export default function POItemsTable({ items, onAdd, onEdit, onDelete }) {
                 <TableHead className="text-xs">Qty</TableHead>
                 <TableHead className="text-xs">Price</TableHead>
                 <TableHead className="text-xs hidden lg:table-cell">CBM</TableHead>
+                <TableHead className="text-xs hidden lg:table-cell">Cartons</TableHead>
                 <TableHead className="text-xs">Price Check</TableHead>
                 <TableHead className="text-xs w-20"></TableHead>
               </TableRow>
@@ -47,6 +48,11 @@ export default function POItemsTable({ items, onAdd, onEdit, onDelete }) {
                     <TableCell className="text-xs">{item.quantity} {item.unit}</TableCell>
                     <TableCell className="text-xs font-medium">{item.unit_price || "—"}</TableCell>
                     <TableCell className="text-xs hidden lg:table-cell">{item.cbm?.toFixed(4) || "—"}</TableCell>
+                    <TableCell className="text-xs hidden lg:table-cell font-medium">
+                      {item.pieces_per_carton && item.quantity
+                        ? Math.ceil(item.quantity / item.pieces_per_carton)
+                        : item.num_cartons || "—"}
+                    </TableCell>
                     <TableCell><StatusBadge status={item.price_status || "Pending"} /></TableCell>
                     <TableCell>
                       <div className="flex gap-1">
