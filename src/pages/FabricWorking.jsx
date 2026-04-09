@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo } from "react";
 import { jsPDF } from "jspdf";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Printer, Download, FileText, Pencil, Save, X, Plus, Layers, Grid, List } from "lucide-react";
 import UploadFabricSheet from "../components/fabric/UploadFabricSheet";
 import ArticleFabricSetup from "../components/fabric/ArticleFabricSetup";
+import FabricEditDialog from "../components/fabric/FabricEditDialog";
 
 const COMPONENT_TYPES = ["Flat Sheet","Fitted Sheet","Pillow Case","Front","Skirt","Bottom","Piping","Binding","Filling","Lamination","Top Fabric","Window (Outside)","Window (Inside)"];
 
@@ -29,9 +30,8 @@ const getBaseCode = (art) => {
 export default function FabricWorking() {
   const queryClient = useQueryClient();
   const [selectedPoId, setSelectedPoId] = useState("");
-  const [viewMode, setViewMode] = useState("combined"); // "combined" | "separate"
-  const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState(null);
+  const [viewMode, setViewMode] = useState("combined");
+  const [editingArticle, setEditingArticle] = useState(null);
 
   const { data: pos = [] } = useQuery({ queryKey: ["purchaseOrders"], queryFn: () => base44.entities.PurchaseOrder.list() });
   const { data: articles = [] } = useQuery({ queryKey: ["articles"], queryFn: () => base44.entities.Article.list() });
@@ -93,7 +93,6 @@ export default function FabricWorking() {
   const updateArticle = useMutation({
     mutationFn: async ({ id, data }) => {
       await base44.entities.Article.update(id, data);
-      // Save as master template keyed by article_code
       if (data.article_code) {
         const masterComponents = (data.components || []).map(({ total_required, ...rest }) => rest);
         const existing = await base44.entities.FabricTemplate.filter({ article_code: data.article_code });
@@ -104,38 +103,14 @@ export default function FabricWorking() {
         }
       }
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["articles"] }); setEditingId(null); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["articles"] }); setEditingArticle(null); },
   });
 
-  const startEdit = (article) => {
-
-    setEditingId(article.id);
-    setEditForm({ ...article, components: JSON.parse(JSON.stringify(article.components || [])) });
+  const startEdit = (article) => setEditingArticle(article);
+  const saveEdit = (formData) => {
+    const total_fabric_required = +( formData.components || []).reduce((s, c) => s + (c.total_required || 0), 0).toFixed(4);
+    updateArticle.mutate({ id: formData.id, data: { ...formData, total_fabric_required } });
   };
-
-  const updateComp = (idx, field, value) => {
-    setEditForm((f) => {
-      const comps = [...f.components];
-      comps[idx] = { ...comps[idx], [field]: value };
-      if (["consumption_per_unit", "wastage_percent"].includes(field)) {
-        const c = comps[idx];
-        const net = (c.consumption_per_unit || 0) * (f.order_quantity || 0);
-        comps[idx].total_required = +(net * (1 + (c.wastage_percent || 0) / 100)).toFixed(4);
-      }
-      return { ...f, components: comps };
-    });
-  };
-
-  const addComponent = () => {
-    setEditForm((f) => ({
-      ...f,
-      components: [...(f.components || []), { component_type: "Flat Sheet", product_size: "", direction: "", fabric_type: "", gsm: 0, width: 0, consumption_per_unit: 0, wastage_percent: 6, total_required: 0 }],
-    }));
-  };
-
-  const removeComponent = (idx) => setEditForm((f) => ({ ...f, components: f.components.filter((_, i) => i !== idx) }));
-  const saveEdit = () => updateArticle.mutate({ id: editingId, data: editForm });
-  const handlePrint = () => window.print();
 
   const handleDownloadExcel = () => {
     const rows = [["Mode", viewMode === "combined" ? "Combined (All Colors)" : "Separate (By Color)"]];
@@ -380,6 +355,7 @@ export default function FabricWorking() {
                                 <button onClick={() => startEdit(g.template)} className="text-blue-600 hover:text-blue-800" title="Edit fabric specs"><Pencil className="h-3.5 w-3.5" /></button>
                               </td>
                             )}
+
                           </tr>
                         ))
                       )}
@@ -409,14 +385,13 @@ export default function FabricWorking() {
                       </thead>
                       <tbody>
                         {colorArticles.map((article, artIdx) => {
-                          const isEditing = editingId === article.id;
-                          const comps = isEditing ? editForm.components : (article.components || []);
+                          const comps = article.components || [];
                           const rowCount = Math.max(comps.length, 1);
                           const artBg = artIdx % 2 === 0 ? "#EBF0FA" : "#FFFFFF";
 
                           return (
                             <React.Fragment key={article.id}>
-                              {!isEditing && comps.length === 0 ? (
+                              {comps.length === 0 ? (
                                 <tr style={{ backgroundColor: artBg }}>
                                   <td className="border border-gray-300 px-2 py-1.5 font-semibold text-blue-900">{article.article_name}</td>
                                   <td className="border border-gray-300 px-2 py-1.5 text-gray-500">{article.article_code}</td>
@@ -430,11 +405,13 @@ export default function FabricWorking() {
                                       queryClient.invalidateQueries({ queryKey: ["articles"] });
                                     }}
                                   />
-                                  <td className="border border-gray-300 px-2 py-1.5 print-hidden" />
-                                </tr>
+                                  <td className="border border-gray-300 px-2 py-1.5 print-hidden">
+                                    <button onClick={() => startEdit(article)} className="text-blue-600 hover:text-blue-800" title="Edit"><Pencil className="h-3.5 w-3.5" /></button>
+                                  </td>
+                                  </tr>
                               ) : (
                                 comps.map((comp, idx) => {
-                                  const qty = (isEditing ? editForm.order_quantity : article.order_quantity) || 0;
+                                  const qty = article.order_quantity || 0;
                                   const net = (comp.consumption_per_unit || 0) * qty;
                                   const total = comp.total_required || net * (1 + (comp.wastage_percent || 0) / 100);
                                   return (
@@ -443,79 +420,28 @@ export default function FabricWorking() {
                                         <>
                                           <td rowSpan={rowCount} className="border border-gray-300 px-2 py-1.5 font-semibold text-blue-900 align-top">{article.article_name}</td>
                                           <td rowSpan={rowCount} className="border border-gray-300 px-2 py-1.5 text-gray-600 align-top">{article.article_code}</td>
-                                          <td rowSpan={rowCount} className="border border-gray-300 px-2 py-1.5 text-center font-semibold align-top">
-                                            {isEditing ? (
-                                              <input type="number" className="w-14 border rounded px-1 py-0.5 text-center" value={editForm.order_quantity || ""} onChange={(e) => setEditForm((f) => ({ ...f, order_quantity: Number(e.target.value) }))} />
-                                            ) : article.order_quantity?.toLocaleString()}
-                                          </td>
+                                          <td rowSpan={rowCount} className="border border-gray-300 px-2 py-1.5 text-center font-semibold align-top">{article.order_quantity?.toLocaleString()}</td>
                                         </>
                                       )}
-                                      <td className="border border-gray-300 px-2 py-1">
-                                        {isEditing ? (
-                                          <select className="w-full text-xs border rounded px-1 py-0.5" value={comp.component_type} onChange={(e) => updateComp(idx, "component_type", e.target.value)}>
-                                            {COMPONENT_TYPES.map((t) => <option key={t}>{t}</option>)}
-                                          </select>
-                                        ) : <span className="font-medium">{comp.component_type}</span>}
-                                      </td>
-                                      <td className="border border-gray-300 px-2 py-1 text-center">
-                                        {isEditing ? (
-                                          <input className="w-20 text-xs border rounded px-1 py-0.5 text-center" placeholder="e.g. 70x96+4" value={comp.product_size || ""} onChange={(e) => updateComp(idx, "product_size", e.target.value)} />
-                                        ) : comp.product_size || "—"}
-                                      </td>
-                                      <td className="border border-gray-300 px-2 py-1 text-center">
-                                        {isEditing ? (
-                                          <input className="w-16 text-xs border rounded px-1 py-0.5 text-center" placeholder="WXL" value={comp.direction || ""} onChange={(e) => updateComp(idx, "direction", e.target.value)} />
-                                        ) : comp.direction || "—"}
-                                      </td>
-                                      <td className="border border-gray-300 px-2 py-1">
-                                        {isEditing ? (
-                                          <input className="w-full text-xs border rounded px-1 py-0.5" value={comp.fabric_type || ""} onChange={(e) => updateComp(idx, "fabric_type", e.target.value)} />
-                                        ) : comp.fabric_type}
-                                      </td>
-                                      <td className="border border-gray-300 px-2 py-1 text-center">
-                                        {isEditing ? (
-                                          <input type="number" className="w-16 text-xs border rounded px-1 py-0.5 text-center" value={comp.width || ""} onChange={(e) => updateComp(idx, "width", Number(e.target.value))} />
-                                        ) : comp.width ? `${comp.width}cm` : "—"}
-                                      </td>
-                                      <td className="border border-gray-300 px-2 py-1 text-center">
-                                        {isEditing ? (
-                                          <input type="number" step="0.0001" className="w-20 text-xs border rounded px-1 py-0.5 text-center" value={comp.consumption_per_unit || ""} onChange={(e) => updateComp(idx, "consumption_per_unit", Number(e.target.value))} />
-                                        ) : comp.consumption_per_unit?.toFixed(4)}
-                                      </td>
+                                      <td className="border border-gray-300 px-2 py-1 font-medium">{comp.component_type}</td>
+                                      <td className="border border-gray-300 px-2 py-1 text-center">{comp.product_size || "—"}</td>
+                                      <td className="border border-gray-300 px-2 py-1 text-center">{comp.direction || "—"}</td>
+                                      <td className="border border-gray-300 px-2 py-1">{comp.fabric_type}</td>
+                                      <td className="border border-gray-300 px-2 py-1 text-center">{comp.width ? `${comp.width}cm` : "—"}</td>
+                                      <td className="border border-gray-300 px-2 py-1 text-center">{comp.consumption_per_unit?.toFixed(4)}</td>
                                       <td className="border border-gray-300 px-2 py-1 text-center">{net.toFixed(2)}</td>
-                                      <td className="border border-gray-300 px-2 py-1 text-center">
-                                        {isEditing ? (
-                                          <input type="number" className="w-14 text-xs border rounded px-1 py-0.5 text-center" value={comp.wastage_percent ?? 6} onChange={(e) => updateComp(idx, "wastage_percent", Number(e.target.value))} />
-                                        ) : `${comp.wastage_percent ?? 6}%`}
-                                      </td>
+                                      <td className="border border-gray-300 px-2 py-1 text-center">{comp.wastage_percent ?? 6}%</td>
                                       <td className="border border-gray-300 px-2 py-1 text-center font-bold" style={{ backgroundColor: "#FFF2CC" }}>{total.toFixed(2)}</td>
                                       {idx === 0 && (
                                         <td rowSpan={rowCount} className="border border-gray-300 px-2 py-1 text-center align-top print-hidden">
-                                          {isEditing ? (
-                                            <div className="flex flex-col gap-1 items-center">
-                                              <button onClick={saveEdit} className="text-green-600 hover:text-green-800" title="Save"><Save className="h-3.5 w-3.5" /></button>
-                                              <button onClick={() => setEditingId(null)} className="text-gray-400 hover:text-gray-600" title="Cancel"><X className="h-3.5 w-3.5" /></button>
-                                            </div>
-                                          ) : (
-                                            <button onClick={() => startEdit(article)} className="text-blue-600 hover:text-blue-800" title="Edit"><Pencil className="h-3.5 w-3.5" /></button>
-                                          )}
+                                          <button onClick={() => startEdit(article)} className="text-blue-600 hover:text-blue-800" title="Edit"><Pencil className="h-3.5 w-3.5" /></button>
                                         </td>
                                       )}
                                     </tr>
                                   );
                                 })
                               )}
-                              {isEditing && (
-                                <tr style={{ backgroundColor: artBg }}>
-                                  <td colSpan={3} />
-                                  <td colSpan={9} className="border border-gray-300 px-2 py-1">
-                                    <button onClick={addComponent} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs font-medium">
-                                      <Plus className="h-3 w-3" /> Add Component
-                                    </button>
-                                  </td>
-                                  <td className="border border-gray-300" />
-                                </tr>
-                              )}
+
                             </React.Fragment>
                           );
                         })}
@@ -559,6 +485,13 @@ export default function FabricWorking() {
           )}
         </div>
       )}
+      <FabricEditDialog
+        open={!!editingArticle}
+        onOpenChange={(v) => { if (!v) setEditingArticle(null); }}
+        article={editingArticle}
+        onSave={saveEdit}
+        saving={updateArticle.isPending}
+      />
     </div>
   );
 }
