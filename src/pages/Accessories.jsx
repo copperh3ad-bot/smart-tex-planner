@@ -10,7 +10,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Plus, Search, Printer, Upload, Trash2, Edit2, X, CheckCircle, Download, FileText } from "lucide-react";
-import InsertCardPlanning from "../components/accessories/InsertCardPlanning";
+import LabelPlanning from "../components/accessories/LabelPlanning";
 
 const CATEGORIES = ["Zipper", "Slider", "Elastic", "Button", "Dori", "Eyelet", "Stitching Thread", "Other"];
 const UNITS = ["Pcs", "Meters", "Kgs", "Rolls", "Dozens", "Gross", "Sets"];
@@ -35,7 +35,7 @@ const emptyForm = {
   total_cost: "", status: "Planned", notes: ""
 };
 
-const TABS = ["Trims & Accessories", "Insert Cards"];
+const TABS = ["Trims & Accessories", "Labels"];
 
 export default function Accessories() {
   const queryClient = useQueryClient();
@@ -205,7 +205,7 @@ export default function Accessories() {
         ))}
       </div>
 
-      {activeTab === "Insert Cards" && <InsertCardPlanning />}
+      {activeTab === "Labels" && <LabelPlanning />}
 
       {activeTab === "Trims & Accessories" && (<>
       {/* Header */}

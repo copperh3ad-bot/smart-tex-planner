@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { jsPDF } from "jspdf";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import InsertCardPlanning from "../components/packaging/InsertCardPlanning";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,8 +11,11 @@ import UploadPackagingSheet from "../components/packaging/UploadPackagingSheet";
 import ArticlePackagingForm from "../components/packaging/ArticlePackagingForm";
 import ArticlePackagingCard from "../components/packaging/ArticlePackagingCard";
 
+const TABS = ["Packaging Templates", "Insert Cards"];
+
 export default function AccessoriesPackaging() {
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState("Packaging Templates");
   const [showForm, setShowForm] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [search, setSearch] = useState("");
@@ -105,6 +109,21 @@ export default function AccessoriesPackaging() {
 
   return (
     <div className="space-y-5">
+      {/* Tabs */}
+      <div className="flex gap-0 border-b border-border">
+        {TABS.map(tab => (
+          <button key={tab} onClick={() => setActiveTab(tab)}
+            className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === tab ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}>
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "Insert Cards" && <InsertCardPlanning />}
+
+      {activeTab === "Packaging Templates" && (<>
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -192,6 +211,7 @@ export default function AccessoriesPackaging() {
         onSave={handleSave}
         initialData={editingItem}
       />
+      </>)}
     </div>
   );
 }
