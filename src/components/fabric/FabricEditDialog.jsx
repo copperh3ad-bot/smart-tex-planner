@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2, Save } from "lucide-react";
 
-const COMPONENT_TYPES = ["Flat Sheet", "Fitted Sheet", "Pillow Case", "Front", "Skirt", "Bottom", "Piping", "Binding", "Filling", "Lamination", "Top Fabric", "Window (Outside)", "Window (Inside)", "Fabric Bag"];
+const COMPONENT_TYPES = ["Flat Sheet", "Fitted Sheet", "Pillow Case", "Front", "Skirt", "Bottom", "Piping", "Binding", "Filling", "Lamination", "Top Fabric", "Window (Outside)", "Window (Inside)", "Fabric Bag", "Fabric Swatch", "Quilting", "Pillow Compression"];
 
 export default function FabricEditDialog({ open, onOpenChange, article, onSave, saving }) {
   const [form, setForm] = useState(null);
