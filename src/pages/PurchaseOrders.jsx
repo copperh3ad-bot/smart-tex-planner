@@ -59,10 +59,11 @@ export default function PurchaseOrders() {
     setImporting(true);
     try {
       // Fetch historical data to enrich repeat articles
-      const [existingItems, priceList, historicArticles] = await Promise.all([
+      const [existingItems, priceList, historicArticles, fabricTemplates] = await Promise.all([
         base44.entities.POItem.list("-created_date", 500),
         base44.entities.PriceList.list(),
-        base44.entities.Article.list("-created_date", 500),
+        base44.entities.Article.list("-updated_date", 500),
+        base44.entities.FabricTemplate.list(),
       ]);
 
       // Build lookup maps keyed by item_code (uppercase)
@@ -75,7 +76,13 @@ export default function PurchaseOrders() {
       priceList.forEach((p) => {
         if (p.item_code) priceMap[p.item_code.trim().toUpperCase()] = p;
       });
-      // Article history map by item_code and by article_name
+      // FabricTemplate master map (takes priority over article history)
+      const fabricTemplateMap = {};
+      fabricTemplates.forEach((t) => {
+        if (t.article_code) fabricTemplateMap[t.article_code.trim().toUpperCase()] = t;
+      });
+
+      // Article history map by item_code and by article_name (fallback)
       const articleHistoryMap = {};
       historicArticles.forEach((a) => {
         if (a.article_code) articleHistoryMap[a.article_code.trim().toUpperCase()] = a;
@@ -158,9 +165,15 @@ export default function PurchaseOrders() {
           const qty = Number(item.quantity) || 0;
 
           let components;
-          if (histArt?.components?.length > 0) {
-            // REPEAT ARTICLE: reuse saved components, recalculate totals with new quantity
-            components = histArt.components.map((comp) => {
+          // Prefer master FabricTemplate, fall back to article history
+          const masterTemplate = fabricTemplateMap[key];
+          const templateComponents = masterTemplate?.components?.length > 0
+            ? masterTemplate.components
+            : histArt?.components;
+
+          if (templateComponents?.length > 0) {
+            // REPEAT ARTICLE: reuse master specs, recalculate totals with new quantity
+            components = templateComponents.map((comp) => {
               const net = (comp.consumption_per_unit || 0) * qty;
               const total_required = +(net * (1 + (comp.wastage_percent || 6) / 100)).toFixed(4);
               return { ...comp, total_required };

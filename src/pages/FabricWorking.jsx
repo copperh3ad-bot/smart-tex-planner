@@ -91,11 +91,24 @@ export default function FabricWorking() {
   }, [poArticles]);
 
   const updateArticle = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Article.update(id, data),
+    mutationFn: async ({ id, data }) => {
+      await base44.entities.Article.update(id, data);
+      // Save as master template keyed by article_code
+      if (data.article_code) {
+        const masterComponents = (data.components || []).map(({ total_required, ...rest }) => rest);
+        const existing = await base44.entities.FabricTemplate.filter({ article_code: data.article_code });
+        if (existing.length > 0) {
+          await base44.entities.FabricTemplate.update(existing[0].id, { components: masterComponents, article_name: data.article_name });
+        } else {
+          await base44.entities.FabricTemplate.create({ article_code: data.article_code, article_name: data.article_name, components: masterComponents });
+        }
+      }
+    },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["articles"] }); setEditingId(null); },
   });
 
   const startEdit = (article) => {
+
     setEditingId(article.id);
     setEditForm({ ...article, components: JSON.parse(JSON.stringify(article.components || [])) });
   };
@@ -263,7 +276,7 @@ export default function FabricWorking() {
   };
 
   // ─── TABLE HEADER COLUMNS ────────────────────────────────────────────────────
-  const combinedCols = ["Article (Base)", "Colors", "Total Qty", "Part", "Prod. Size", "Direction", "Fabrication", "Width (cm)", "Cut/Unit (m)", "Net Mtrs", "Wastage %", "Total Mtrs"];
+  const combinedCols = ["Article (Base)", "Colors", "Total Qty", "Part", "Prod. Size", "Direction", "Fabrication", "Width (cm)", "Cut/Unit (m)", "Net Mtrs", "Wastage %", "Total Mtrs", ""];
   const separateCols = ["Article Name", "Article Code", "Qty", "Part", "Prod. Size", "Direction", "Fabrication", "Width (cm)", "Cut/Unit (m)", "Net Mtrs", "Wastage %", "Total Mtrs", ""];
 
   return (
@@ -338,7 +351,10 @@ export default function FabricWorking() {
                           <td className="border border-gray-300 px-2 py-1.5 font-semibold text-blue-900">{g.displayName}</td>
                           <td className="border border-gray-300 px-2 py-1.5 text-xs text-gray-500">{g.colors}</td>
                           <td className="border border-gray-300 px-2 py-1.5 text-center font-semibold">{g.totalQty}</td>
-                          <td colSpan={9} className="border border-gray-300 px-2 py-1.5 text-muted-foreground italic">No components defined</td>
+                            <td colSpan={9} className="border border-gray-300 px-2 py-1.5 text-muted-foreground italic">No components defined</td>
+                          <td className="border border-gray-300 px-2 py-1 text-center print-hidden">
+                            <button onClick={() => startEdit(g.template)} className="text-blue-600 hover:text-blue-800" title="Edit fabric specs"><Pencil className="h-3.5 w-3.5" /></button>
+                          </td>
                         </tr>
                       ) : (
                         g.components.map((comp, ci) => (
@@ -359,6 +375,11 @@ export default function FabricWorking() {
                             <td className="border border-gray-300 px-2 py-1 text-center">{comp.net_total?.toFixed(2)}</td>
                             <td className="border border-gray-300 px-2 py-1 text-center">{comp.wastage_percent ?? 6}%</td>
                             <td className="border border-gray-300 px-2 py-1 text-center font-bold" style={{ backgroundColor: "#FFF2CC" }}>{comp.total_required?.toFixed(2)}</td>
+                            {ci === 0 && (
+                              <td rowSpan={g.components.length} className="border border-gray-300 px-2 py-1 text-center align-top print-hidden">
+                                <button onClick={() => startEdit(g.template)} className="text-blue-600 hover:text-blue-800" title="Edit fabric specs"><Pencil className="h-3.5 w-3.5" /></button>
+                              </td>
+                            )}
                           </tr>
                         ))
                       )}

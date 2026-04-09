@@ -1,0 +1,53 @@
+{
+  "name": "FabricTemplate",
+  "type": "object",
+  "properties": {
+    "article_code": {
+      "type": "string",
+      "description": "Article code / SKU \u2014 used as the lookup key for repeat POs"
+    },
+    "article_name": {
+      "type": "string",
+      "description": "Human-readable article name"
+    },
+    "components": {
+      "type": "array",
+      "description": "Master fabric component specs for this article",
+      "items": {
+        "type": "object",
+        "properties": {
+          "component_type": {
+            "type": "string"
+          },
+          "product_size": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "fabric_type": {
+            "type": "string"
+          },
+          "gsm": {
+            "type": "number"
+          },
+          "width": {
+            "type": "number"
+          },
+          "consumption_per_unit": {
+            "type": "number"
+          },
+          "wastage_percent": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "article_code"
+  ]
+}
