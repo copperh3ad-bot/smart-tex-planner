@@ -133,7 +133,7 @@ function ArticleBlock({ art, cfg, rows, onChange }) {
                     className="w-14 text-center text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-purple-400"
                     value={row.multiplier || 1}
                     onChange={e => update(idx, "multiplier", parseFloat(e.target.value))}>
-                    {[1, 2, 3, 4].map(m => <option key={m} value={m}>x{m}</option>)}
+                    {Array.from({length: 20}, (_, i) => i + 1).map(m => <option key={m} value={m}>x{m}</option>)}
                   </select>
                 </td>
               )}
