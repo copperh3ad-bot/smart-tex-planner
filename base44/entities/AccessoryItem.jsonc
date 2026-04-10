@@ -26,6 +26,12 @@
         "Eyelet",
         "Stitching Thread",
         "Insert Card",
+        "Label",
+        "Accessory",
+        "Polybag",
+        "Stiffener",
+        "Carton",
+        "Sticker",
         "Other"
       ],
       "default": "Other"
@@ -38,14 +44,26 @@
     },
     "size_spec": {
       "type": "string",
-      "description": "Size or specification e.g. 5mm, #3, 10cm"
+      "description": "Size or specification"
     },
     "quantity_required": {
       "type": "number"
     },
     "wastage_percent": {
+      "type": "number"
+    },
+    "multiplier": {
       "type": "number",
-      "description": "Wastage percentage"
+      "description": "Quantity multiplier (e.g. labels per piece)",
+      "default": 1
+    },
+    "pc_ean_code": {
+      "type": "string",
+      "description": "Per-piece EAN/barcode"
+    },
+    "carton_ean_code": {
+      "type": "string",
+      "description": "Per-carton EAN/barcode"
     },
     "unit": {
       "type": "string",
@@ -67,8 +85,7 @@
       "type": "string"
     },
     "unit_cost": {
-      "type": "number",
-      "description": "Unit cost in PKR"
+      "type": "number"
     },
     "total_cost": {
       "type": "number"

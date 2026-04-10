@@ -206,7 +206,15 @@ export default function UnifiedPackagingPlanning() {
           i => i.po_id === activePo.id && i.article_code === art.article_code && i.category === cfg.category
         );
         init[tab][art.id] = existing.length > 0
-          ? existing.map(e => ({ type: e.item_description, quality: e.size_spec || "", wastage_percent: e.wastage_percent ?? cfg.defaultWastage, existing_id: e.id }))
+          ? existing.map(e => ({
+              type: e.item_description,
+              quality: e.size_spec || "",
+              wastage_percent: e.wastage_percent ?? cfg.defaultWastage,
+              multiplier: e.multiplier ?? 1,
+              pc_ean_code: e.pc_ean_code || "",
+              carton_ean_code: e.carton_ean_code || "",
+              existing_id: e.id
+            }))
           : [defaultRow(cfg)];
       });
     });
@@ -350,6 +358,7 @@ export default function UnifiedPackagingPlanning() {
   const handleSave = async () => {
     if (!activePo) return;
     setSaving(true);
+    const ops = [];
     for (const tab of SUB_TABS) {
       const cfg = TAB_CONFIG[tab];
       for (const art of poArticles) {
@@ -365,16 +374,20 @@ export default function UnifiedPackagingPlanning() {
             size_spec: row.quality,
             quantity_required: calcInclWastageWithMultiplier(qty, row.wastage_percent, row.multiplier || 1),
             wastage_percent: parseFloat(row.wastage_percent) || 0,
+            multiplier: parseFloat(row.multiplier) || 1,
+            pc_ean_code: row.pc_ean_code || "",
+            carton_ean_code: row.carton_ean_code || "",
             unit: "Pcs", status: "Planned",
           };
           if (row.existing_id) {
-            await base44.entities.AccessoryItem.update(row.existing_id, data);
+            ops.push(base44.entities.AccessoryItem.update(row.existing_id, data));
           } else {
-            await base44.entities.AccessoryItem.create(data);
+            ops.push(base44.entities.AccessoryItem.create(data));
           }
         }
       }
     }
+    await Promise.all(ops);
     queryClient.invalidateQueries({ queryKey: ["accessoryItems"] });
     setSaving(false);
   };
