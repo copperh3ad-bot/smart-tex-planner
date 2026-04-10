@@ -413,10 +413,11 @@ export default function FabricWorking() {
                           return (
                             <React.Fragment key={article.id}>
                               {comps.length === 0 ? (
-                                <tr style={{ backgroundColor: artBg }}>
-                                  <td className="border border-gray-300 px-2 py-1.5 font-semibold text-blue-900">{article.article_name}</td>
-                                  <td className="border border-gray-300 px-2 py-1.5 text-gray-500">{article.article_code}</td>
-                                  <td className="border border-gray-300 px-2 py-1.5 text-center">{article.order_quantity?.toLocaleString()}</td>
+                              <tr style={{ backgroundColor: artBg }}>
+                                <td className="border border-gray-300 px-2 py-1.5 font-semibold text-blue-900">{article.article_name}</td>
+                                <td className="border border-gray-300 px-2 py-1.5 text-gray-500">{article.article_code}</td>
+                                <td className="border border-gray-300 px-2 py-1.5 text-center">{article.order_quantity?.toLocaleString()}</td>
+                                <td colSpan={9} className="border border-gray-300 px-2 py-1.5">
                                   <ArticleFabricSetup
                                     article={article}
                                     onEdit={() => startEdit(article)}
@@ -426,10 +427,11 @@ export default function FabricWorking() {
                                       queryClient.invalidateQueries({ queryKey: ["articles"] });
                                     }}
                                   />
-                                  <td className="border border-gray-300 px-2 py-1.5 print-hidden">
-                                    <button onClick={() => startEdit(article)} className="text-blue-600 hover:text-blue-800" title="Edit"><Pencil className="h-3.5 w-3.5" /></button>
-                                  </td>
-                                  </tr>
+                                </td>
+                                <td className="border border-gray-300 px-2 py-1.5 print-hidden">
+                                  <button onClick={() => startEdit(article)} className="text-blue-600 hover:text-blue-800" title="Edit"><Pencil className="h-3.5 w-3.5" /></button>
+                                </td>
+                                </tr>
                               ) : (
                                 comps.map((comp, idx) => {
                                   const qty = article.order_quantity || 0;
