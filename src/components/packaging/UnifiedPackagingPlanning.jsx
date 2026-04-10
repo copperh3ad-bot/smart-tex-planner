@@ -19,6 +19,7 @@ const TAB_CONFIG = {
     qualityLabel: "Quality / Description",
     qualityPlaceholder: "e.g. Woven, Satin, 3x5cm",
     defaultWastage: 5,
+    showMultiplier: true,
   },
   Accessories: {
     category: "Accessory",
@@ -78,7 +79,8 @@ const inputCls = "w-full text-xs border border-gray-300 rounded px-1.5 py-1 focu
 const numInputCls = "w-16 text-center text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400";
 const calcInclWastage = (qty, wastage) => Math.ceil((qty || 0) * (1 + (parseFloat(wastage) || 0) / 100));
 
-const defaultRow = (cfg) => ({ type: cfg.typeOptions[0], quality: "", wastage_percent: cfg.defaultWastage, existing_id: null, pc_ean_code: "", carton_ean_code: "" });
+const defaultRow = (cfg) => ({ type: cfg.typeOptions[0], quality: "", wastage_percent: cfg.defaultWastage, existing_id: null, pc_ean_code: "", carton_ean_code: "", multiplier: 1 });
+const calcInclWastageWithMultiplier = (qty, wastage, multiplier) => Math.ceil((qty || 0) * (parseFloat(multiplier) || 1) * (1 + (parseFloat(wastage) || 0) / 100));
 
 // ─── Article block with multi-row table ───────────────────────────────────────
 function ArticleBlock({ art, cfg, rows, onChange }) {
@@ -103,6 +105,7 @@ function ArticleBlock({ art, cfg, rows, onChange }) {
             <th className="border border-gray-300 px-2 py-1.5 text-left w-44">{cfg.typeLabel}</th>
             <th className="border border-gray-300 px-2 py-1.5 text-left">{cfg.qualityLabel}</th>
             <th className="border border-gray-300 px-2 py-1.5 text-center w-20">Qty</th>
+            {cfg.showMultiplier && <th className="border border-gray-300 px-2 py-1.5 text-center w-24" style={{ backgroundColor: "#F3E5F5" }}>Multiplier</th>}
             <th className="border border-gray-300 px-2 py-1.5 text-center w-24">Wastage %</th>
             <th className="border border-gray-300 px-2 py-1.5 text-center w-28" style={{ backgroundColor: "#FFF2CC" }}>Incl. Wastage Qty</th>
             {cfg.showEAN && <th className="border border-gray-300 px-2 py-1.5 text-left w-36" style={{ backgroundColor: "#E8F5E9" }}>PC EAN Code</th>}
@@ -123,12 +126,22 @@ function ArticleBlock({ art, cfg, rows, onChange }) {
                   onChange={e => update(idx, "quality", e.target.value)} />
               </td>
               <td className="border border-gray-300 px-2 py-1 text-center font-medium">{qty.toLocaleString()}</td>
+              {cfg.showMultiplier && (
+                <td className="border border-gray-300 px-1.5 py-1 text-center" style={{ backgroundColor: "#FDF6FF" }}>
+                  <select
+                    className="w-14 text-center text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-purple-400"
+                    value={row.multiplier || 1}
+                    onChange={e => update(idx, "multiplier", parseFloat(e.target.value))}>
+                    {[1, 2, 3, 4].map(m => <option key={m} value={m}>x{m}</option>)}
+                  </select>
+                </td>
+              )}
               <td className="border border-gray-300 px-1.5 py-1 text-center">
                 <input type="number" min="0" max="100" step="0.5" className={numInputCls}
                   value={row.wastage_percent} onChange={e => update(idx, "wastage_percent", e.target.value)} />
               </td>
               <td className="border border-gray-300 px-2 py-1 text-center font-bold" style={{ backgroundColor: "#FFF2CC" }}>
-                {calcInclWastage(qty, row.wastage_percent).toLocaleString()}
+                {calcInclWastageWithMultiplier(qty, row.wastage_percent, row.multiplier || 1).toLocaleString()}
               </td>
               {cfg.showEAN && (
                 <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#F1F8E9" }}>
@@ -349,7 +362,7 @@ export default function UnifiedPackagingPlanning() {
             category: cfg.category,
             item_description: row.type,
             size_spec: row.quality,
-            quantity_required: calcInclWastage(qty, row.wastage_percent),
+            quantity_required: calcInclWastageWithMultiplier(qty, row.wastage_percent, row.multiplier || 1),
             wastage_percent: parseFloat(row.wastage_percent) || 0,
             unit: "Pcs", status: "Planned",
           };
