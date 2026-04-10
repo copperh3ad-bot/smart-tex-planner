@@ -26,13 +26,7 @@
         "Eyelet",
         "Stitching Thread",
         "Insert Card",
-        "Other",
-        "Label",
-        "Accessory",
-        "Polybag",
-        "Stiffener",
-        "Carton",
-        "Sticker"
+        "Other"
       ],
       "default": "Other"
     },
@@ -88,14 +82,6 @@
         "Approved"
       ],
       "default": "Planned"
-    },
-    "pc_ean": {
-      "type": "string",
-      "description": "PC / Unit EAN barcode"
-    },
-    "carton_ean": {
-      "type": "string",
-      "description": "Carton EAN barcode"
     },
     "notes": {
       "type": "string"
