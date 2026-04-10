@@ -74,7 +74,7 @@ export default function FabricWorking() {
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
   }, [poArticles]);
 
-  // Fabric summary
+  // Fabric summary (combined)
   const fabricSummary = useMemo(() => {
     const map = {};
     poArticles.forEach((art) => {
@@ -89,6 +89,24 @@ export default function FabricWorking() {
     });
     return Object.values(map);
   }, [poArticles]);
+
+  // Color-wise fabric summary (for separate view)
+  const colorFabricSummary = useMemo(() => {
+    return colorGroups.map(([color, arts]) => {
+      const map = {};
+      arts.forEach((art) => {
+        (art.components || []).forEach((comp) => {
+          const key = `${comp.fabric_type}||${comp.width}`;
+          if (!map[key]) map[key] = { fabric_type: comp.fabric_type, width: comp.width, net_total: 0, total_with_wastage: 0 };
+          const net = (comp.consumption_per_unit || 0) * (art.order_quantity || 0);
+          const total = comp.total_required || net * (1 + (comp.wastage_percent || 0) / 100);
+          map[key].net_total += net;
+          map[key].total_with_wastage += total;
+        });
+      });
+      return { color, items: Object.values(map) };
+    }).filter(g => g.items.length > 0);
+  }, [colorGroups]);
 
   const updateArticle = useMutation({
     mutationFn: async ({ id, data, siblingIds }) => {
@@ -477,7 +495,7 @@ export default function FabricWorking() {
           )}
 
           {/* Fabric Summary Table */}
-          {fabricSummary.length > 0 && (
+          {viewMode === "combined" && fabricSummary.length > 0 && (
             <div className="mt-4 overflow-x-auto rounded border border-gray-300 shadow-sm">
               <table className="w-full text-xs border-collapse" style={{ fontFamily: "Arial, sans-serif" }}>
                 <thead>
@@ -504,6 +522,56 @@ export default function FabricWorking() {
                   </tr>
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Color-wise Fabric Summary (Separate View) */}
+          {viewMode === "separate" && colorFabricSummary.length > 0 && (
+            <div className="mt-4 space-y-3">
+              <div className="text-xs font-bold text-white px-3 py-2 rounded-t" style={{ backgroundColor: "#1F3864" }}>
+                FABRIC REQUIREMENT SUMMARY — BY COLOR — {activePo?.po_number}
+              </div>
+              {colorFabricSummary.map(({ color, items }) => (
+                <div key={color} className="overflow-x-auto rounded border border-gray-300 shadow-sm">
+                  <table className="w-full text-xs border-collapse" style={{ fontFamily: "Arial, sans-serif" }}>
+                    <thead>
+                      <tr style={{ backgroundColor: "#1F6B3F", color: "white" }}>
+                        <th className="border border-gray-400 px-3 py-1.5 text-left" colSpan={2}>● {color.toUpperCase()}</th>
+                        <th className="border border-gray-400 px-3 py-1.5 text-center">Width</th>
+                        <th className="border border-gray-400 px-3 py-1.5 text-right">Net Mtrs</th>
+                        <th className="border border-gray-400 px-3 py-1.5 text-right">Total Mtrs (incl. wastage)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((f, idx) => (
+                        <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? "#EBF0FA" : "white" }}>
+                          <td className="border border-gray-300 px-3 py-1.5" colSpan={2}>{f.fabric_type}</td>
+                          <td className="border border-gray-300 px-3 py-1.5 text-center">{f.width ? `${f.width}cm` : "—"}</td>
+                          <td className="border border-gray-300 px-3 py-1.5 text-right">{f.net_total.toFixed(2)}</td>
+                          <td className="border border-gray-300 px-3 py-1.5 text-right font-bold" style={{ backgroundColor: "#FFF2CC" }}>{f.total_with_wastage.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                      <tr style={{ backgroundColor: "#1F6B3F", color: "white", fontWeight: "bold" }}>
+                        <td className="border border-gray-400 px-3 py-1.5" colSpan={3}>SUBTOTAL</td>
+                        <td className="border border-gray-400 px-3 py-1.5 text-right">{items.reduce((s, f) => s + f.net_total, 0).toFixed(2)}</td>
+                        <td className="border border-gray-400 px-3 py-1.5 text-right">{items.reduce((s, f) => s + f.total_with_wastage, 0).toFixed(2)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+              {/* Grand Total across all colors */}
+              <div className="overflow-x-auto rounded border border-gray-300">
+                <table className="w-full text-xs border-collapse" style={{ fontFamily: "Arial, sans-serif" }}>
+                  <tbody>
+                    <tr style={{ backgroundColor: "#1F3864", color: "white", fontWeight: "bold" }}>
+                      <td className="border border-gray-400 px-3 py-2" colSpan={3}>GRAND TOTAL (ALL COLORS)</td>
+                      <td className="border border-gray-400 px-3 py-2 text-right">{fabricSummary.reduce((s, f) => s + f.net_total, 0).toFixed(2)}</td>
+                      <td className="border border-gray-400 px-3 py-2 text-right">{fabricSummary.reduce((s, f) => s + f.total_with_wastage, 0).toFixed(2)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
