@@ -13,7 +13,8 @@ const TAB_CONFIG = {
     typeOptions: [
       "Brand Label", "Care Label", "Size Label", "Direction Label", "GOTS Label",
       "Barcode Label", "Hang Tag", "Country of Origin Label", "Composition Label",
-      "Wash Label", "Price Ticket", "Compliance Label", "Retailer Label", "Eco Label", "Custom Label"
+      "Wash Label", "Price Ticket", "Compliance Label", "Retailer Label", "Eco Label",
+      "Care label in 3 Languages 1X3", "Custom Label"
     ],
     typeLabel: "Label Type",
     qualityLabel: "Quality / Description",
