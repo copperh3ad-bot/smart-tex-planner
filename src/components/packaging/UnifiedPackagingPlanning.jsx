@@ -387,7 +387,11 @@ export default function UnifiedPackagingPlanning() {
         }
       }
     }
-    await Promise.all(ops);
+    // Process in batches of 5 to avoid rate limits
+    const BATCH = 5;
+    for (let i = 0; i < ops.length; i += BATCH) {
+      await Promise.all(ops.slice(i, i + BATCH));
+    }
     queryClient.invalidateQueries({ queryKey: ["accessoryItems"] });
     setSaving(false);
   };
