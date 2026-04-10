@@ -76,7 +76,7 @@ const inputCls = "w-full text-xs border border-gray-300 rounded px-1.5 py-1 focu
 const numInputCls = "w-16 text-center text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400";
 const calcInclWastage = (qty, wastage) => Math.ceil((qty || 0) * (1 + (parseFloat(wastage) || 0) / 100));
 
-const defaultRow = (cfg) => ({ type: cfg.typeOptions[0], quality: "", wastage_percent: cfg.defaultWastage, existing_id: null });
+const defaultRow = (cfg) => ({ type: cfg.typeOptions[0], quality: "", wastage_percent: cfg.defaultWastage, pc_ean: "", carton_ean: "", existing_id: null });
 
 // ─── Article block with multi-row table ───────────────────────────────────────
 function ArticleBlock({ art, cfg, rows, onChange }) {
@@ -103,6 +103,8 @@ function ArticleBlock({ art, cfg, rows, onChange }) {
             <th className="border border-gray-300 px-2 py-1.5 text-center w-20">Qty</th>
             <th className="border border-gray-300 px-2 py-1.5 text-center w-24">Wastage %</th>
             <th className="border border-gray-300 px-2 py-1.5 text-center w-28" style={{ backgroundColor: "#FFF2CC" }}>Incl. Wastage Qty</th>
+            <th className="border border-gray-300 px-2 py-1.5 text-left w-32">PC EAN Code</th>
+            <th className="border border-gray-300 px-2 py-1.5 text-left w-32">Carton EAN Code</th>
             <th className="border border-gray-300 px-2 py-1.5 w-8"></th>
           </tr>
         </thead>
@@ -125,6 +127,14 @@ function ArticleBlock({ art, cfg, rows, onChange }) {
               </td>
               <td className="border border-gray-300 px-2 py-1 text-center font-bold" style={{ backgroundColor: "#FFF2CC" }}>
                 {calcInclWastage(qty, row.wastage_percent).toLocaleString()}
+              </td>
+              <td className="border border-gray-300 px-1.5 py-1">
+                <input className={inputCls} placeholder="e.g. 1234567890123" value={row.pc_ean || ""}
+                  onChange={e => update(idx, "pc_ean", e.target.value)} />
+              </td>
+              <td className="border border-gray-300 px-1.5 py-1">
+                <input className={inputCls} placeholder="e.g. 1234567890456" value={row.carton_ean || ""}
+                  onChange={e => update(idx, "carton_ean", e.target.value)} />
               </td>
               <td className="border border-gray-300 px-1.5 py-1 text-center">
                 {artRows.length > 1 && (
@@ -176,7 +186,7 @@ export default function UnifiedPackagingPlanning() {
           i => i.po_id === activePo.id && i.article_code === art.article_code && i.category === cfg.category
         );
         init[tab][art.id] = existing.length > 0
-          ? existing.map(e => ({ type: e.item_description, quality: e.size_spec || "", wastage_percent: e.wastage_percent ?? cfg.defaultWastage, existing_id: e.id }))
+          ? existing.map(e => ({ type: e.item_description, quality: e.size_spec || "", wastage_percent: e.wastage_percent ?? cfg.defaultWastage, pc_ean: e.pc_ean || "", carton_ean: e.carton_ean || "", existing_id: e.id }))
           : [defaultRow(cfg)];
       });
     });
@@ -336,6 +346,8 @@ export default function UnifiedPackagingPlanning() {
             quantity_required: calcInclWastage(qty, row.wastage_percent),
             wastage_percent: parseFloat(row.wastage_percent) || 0,
             unit: "Pcs", status: "Planned",
+            pc_ean: row.pc_ean || "",
+            carton_ean: row.carton_ean || "",
           };
           if (row.existing_id) {
             await base44.entities.AccessoryItem.update(row.existing_id, data);
