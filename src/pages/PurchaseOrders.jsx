@@ -197,6 +197,38 @@ export default function PurchaseOrders() {
         });
         await base44.entities.Article.bulkCreate(articleRecords);
 
+        // ---- Auto-copy Accessories & Packaging from previous orders ----
+        const historicAccessoryItems = await base44.entities.AccessoryItem.list("-created_date", 1000);
+        const accessoryItemsToCopy = [];
+        articleRecords.forEach((artRecord) => {
+          if (!artRecord.article_code) return;
+          const key = artRecord.article_code.trim().toUpperCase();
+          const prevItems = historicAccessoryItems.filter(
+            (i) => i.article_code?.trim().toUpperCase() === key && i.po_id !== po.id
+          );
+          if (prevItems.length === 0) return;
+          // Use items from the most recent previous PO for this article
+          const mostRecentPoId = prevItems[0].po_id;
+          prevItems.filter((i) => i.po_id === mostRecentPoId).forEach((item) => {
+            const newQty = artRecord.order_quantity || 0;
+            const multiplier = item.multiplier || 1;
+            const wastage = item.wastage_percent || 0;
+            accessoryItemsToCopy.push({
+              po_id: po.id, po_number: po.po_number,
+              article_name: artRecord.article_name, article_code: artRecord.article_code,
+              category: item.category, item_description: item.item_description,
+              color: item.color || "", size_spec: item.size_spec || "",
+              quantity_required: Math.ceil(newQty * multiplier * (1 + wastage / 100)),
+              wastage_percent: wastage, multiplier,
+              pc_ean_code: item.pc_ean_code || "", carton_ean_code: item.carton_ean_code || "",
+              unit: item.unit || "Pcs", status: "Planned", notes: item.notes || "",
+            });
+          });
+        });
+        for (let i = 0; i < accessoryItemsToCopy.length; i += 10) {
+          await base44.entities.AccessoryItem.bulkCreate(accessoryItemsToCopy.slice(i, i + 10));
+        }
+
         // Update PO totals
         const total_cbm = enrichedItems.reduce((s, i) => s + (Number(i.cbm) || 0), 0);
         const total_po_value = enrichedItems.reduce((s, i) => s + (Number(i.total_price) || 0), 0);
