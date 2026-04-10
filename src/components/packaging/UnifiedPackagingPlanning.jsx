@@ -35,6 +35,7 @@ const TAB_CONFIG = {
     qualityLabel: "Quality / Size",
     qualityPlaceholder: "e.g. 300gsm, 10x15cm",
     defaultWastage: 5,
+    showEAN: true,
   },
   Polybag: {
     category: "Polybag",
@@ -67,6 +68,7 @@ const TAB_CONFIG = {
     qualityLabel: "Size / Description",
     qualityPlaceholder: "e.g. 5x3cm, matte, waterproof",
     defaultWastage: 5,
+    showEAN: true,
   },
 };
 
@@ -76,7 +78,7 @@ const inputCls = "w-full text-xs border border-gray-300 rounded px-1.5 py-1 focu
 const numInputCls = "w-16 text-center text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400";
 const calcInclWastage = (qty, wastage) => Math.ceil((qty || 0) * (1 + (parseFloat(wastage) || 0) / 100));
 
-const defaultRow = (cfg) => ({ type: cfg.typeOptions[0], quality: "", wastage_percent: cfg.defaultWastage, existing_id: null });
+const defaultRow = (cfg) => ({ type: cfg.typeOptions[0], quality: "", wastage_percent: cfg.defaultWastage, existing_id: null, pc_ean_code: "", carton_ean_code: "" });
 
 // ─── Article block with multi-row table ───────────────────────────────────────
 function ArticleBlock({ art, cfg, rows, onChange }) {
@@ -103,6 +105,8 @@ function ArticleBlock({ art, cfg, rows, onChange }) {
             <th className="border border-gray-300 px-2 py-1.5 text-center w-20">Qty</th>
             <th className="border border-gray-300 px-2 py-1.5 text-center w-24">Wastage %</th>
             <th className="border border-gray-300 px-2 py-1.5 text-center w-28" style={{ backgroundColor: "#FFF2CC" }}>Incl. Wastage Qty</th>
+            {cfg.showEAN && <th className="border border-gray-300 px-2 py-1.5 text-left w-36" style={{ backgroundColor: "#E8F5E9" }}>PC EAN Code</th>}
+            {cfg.showEAN && <th className="border border-gray-300 px-2 py-1.5 text-left w-36" style={{ backgroundColor: "#E3F2FD" }}>Carton EAN Code</th>}
             <th className="border border-gray-300 px-2 py-1.5 w-8"></th>
           </tr>
         </thead>
@@ -126,6 +130,18 @@ function ArticleBlock({ art, cfg, rows, onChange }) {
               <td className="border border-gray-300 px-2 py-1 text-center font-bold" style={{ backgroundColor: "#FFF2CC" }}>
                 {calcInclWastage(qty, row.wastage_percent).toLocaleString()}
               </td>
+              {cfg.showEAN && (
+                <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#F1F8E9" }}>
+                  <input className={inputCls} placeholder="e.g. 1234567890123" value={row.pc_ean_code || ""}
+                    onChange={e => update(idx, "pc_ean_code", e.target.value)} />
+                </td>
+              )}
+              {cfg.showEAN && (
+                <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#E3F2FD" }}>
+                  <input className={inputCls} placeholder="e.g. 9876543210123" value={row.carton_ean_code || ""}
+                    onChange={e => update(idx, "carton_ean_code", e.target.value)} />
+                </td>
+              )}
               <td className="border border-gray-300 px-1.5 py-1 text-center">
                 {artRows.length > 1 && (
                   <button onClick={() => remove(idx)} className="text-red-400 hover:text-red-600">
