@@ -219,7 +219,8 @@ export default function UnifiedPackagingPlanning() {
       });
     });
     setAllRows(init);
-  }, [activePo?.id, poArticles.length, existingItems.length]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePo?.id, JSON.stringify(existingItems.map(i => i.id + i.size_spec + i.item_description + i.wastage_percent + i.multiplier + i.pc_ean_code + i.carton_ean_code))]);
 
   const handleChange = (tab, artId, newRows) => {
     setAllRows(prev => ({ ...prev, [tab]: { ...prev[tab], [artId]: newRows } }));
@@ -439,6 +440,7 @@ export default function UnifiedPackagingPlanning() {
       {poArticles.length === 0 ? (
         <div className="py-12 text-center text-muted-foreground text-sm">No articles found for this PO.</div>
       ) : (
+        <>
         <div className="space-y-3">
           {poArticles.map(art => (
             <ArticleBlock
@@ -450,6 +452,55 @@ export default function UnifiedPackagingPlanning() {
             />
           ))}
         </div>
+        {/* Per-item-type totals footer */}
+        {(() => {
+          const cfg = TAB_CONFIG[subTab];
+          const typeTotals = {};
+          poArticles.forEach(art => {
+            const artRows = allRows[subTab]?.[art.id] || [];
+            artRows.forEach(row => {
+              if (!row.type) return;
+              if (!typeTotals[row.type]) typeTotals[row.type] = { orderQty: 0, inclWastage: 0 };
+              typeTotals[row.type].orderQty += (art.order_quantity || 0);
+              typeTotals[row.type].inclWastage += calcInclWastageWithMultiplier(art.order_quantity || 0, row.wastage_percent, row.multiplier || 1);
+            });
+          });
+          const entries = Object.entries(typeTotals);
+          if (entries.length === 0) return null;
+          return (
+            <div className="rounded border border-gray-300 overflow-hidden shadow-sm">
+              <div className="px-3 py-2 text-xs font-bold text-white" style={{ backgroundColor: "#1F3864" }}>
+                {subTab.toUpperCase()} — TOTALS BY TYPE
+              </div>
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr style={{ backgroundColor: "#EBF0FA" }}>
+                    <th className="border border-gray-300 px-3 py-1.5 text-left">{cfg.typeLabel}</th>
+                    <th className="border border-gray-300 px-3 py-1.5 text-center w-32">Total Order Qty</th>
+                    <th className="border border-gray-300 px-3 py-1.5 text-center w-40" style={{ backgroundColor: "#FFF2CC" }}>Total Incl. Wastage Qty</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries.map(([type, totals], idx) => (
+                    <tr key={type} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#F9FAFB" }}>
+                      <td className="border border-gray-300 px-3 py-1.5 font-medium">{type}</td>
+                      <td className="border border-gray-300 px-3 py-1.5 text-center">{totals.orderQty.toLocaleString()}</td>
+                      <td className="border border-gray-300 px-3 py-1.5 text-center font-bold" style={{ backgroundColor: "#FFF9E6" }}>{totals.inclWastage.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ backgroundColor: "#1F3864", color: "white", fontWeight: "bold" }}>
+                    <td className="border border-gray-400 px-3 py-1.5">GRAND TOTAL</td>
+                    <td className="border border-gray-400 px-3 py-1.5 text-center">{entries.reduce((s, [, t]) => s + t.orderQty, 0).toLocaleString()}</td>
+                    <td className="border border-gray-400 px-3 py-1.5 text-center" style={{ backgroundColor: "#E6B800", color: "#1a1a1a" }}>{entries.reduce((s, [, t]) => s + t.inclWastage, 0).toLocaleString()}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          );
+        })()}
+        </>
       )}
     </div>
   );
