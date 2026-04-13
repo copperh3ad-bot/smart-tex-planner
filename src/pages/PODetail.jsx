@@ -14,6 +14,9 @@ import POFormDialog from "../components/po/POFormDialog";
 import PriceVerification from "../components/po/PriceVerification";
 import CBMSummary from "../components/po/CBMSummary";
 
+const NUM_FIELDS = ["quantity", "unit_price", "total_price", "gsm", "width", "cbm",
+  "pieces_per_carton", "carton_length", "carton_width", "carton_height", "expected_price"];
+
 export default function PODetail() {
   const urlParams = new URLSearchParams(window.location.search);
   const poId = urlParams.get("id");
@@ -43,9 +46,6 @@ export default function PODetail() {
     queryClient.invalidateQueries({ queryKey: ["purchaseOrders"] });
   };
 
-  const NUM_FIELDS = ["quantity", "unit_price", "total_price", "gsm", "width", "cbm",
-    "pieces_per_carton", "carton_length", "carton_width", "carton_height", "expected_price"];
-
   const castNumbers = (data) => {
     const out = { ...data };
     NUM_FIELDS.forEach(f => { if (out[f] !== undefined && out[f] !== "") out[f] = Number(out[f]) || 0; });
@@ -55,7 +55,6 @@ export default function PODetail() {
   const handleSaveItem = async (data) => {
     const cast = castNumbers(data);
     if (editingItem) {
-      // Merge with existing to prevent field loss
       await base44.entities.POItem.update(editingItem.id, { ...editingItem, ...cast });
     } else {
       await base44.entities.POItem.create({ po_id: poId, po_number: po?.po_number || "", price_status: "Pending", ...cast });
@@ -72,45 +71,86 @@ export default function PODetail() {
     const records = [];
     try {
       const text = await file.text();
-      const lines = text.split("\n").map(l => l.split(",").map(c => c.replace(/^"|"$/g, "").trim()));
-      if (lines.length < 2) { alert("CSV file is empty or has no data rows."); e.target.value = ""; return; }
-      const headers = lines[0].map(h => h.toLowerCase().replace(/\s+/g, "_"));
-      if (!headers.includes("item_code")) { alert("CSV must have an 'item_code' column."); e.target.value = ""; return; }
-      if (!headers.includes("quantity")) { alert("CSV must have a 'quantity' column."); e.target.value = ""; return; }
+      const rawLines = text.split(/\r?\n/);
+      const lines = rawLines.map(l => l.split(",").map(c => c.replace(/^"|"$/g, "").trim()));
+
+      if (lines.length < 2 || lines.every(l => l.join("").trim() === "")) {
+        alert("CSV file is empty or has no data rows.");
+        e.target.value = "";
+        return;
+      }
+
+      const headers = lines[0].map(h => h.trim().toLowerCase().replace(/\s+/g, "_"));
+
+      const REQUIRED = ["item_code", "quantity"];
+      const missing = REQUIRED.filter(r => !headers.includes(r));
+      if (missing.length > 0) {
+        alert("CSV is missing required column(s): " + missing.join(", ") + ".\n\nFound columns: " + headers.join(", "));
+        e.target.value = "";
+        return;
+      }
+
+      const existingItems = await base44.entities.POItem.filter({ po_id: poId });
+      const existingByCode = {};
+      existingItems.forEach(item => {
+        if (item.item_code) existingByCode[item.item_code.trim().toUpperCase()] = item;
+      });
 
       lines.slice(1).forEach((row, idx) => {
         const lineNum = idx + 2;
-        if (row.length < 2 || !row[0]) return; // skip blank rows
+        if (row.length < 2 || row.join("").trim() === "") return;
         try {
           const rec = { po_id: poId, po_number: po?.po_number || "", price_status: "Pending", unit: "Pieces" };
-          headers.forEach((h, i) => { if (row[i] !== undefined && row[i] !== "") rec[h] = row[i]; });
+          headers.forEach((h, i) => {
+            const val = row[i] !== undefined ? row[i].trim() : "";
+            if (val !== "") rec[h] = val;
+          });
           NUM_FIELDS.forEach(f => { if (rec[f] !== undefined) rec[f] = Number(rec[f]); });
 
-          // Validation
-          if (!rec.item_code) { errors.push(`Row ${lineNum}: missing item_code`); return; }
+          if (!rec.item_code || String(rec.item_code).trim() === "") {
+            errors.push("Row " + lineNum + ": missing item_code"); return;
+          }
           const qty = Number(rec.quantity);
-          if (!qty || isNaN(qty) || qty <= 0) { errors.push(`Row ${lineNum}: invalid quantity "${rec.quantity}"`); return; }
-          if (rec.unit_price !== undefined && isNaN(Number(rec.unit_price))) { errors.push(`Row ${lineNum}: invalid unit_price`); return; }
-
+          if (!rec.quantity || isNaN(qty) || qty <= 0) {
+            errors.push("Row " + lineNum + " (" + rec.item_code + "): invalid quantity \"" + rec.quantity + "\""); return;
+          }
+          if (rec.unit_price !== undefined && isNaN(Number(rec.unit_price))) {
+            errors.push("Row " + lineNum + " (" + rec.item_code + "): invalid unit_price \"" + rec.unit_price + "\""); return;
+          }
           rec.quantity = qty;
-          records.push(rec);
+
+          const codeKey = String(rec.item_code).trim().toUpperCase();
+          const existing = existingByCode[codeKey];
+          if (existing) {
+            records.push({ _existingId: existing.id, ...existing, ...rec });
+          } else {
+            records.push(rec);
+          }
         } catch (rowErr) {
-          errors.push(`Row ${lineNum}: unexpected error — ${rowErr.message}`);
+          errors.push("Row " + lineNum + ": unexpected error — " + rowErr.message);
         }
       });
 
-      if (records.length > 0) {
-        for (let i = 0; i < records.length; i += 5) {
-          await base44.entities.POItem.bulkCreate(records.slice(i, i + 5));
-        }
-        queryClient.invalidateQueries({ queryKey: ["poItems", poId] });
-      }
+      let saved = 0;
+      const toCreate = records.filter(r => !r._existingId);
+      const toUpdate = records.filter(r => r._existingId);
 
-      const summary = [`✅ ${records.length} item(s) imported successfully.`];
-      if (errors.length > 0) summary.push(`\n⚠️ ${errors.length} row(s) skipped:\n${errors.join("\n")}`);
-      alert(summary.join(""));
+      for (let i = 0; i < toCreate.length; i += 5) {
+        await base44.entities.POItem.bulkCreate(toCreate.slice(i, i + 5));
+        saved += Math.min(5, toCreate.length - i);
+      }
+      for (const r of toUpdate) {
+        const { _existingId, ...data } = r;
+        await base44.entities.POItem.update(_existingId, data);
+        saved++;
+      }
+      if (saved > 0) queryClient.invalidateQueries({ queryKey: ["poItems", poId] });
+
+      let summary = saved + " item(s) imported/updated successfully.";
+      if (errors.length > 0) summary += "\n\n" + errors.length + " row(s) skipped:\n" + errors.join("\n");
+      alert(summary);
     } catch (err) {
-      alert(`CSV upload failed: ${err.message}`);
+      alert("CSV upload failed: " + err.message);
     }
     e.target.value = "";
   };
@@ -128,7 +168,6 @@ export default function PODetail() {
   };
 
   const handleEditPO = async (data) => {
-    // Merge with existing PO to prevent field loss
     await base44.entities.PurchaseOrder.update(poId, { ...po, ...data });
     queryClient.invalidateQueries({ queryKey: ["po", poId] });
     queryClient.invalidateQueries({ queryKey: ["purchaseOrders"] });

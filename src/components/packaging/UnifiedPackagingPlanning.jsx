@@ -436,18 +436,39 @@ export default function UnifiedPackagingPlanning() {
       let imported = 0;
       try {
         const text = evt.target.result;
-        const lines = text.split("\n").map(l => l.split(",").map(c => c.replace(/^"|"$/g, "").trim()));
-        if (lines.length < 2) { alert("CSV file is empty or has no data rows."); return; }
-        const headers = lines[0].map(h => h.toLowerCase().replace(/\s+/g, "_"));
-        if (!headers.includes("article_code") && !headers.includes("articlecode")) {
-          alert("CSV must have an 'article_code' column."); return;
+        // UTF-8 safe split, handle \r\n and \n
+        const rawLines = text.split(/\r?\n/);
+        const lines = rawLines.map(l =>
+          l.split(",").map(c => c.replace(/^"|"$/g, "").trim())
+        );
+        if (lines.length < 2 || lines.every(l => l.join("").trim() === "")) {
+          alert("CSV file is empty or has no data rows."); return;
         }
+        // Normalize headers: trim + lowercase + underscores
+        const headers = lines[0].map(h => h.trim().toLowerCase().replace(/\s+/g, "_"));
+
+        // Required column validation per upload type
+        const REQUIRED_BY_TYPE = {
+          Labels: ["article_code", "label_type"],
+          Accessories: ["article_code", "item_type"],
+          Packaging: ["article_code", "type"],
+        };
+        const requiredCols = REQUIRED_BY_TYPE[csvUploadType] || ["article_code"];
+        const missingCols = requiredCols.filter(r => !headers.includes(r));
+        if (missingCols.length > 0) {
+          alert(`CSV missing required column(s) for ${csvUploadType}: ${missingCols.join(", ")}\n\nFound columns: ${headers.join(", ")}`);
+          return;
+        }
+
         const getCol = (row, ...names) => {
-          for (const n of names) { const i = headers.indexOf(n); if (i >= 0 && row[i]) return row[i]; }
+          for (const n of names) {
+            const i = headers.indexOf(n.trim().toLowerCase().replace(/\s+/g, "_"));
+            if (i >= 0 && row[i] !== undefined) return row[i].trim();
+          }
           return "";
         };
 
-        // Determine which tab(s) to populate based on upload type
+        // Determine target tabs
         let targetTabs = [];
         if (csvUploadType === "Labels") targetTabs = ["Labels"];
         else if (csvUploadType === "Accessories") targetTabs = ["Accessories"];
@@ -456,54 +477,65 @@ export default function UnifiedPackagingPlanning() {
         const newRows = {};
         targetTabs.forEach(tab => {
           newRows[tab] = {};
-          poArticles.forEach(art => { newRows[tab][art.id] = [defaultRow(TAB_CONFIG[tab])]; });
+          // Pre-seed with existing rows so merge doesn't wipe saved data
+          poArticles.forEach(art => {
+            newRows[tab][art.id] = allRows[tab]?.[art.id] ? [...allRows[tab][art.id]] : [defaultRow(TAB_CONFIG[tab])];
+          });
         });
 
         lines.slice(1).forEach((row, rowIdx) => {
           const lineNum = rowIdx + 2;
-          if (row.length < 2 || !row[0]) return;
+          if (row.length < 2 || row.join("").trim() === "") return; // skip blank
           try {
             const artCode = getCol(row, "article_code", "articlecode");
             if (!artCode) { errors.push(`Row ${lineNum}: missing article_code`); return; }
-            const art = poArticles.find(a => a.article_code === artCode || a.article_name === artCode);
+            const art = poArticles.find(a =>
+              (a.article_code || "").trim().toUpperCase() === artCode.trim().toUpperCase() ||
+              (a.article_name || "").trim().toUpperCase() === artCode.trim().toUpperCase()
+            );
             if (!art) { errors.push(`Row ${lineNum}: no article found for "${artCode}"`); return; }
 
             let tab = null;
-            if (csvUploadType === "Labels") {
-              tab = "Labels";
-            } else if (csvUploadType === "Accessories") {
-              tab = "Accessories";
-            } else if (csvUploadType === "Packaging") {
+            if (csvUploadType === "Labels") tab = "Labels";
+            else if (csvUploadType === "Accessories") tab = "Accessories";
+            else if (csvUploadType === "Packaging") {
               const packType = getCol(row, "pack_type", "packtype", "tab").toLowerCase();
               if (packType.includes("polybag") || packType.includes("poly")) tab = "Polybag";
               else if (packType.includes("stiffener") || packType.includes("stiff")) tab = "Stiffener";
               else if (packType.includes("carton")) tab = "Carton";
               else tab = "Polybag";
             }
-            if (!tab || !newRows[tab]) { errors.push(`Row ${lineNum}: could not determine tab`); return; }
+            if (!tab || !newRows[tab]) { errors.push(`Row ${lineNum}: could not determine tab type`); return; }
             const cfg = TAB_CONFIG[tab];
             let newRow = null;
 
             if (csvUploadType === "Labels") {
-              const multiplierVal = Number(getCol(row, "multiplier")) || 1;
-              if (isNaN(multiplierVal)) { errors.push(`Row ${lineNum}: invalid multiplier`); return; }
+              const labelType = getCol(row, "label_type", "labeltype", "type");
+              if (!labelType) { errors.push(`Row ${lineNum}: missing label_type`); return; }
+              const multiplierVal = getCol(row, "multiplier");
+              const multiplier = multiplierVal ? Number(multiplierVal) : 1;
+              if (multiplierVal && (isNaN(multiplier) || multiplier <= 0)) {
+                errors.push(`Row ${lineNum}: invalid multiplier "${multiplierVal}" — must be a positive number`); return;
+              }
               newRow = {
-                type: getCol(row, "label_type", "labeltype", "type") || cfg.typeOptions[0],
+                type: labelType || cfg.typeOptions[0],
                 quality: getCol(row, "quality", "name", "description"),
                 description: "", size: "",
                 wastage_percent: parseFloat(getCol(row, "wastage_percent", "wastage")) || cfg.defaultWastage,
-                multiplier: multiplierVal,
+                multiplier: multiplier || 1,
                 pc_ean_code: getCol(row, "pc_ean_code", "ean"),
                 carton_ean_code: getCol(row, "carton_ean_code"),
                 existing_id: null,
               };
             } else if (csvUploadType === "Accessories") {
+              const itemType = getCol(row, "item_type", "itemtype", "type");
+              if (!itemType) { errors.push(`Row ${lineNum}: missing item_type`); return; }
               const consumptionRaw = getCol(row, "consumption");
-              if (consumptionRaw && isNaN(Number(consumptionRaw))) {
-                errors.push(`Row ${lineNum}: invalid consumption "${consumptionRaw}" — must be a number`); return;
+              if (consumptionRaw && (isNaN(Number(consumptionRaw)) || Number(consumptionRaw) < 0)) {
+                errors.push(`Row ${lineNum}: invalid consumption "${consumptionRaw}" — must be a non-negative number`); return;
               }
               newRow = {
-                type: getCol(row, "item_type", "itemtype", "type") || cfg.typeOptions[0],
+                type: itemType || cfg.typeOptions[0],
                 quality: getCol(row, "name", "quality", "description"),
                 description: "", size: "",
                 wastage_percent: parseFloat(getCol(row, "wastage_percent", "wastage")) || cfg.defaultWastage,
@@ -511,11 +543,16 @@ export default function UnifiedPackagingPlanning() {
                 existing_id: null,
               };
             } else if (csvUploadType === "Packaging") {
+              const pType = getCol(row, "type");
+              if (!pType) { errors.push(`Row ${lineNum}: missing type`); return; }
+              const desc = getCol(row, "description", "name");
+              const size = getCol(row, "size", "dimension");
+              if (!desc && !size) { errors.push(`Row ${lineNum} (${artCode}): description and size are both empty`); return; }
               newRow = {
-                type: getCol(row, "type") || cfg.typeOptions[0],
+                type: pType || cfg.typeOptions[0],
                 quality: "",
-                description: getCol(row, "description", "name"),
-                size: getCol(row, "size", "dimension"),
+                description: desc,
+                size: size,
                 wastage_percent: parseFloat(getCol(row, "wastage_percent", "wastage")) || cfg.defaultWastage,
                 multiplier: 1, pc_ean_code: "", carton_ean_code: "",
                 existing_id: null,
@@ -523,8 +560,10 @@ export default function UnifiedPackagingPlanning() {
             }
 
             if (!newRow) { errors.push(`Row ${lineNum}: could not build row`); return; }
+
+            // Merge: replace first empty row or append
             const existing = newRows[tab][art.id];
-            const emptyIdx = existing.findIndex(r => !r.quality && !r.description);
+            const emptyIdx = existing.findIndex(r => !r.quality && !r.description && !r.type?.includes(" "));
             if (emptyIdx >= 0) existing[emptyIdx] = newRow;
             else existing.push(newRow);
             imported++;
@@ -546,7 +585,7 @@ export default function UnifiedPackagingPlanning() {
         alert(`CSV upload failed: ${err.message}`);
       }
     };
-    reader.readAsText(file);
+    reader.readAsText(file, "UTF-8");
     e.target.value = "";
   };
 
