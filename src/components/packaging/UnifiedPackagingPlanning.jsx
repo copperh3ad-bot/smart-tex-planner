@@ -278,9 +278,12 @@ export default function UnifiedPackagingPlanning() {
         );
         if (existing.length > 0) {
           init[tab][art.id] = existing.map(e => ({
-            type: e.item_description,
-            // For splitDescSize tabs: description stored in size_spec, size in color field
-            quality: cfg.splitDescSize ? "" : (e.size_spec || ""),
+            // Insert Card: type=size_spec (card type), quality=item_description (description)
+            // All others: type=item_description, quality/description=size_spec
+            type: cfg.category === "Insert Card" ? (e.size_spec || "") : e.item_description,
+            quality: cfg.category === "Insert Card"
+              ? (e.item_description || "")
+              : (cfg.splitDescSize ? "" : (e.size_spec || "")),
             description: cfg.splitDescSize ? (e.size_spec || "") : "",
             size: cfg.splitDescSize ? (e.color || "") : "",
             wastage_percent: e.wastage_percent ?? cfg.defaultWastage,
@@ -627,10 +630,15 @@ export default function UnifiedPackagingPlanning() {
                 errorLog.push("Row " + lineNum + ": missing type — skipped");
                 skipped++; continue;
               }
+              const cardDesc = get(row, "description", "quality_/_size", "quality/size", "quality", "size", "name").trim();
+              if (!cardDesc) {
+                errorLog.push("Row " + lineNum + ": missing description — skipped");
+                skipped++; continue;
+              }
               const wastageRaw = get(row, "wastage_percent", "wastage_%", "wastage");
               newRow = {
                 type: cardType,
-                quality: get(row, "description", "quality_/_size", "quality/size", "quality", "size", "name"),
+                quality: cardDesc,
                 description: "",
                 size: "",
                 wastage_percent: toNum(wastageRaw) ?? cfg.defaultWastage,
