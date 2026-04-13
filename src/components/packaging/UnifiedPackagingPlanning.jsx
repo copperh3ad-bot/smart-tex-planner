@@ -194,7 +194,7 @@ export default function UnifiedPackagingPlanning() {
   const activePo = selectedPoId ? pos.find(p => p.id === selectedPoId) : pos[0];
   const poArticles = activePo ? articles.filter(a => a.po_id === activePo.id) : [];
 
-  // Stable keys from IDs only — avoids JSON.stringify re-renders
+  // Stable keys from IDs only — avoids JSON.stringify re-render loops
   const poArticleIds = poArticles.map(a => a.id).sort().join(',');
   const itemIds = existingItems.map(i => i.id).sort().join(',');
 
