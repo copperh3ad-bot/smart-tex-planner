@@ -166,7 +166,7 @@ export default function ProformaInvoice() {
             <div className="flex items-center gap-3">
               <img src="https://media.base44.com/images/public/69ae7db4de05f431bd9ae6e1/cafccf4cf_image.png" alt="Union Fabrics Logo" className="h-20 w-auto object-contain" />
               <div>
-                <div className="text-lg font-black text-gray-900 tracking-wide">UNION FABRICS LTD.</div>
+                <div className="text-lg font-black text-gray-900 tracking-wide">UNION FABRICS (PVT.) LIMITED.</div>
                 <div className="text-xs text-gray-600">E20/B Central Avenue Site, Karachi, PK 75700</div>
                 <div className="text-xs text-gray-600">Tel: +92 21 32567881</div>
               </div>
@@ -364,7 +364,7 @@ export default function ProformaInvoice() {
           <div className="grid grid-cols-2 gap-12 mt-10 text-xs">
             <div>
               <div className="border-t-2 border-gray-700 pt-2 mt-10">
-                <p className="font-bold">For Union Fabrics Ltd.</p>
+                <p className="font-bold">For Union Fabrics (Pvt.) Limited.</p>
                 <p className="text-gray-500 mt-0.5">Authorized Signature &amp; Stamp</p>
               </div>
             </div>
