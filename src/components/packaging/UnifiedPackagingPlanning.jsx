@@ -485,6 +485,7 @@ export default function UnifiedPackagingPlanning() {
         const REQUIRED_HEADERS = {
           Labels: ["article_code", "label_type"],
           Accessories: ["article_code", "item_type"],
+          "Insert Card": ["article_code", "type"],
           Packaging: ["article_code", "type"],
         };
         const requiredHeaders = REQUIRED_HEADERS[csvUploadType] || [];
@@ -501,6 +502,7 @@ export default function UnifiedPackagingPlanning() {
         const targetTabs =
           csvUploadType === "Labels" ? ["Labels"] :
           csvUploadType === "Accessories" ? ["Accessories"] :
+          csvUploadType === "Insert Card" ? ["Insert Card"] :
           ["Polybag", "Stiffener", "Carton"];
 
         // Build new rows map, pre-seeded with existing rows
@@ -596,6 +598,35 @@ export default function UnifiedPackagingPlanning() {
                 multiplier: 1,
                 pc_ean_code: "",
                 carton_ean_code: "",
+                existing_id: null,
+              };
+            }
+
+            // ── INSERT CARD ──────────────────────────────────────────────────
+            else if (csvUploadType === "Insert Card") {
+              // Filter: skip rows whose category column is present but not "insert card"
+              const rowCategory = get(row, "category");
+              if (rowCategory !== "" && rowCategory.trim().toLowerCase() !== "insert card") {
+                console.log("Row " + lineNum + ": category=\"" + rowCategory + "\" is not Insert Card — skipped");
+                skipped++; continue;
+              }
+              tab = "Insert Card";
+              const cfg = TAB_CONFIG[tab];
+              const cardType = get(row, "type", "insert_card_type", "insert_type", "card_type");
+              if (!cardType) {
+                errorLog.push("Row " + lineNum + ": missing type — skipped");
+                skipped++; continue;
+              }
+              const wastageRaw = get(row, "wastage_percent", "wastage_%", "wastage");
+              newRow = {
+                type: cardType,
+                quality: get(row, "description", "quality_/_size", "quality/size", "quality", "size", "name"),
+                description: "",
+                size: "",
+                wastage_percent: toNum(wastageRaw) ?? cfg.defaultWastage,
+                multiplier: 1,
+                pc_ean_code: get(row, "pc_ean_code", "ean", "pc_ean"),
+                carton_ean_code: get(row, "carton_ean_code", "carton_ean"),
                 existing_id: null,
               };
             }
@@ -819,6 +850,7 @@ export default function UnifiedPackagingPlanning() {
           >
             <option value="Labels">Labels</option>
             <option value="Accessories">Accessories</option>
+            <option value="Insert Card">Insert Card</option>
             <option value="Packaging">Packaging</option>
           </select>
           <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={!activePo} className="gap-1.5">
