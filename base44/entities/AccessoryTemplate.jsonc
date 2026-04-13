@@ -1,0 +1,63 @@
+{
+  "name": "AccessoryTemplate",
+  "type": "object",
+  "properties": {
+    "template_name": {
+      "type": "string",
+      "description": "Unique template name"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "Label",
+        "Insert Card",
+        "Accessory",
+        "Polybag",
+        "Stiffener",
+        "Carton",
+        "Sticker"
+      ],
+      "description": "Accessory category this template applies to"
+    },
+    "type": {
+      "type": "string",
+      "description": "Type value (e.g. Art Card, Brand Label, PVC)"
+    },
+    "description": {
+      "type": "string",
+      "description": "Quality / description text"
+    },
+    "size_spec": {
+      "type": "string",
+      "description": "Size specification"
+    },
+    "default_wastage": {
+      "type": "number",
+      "description": "Default wastage percentage",
+      "default": 5
+    },
+    "default_multiplier": {
+      "type": "number",
+      "description": "Default quantity multiplier",
+      "default": 1
+    },
+    "unit": {
+      "type": "string",
+      "enum": [
+        "Pcs",
+        "Meters",
+        "Kgs",
+        "Rolls",
+        "Dozens",
+        "Gross",
+        "Sets"
+      ],
+      "default": "Pcs"
+    }
+  },
+  "required": [
+    "template_name",
+    "category",
+    "type"
+  ]
+}

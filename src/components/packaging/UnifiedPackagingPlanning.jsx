@@ -7,6 +7,17 @@ import { Save, Plus, Trash2, Upload, Download, Printer } from "lucide-react";
 import { jsPDF } from "jspdf";
 
 // splitDescSize tabs show two columns: Description + Size (instead of one quality column)
+// Category map: tab name → AccessoryTemplate category value
+const TAB_CATEGORY_MAP = {
+  Labels: "Label",
+  Accessories: "Accessory",
+  "Insert Card": "Insert Card",
+  Polybag: "Polybag",
+  Stiffener: "Stiffener",
+  Carton: "Carton",
+  Sticker: "Sticker",
+};
+
 const TAB_CONFIG = {
   Labels: {
     category: "Label",
@@ -104,15 +115,39 @@ const calcInclWastageWithMultiplier = (qty, wastage, multiplier) =>
   Math.ceil((qty || 0) * (parseFloat(multiplier) || 1) * (1 + (parseFloat(wastage) || 0) / 100));
 
 // ─── Article block ────────────────────────────────────────────────────────────
-function ArticleBlock({ art, cfg, rows, onChange, cartonSize }) {
+function ArticleBlock({ art, cfg, rows, onChange, cartonSize, templates = [] }) {
   const qty = art.order_quantity || 0;
   const artRows = rows[art.id] || [defaultRow(cfg)];
 
   const add = () => {
     const newRow = defaultRow(cfg);
-    // Auto-fill carton size for Carton tab
     if (cfg.autoFillSize && cartonSize) newRow.size = cartonSize;
     onChange(art.id, [...artRows, newRow]);
+  };
+
+  const applyTemplate = (tplId) => {
+    if (!tplId) return;
+    const tpl = templates.find(t => t.id === tplId);
+    if (!tpl) return;
+    const newRow = {
+      ...defaultRow(cfg),
+      type: tpl.type || cfg.typeOptions[0],
+      quality: tpl.description || "",
+      description: tpl.description || "",
+      size: tpl.size_spec || "",
+      wastage_percent: tpl.default_wastage ?? cfg.defaultWastage,
+      multiplier: tpl.default_multiplier ?? 1,
+      existing_id: null,
+    };
+    if (cfg.autoFillSize && cartonSize) newRow.size = cartonSize;
+    const emptyIdx = artRows.findIndex(r => !r.quality && !r.description && (!r.type || cfg.typeOptions.indexOf(r.type) === 0));
+    if (emptyIdx >= 0) {
+      const updated = [...artRows];
+      updated[emptyIdx] = newRow;
+      onChange(art.id, updated);
+    } else {
+      onChange(art.id, [...artRows, newRow]);
+    }
   };
   const remove = (idx) => onChange(art.id, artRows.filter((_, i) => i !== idx));
   const update = (idx, field, val) => onChange(art.id, artRows.map((r, i) => i === idx ? { ...r, [field]: val } : r));
@@ -216,10 +251,22 @@ function ArticleBlock({ art, cfg, rows, onChange, cartonSize }) {
           ))}
         </tbody>
       </table>
-      <div className="px-3 py-1.5 bg-gray-50 border-t border-gray-200">
+      <div className="px-3 py-1.5 bg-gray-50 border-t border-gray-200 flex items-center gap-3">
         <button onClick={add} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs font-medium">
           <Plus className="h-3 w-3" /> Add Row
         </button>
+        {templates.length > 0 && (
+          <select
+            className="h-6 text-xs border border-gray-300 rounded px-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 text-gray-600"
+            defaultValue=""
+            onChange={e => { applyTemplate(e.target.value); e.target.value = ""; }}
+          >
+            <option value="" disabled>+ Apply template…</option>
+            {templates.map(t => (
+              <option key={t.id} value={t.id}>{t.template_name} — {t.type}</option>
+            ))}
+          </select>
+        )}
       </div>
     </div>
   );
@@ -228,6 +275,10 @@ function ArticleBlock({ art, cfg, rows, onChange, cartonSize }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function UnifiedPackagingPlanning() {
   const queryClient = useQueryClient();
+  const { data: allTemplates = [] } = useQuery({
+    queryKey: ["accessoryTemplates"],
+    queryFn: () => base44.entities.AccessoryTemplate.list("-created_date", 500),
+  });
   const [selectedPoId, setSelectedPoId] = useState("");
   const [subTab, setSubTab] = useState("Labels");
   const [saving, setSaving] = useState(false);
@@ -918,6 +969,7 @@ export default function UnifiedPackagingPlanning() {
                 rows={allRows[subTab] || {}}
                 onChange={(artId, rows) => handleChange(subTab, artId, rows)}
                 cartonSize={getCartonSize(art)}
+                templates={allTemplates.filter(t => t.category === TAB_CATEGORY_MAP[subTab])}
               />
             ))}
           </div>
