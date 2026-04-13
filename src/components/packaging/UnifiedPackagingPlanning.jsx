@@ -326,7 +326,7 @@ export default function UnifiedPackagingPlanning() {
           // Insert Card: item_description = quality (description text), size_spec = type (card sub-type)
           // All other tabs: item_description = type, size_spec = quality
           item_description: cfg.category === "Insert Card"
-            ? (row.quality || row.type || "")
+            ? (row.quality || "")
             : row.type,
           size_spec: cfg.category === "Insert Card"
             ? (row.type || "")
@@ -404,7 +404,7 @@ export default function UnifiedPackagingPlanning() {
             article_code: sibArt.article_code,
             category: cfg.category,
             item_description: cfg.category === "Insert Card"
-              ? (row.quality || row.type || "")
+              ? (row.quality || "")
               : row.type,
             size_spec: cfg.category === "Insert Card"
               ? (row.type || "")
