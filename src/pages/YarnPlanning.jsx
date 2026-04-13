@@ -10,10 +10,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import StatusBadge from "../components/shared/StatusBadge";
 import YarnFormDialog from "../components/yarn/YarnFormDialog";
 
-// Yarn kg from fabric: Total Meters × GSM × Width(cm) / 1000
+// Yarn kg from fabric: Total Meters × GSM × Width(cm) / 39.37 / 1000
 function fabricToYarnKg(total_meters, gsm, width_cm) {
   if (!total_meters || !gsm || !width_cm) return 0;
-  return +(total_meters * gsm * width_cm / 1000).toFixed(2);
+  return +(total_meters * gsm * width_cm / 39.37 / 1000).toFixed(2);
 }
 
 export default function YarnPlanning() {
@@ -200,7 +200,7 @@ export default function YarnPlanning() {
               </table>
             </div>
             <p className="text-xs text-blue-600 mt-2 italic">
-              Formula: Yarn (kg) = Total Meters × GSM × Width(cm) / 1000
+              Formula: Yarn (kg) = Total Meters × GSM × Width(cm) / 39.37 / 1000
             </p>
           </CardContent>
         </Card>
