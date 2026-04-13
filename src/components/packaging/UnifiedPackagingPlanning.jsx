@@ -268,6 +268,66 @@ export default function UnifiedPackagingPlanning() {
     if (!activePo) return;
     setSaving(true);
     await runOps(buildOpsForTab(tabToSave));
+
+    // ── Auto-propagate to identical articles in other POs ──────────────────
+    const cfg = TAB_CONFIG[tabToSave];
+    // Fetch all articles and all existing accessory items across all POs
+    const [allArticles, allAccessoryItems] = await Promise.all([
+      base44.entities.Article.list("-created_date", 1000),
+      base44.entities.AccessoryItem.list("-created_date", 2000),
+    ]);
+
+    const propagateOps = [];
+    for (const art of poArticles) {
+      if (!art.article_code) continue;
+      const savedRows = allRows[tabToSave]?.[art.id] || [];
+      if (savedRows.every(r => !r.type && !r.quality)) continue;
+
+      // Find same article_code in other POs
+      const sibling = allArticles.filter(
+        a => a.article_code === art.article_code && a.po_id !== activePo.id
+      );
+
+      for (const sibArt of sibling) {
+        // Skip if this sibling already has accessory items for this category
+        const alreadyHas = allAccessoryItems.some(
+          i => i.po_id === sibArt.po_id && i.article_code === sibArt.article_code && i.category === cfg.category
+        );
+        if (alreadyHas) continue;
+
+        // Get the PO for this sibling to fill po_number
+        const sibPo = pos.find(p => p.id === sibArt.po_id);
+        const sibQty = sibArt.order_quantity || 0;
+
+        for (const row of savedRows) {
+          if (!row.type && !row.quality) continue;
+          propagateOps.push(base44.entities.AccessoryItem.create({
+            po_id: sibArt.po_id,
+            po_number: sibPo?.po_number || "",
+            article_name: sibArt.article_name,
+            article_code: sibArt.article_code,
+            category: cfg.category,
+            item_description: row.type,
+            size_spec: row.quality,
+            quantity_required: calcInclWastageWithMultiplier(sibQty, row.wastage_percent, row.multiplier || 1),
+            wastage_percent: parseFloat(row.wastage_percent) || 0,
+            multiplier: parseFloat(row.multiplier) || 1,
+            pc_ean_code: row.pc_ean_code || "",
+            carton_ean_code: row.carton_ean_code || "",
+            unit: "Pcs", status: "Planned",
+          }));
+        }
+      }
+    }
+
+    if (propagateOps.length > 0) {
+      const BATCH = 3;
+      for (let i = 0; i < propagateOps.length; i += BATCH) {
+        await Promise.all(propagateOps.slice(i, i + BATCH));
+      }
+      queryClient.invalidateQueries({ queryKey: ["accessoryItems"] });
+    }
+
     setSaving(false);
   };
 
