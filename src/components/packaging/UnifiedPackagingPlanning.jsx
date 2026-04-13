@@ -94,7 +94,6 @@ function ArticleBlock({ art, cfg, rows, onChange }) {
 
   return (
     <div className="rounded border border-gray-300 shadow-sm overflow-hidden">
-      {/* Article header */}
       <div className="px-3 py-2 text-xs font-bold text-white flex justify-between items-center" style={{ backgroundColor: "#1F3864" }}>
         <span>{art.article_name}{art.article_code ? ` (${art.article_code})` : ""}</span>
         <span className="font-normal opacity-80">Order Qty: {qty.toLocaleString()}</span>
@@ -184,8 +183,8 @@ export default function UnifiedPackagingPlanning() {
   const [subTab, setSubTab] = useState("Labels");
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef(null);
+  const initKeyRef = useRef(null);
 
-  // allRows[tabName][artId] = [ { type, quality, wastage_percent, existing_id } ]
   const [allRows, setAllRows] = useState({});
 
   const { data: pos = [] } = useQuery({ queryKey: ["purchaseOrders"], queryFn: () => base44.entities.PurchaseOrder.list() });
@@ -195,8 +194,16 @@ export default function UnifiedPackagingPlanning() {
   const activePo = selectedPoId ? pos.find(p => p.id === selectedPoId) : pos[0];
   const poArticles = activePo ? articles.filter(a => a.po_id === activePo.id) : [];
 
+  // Stable keys from IDs only — avoids JSON.stringify re-renders
+  const poArticleIds = poArticles.map(a => a.id).sort().join(',');
+  const itemIds = existingItems.map(i => i.id).sort().join(',');
+
   useEffect(() => {
     if (!activePo || poArticles.length === 0) return;
+    const key = `${activePo.id}|${poArticleIds}|${itemIds}`;
+    if (initKeyRef.current === key) return;
+    initKeyRef.current = key;
+
     const init = {};
     SUB_TABS.forEach(tab => {
       const cfg = TAB_CONFIG[tab];
@@ -220,13 +227,12 @@ export default function UnifiedPackagingPlanning() {
     });
     setAllRows(init);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePo?.id, JSON.stringify(existingItems.map(i => i.id + i.size_spec + i.item_description + i.wastage_percent + i.multiplier + i.pc_ean_code + i.carton_ean_code))]);
+  }, [activePo?.id, poArticleIds, itemIds]);
 
   const handleChange = (tab, artId, newRows) => {
     setAllRows(prev => ({ ...prev, [tab]: { ...prev[tab], [artId]: newRows } }));
   };
 
-  // ─── Upload: parse CSV pre-fill ──────────────────────────────────────────
   const handleUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -265,7 +271,6 @@ export default function UnifiedPackagingPlanning() {
     e.target.value = "";
   };
 
-  // ─── Download current data as CSV ─────────────────────────────────────────
   const handleDownloadCSV = () => {
     const rows = [["PO Number", "Article Name", "Article Code", "Category", "Type", "Quality", "Order Qty", "Wastage %", "Incl. Wastage Qty"]];
     SUB_TABS.forEach(tab => {
@@ -291,7 +296,6 @@ export default function UnifiedPackagingPlanning() {
     a.click(); URL.revokeObjectURL(url);
   };
 
-  // ─── Download PDF ──────────────────────────────────────────────────────────
   const handleDownloadPDF = () => {
     const doc = new jsPDF({ orientation: "landscape", format: "a4" });
     doc.setFillColor(31, 56, 100); doc.rect(0, 0, 297, 22, "F");
@@ -336,7 +340,6 @@ export default function UnifiedPackagingPlanning() {
     doc.save(`Accessories_${activePo?.po_number || "Planning"}.pdf`);
   };
 
-  // ─── Print ─────────────────────────────────────────────────────────────────
   const handlePrint = () => {
     const rows = [];
     SUB_TABS.forEach(tab => {
@@ -388,8 +391,7 @@ export default function UnifiedPackagingPlanning() {
         }
       }
     }
-    // Process in batches of 5 to avoid rate limits
-    const BATCH = 5;
+    const BATCH = 3;
     for (let i = 0; i < ops.length; i += BATCH) {
       await Promise.all(ops.slice(i, i + BATCH));
     }
@@ -399,7 +401,6 @@ export default function UnifiedPackagingPlanning() {
 
   return (
     <div className="space-y-4">
-      {/* PO selector + actions */}
       <div className="flex items-center gap-2 flex-wrap">
         <Select value={selectedPoId || activePo?.id || ""} onValueChange={setSelectedPoId}>
           <SelectTrigger className="w-72 h-8 text-xs"><SelectValue placeholder="Select Purchase Order" /></SelectTrigger>
@@ -425,7 +426,6 @@ export default function UnifiedPackagingPlanning() {
         </div>
       </div>
 
-      {/* Sub-tabs */}
       <div className="flex gap-0 border-b border-gray-200 overflow-x-auto">
         {SUB_TABS.map(t => (
           <button key={t} onClick={() => setSubTab(t)}
@@ -441,65 +441,64 @@ export default function UnifiedPackagingPlanning() {
         <div className="py-12 text-center text-muted-foreground text-sm">No articles found for this PO.</div>
       ) : (
         <>
-        <div className="space-y-3">
-          {poArticles.map(art => (
-            <ArticleBlock
-              key={art.id}
-              art={art}
-              cfg={TAB_CONFIG[subTab]}
-              rows={allRows[subTab] || {}}
-              onChange={(artId, rows) => handleChange(subTab, artId, rows)}
-            />
-          ))}
-        </div>
-        {/* Per-item-type totals footer */}
-        {(() => {
-          const cfg = TAB_CONFIG[subTab];
-          const typeTotals = {};
-          poArticles.forEach(art => {
-            const artRows = allRows[subTab]?.[art.id] || [];
-            artRows.forEach(row => {
-              if (!row.type) return;
-              if (!typeTotals[row.type]) typeTotals[row.type] = { orderQty: 0, inclWastage: 0 };
-              typeTotals[row.type].orderQty += (art.order_quantity || 0);
-              typeTotals[row.type].inclWastage += calcInclWastageWithMultiplier(art.order_quantity || 0, row.wastage_percent, row.multiplier || 1);
+          <div className="space-y-3">
+            {poArticles.map(art => (
+              <ArticleBlock
+                key={art.id}
+                art={art}
+                cfg={TAB_CONFIG[subTab]}
+                rows={allRows[subTab] || {}}
+                onChange={(artId, rows) => handleChange(subTab, artId, rows)}
+              />
+            ))}
+          </div>
+          {(() => {
+            const cfg = TAB_CONFIG[subTab];
+            const typeTotals = {};
+            poArticles.forEach(art => {
+              const artRows = allRows[subTab]?.[art.id] || [];
+              artRows.forEach(row => {
+                if (!row.type) return;
+                if (!typeTotals[row.type]) typeTotals[row.type] = { orderQty: 0, inclWastage: 0 };
+                typeTotals[row.type].orderQty += (art.order_quantity || 0);
+                typeTotals[row.type].inclWastage += calcInclWastageWithMultiplier(art.order_quantity || 0, row.wastage_percent, row.multiplier || 1);
+              });
             });
-          });
-          const entries = Object.entries(typeTotals);
-          if (entries.length === 0) return null;
-          return (
-            <div className="rounded border border-gray-300 overflow-hidden shadow-sm">
-              <div className="px-3 py-2 text-xs font-bold text-white" style={{ backgroundColor: "#1F3864" }}>
-                {subTab.toUpperCase()} — TOTALS BY TYPE
-              </div>
-              <table className="w-full text-xs border-collapse">
-                <thead>
-                  <tr style={{ backgroundColor: "#EBF0FA" }}>
-                    <th className="border border-gray-300 px-3 py-1.5 text-left">{cfg.typeLabel}</th>
-                    <th className="border border-gray-300 px-3 py-1.5 text-center w-32">Total Order Qty</th>
-                    <th className="border border-gray-300 px-3 py-1.5 text-center w-40" style={{ backgroundColor: "#FFF2CC" }}>Total Incl. Wastage Qty</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {entries.map(([type, totals], idx) => (
-                    <tr key={type} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#F9FAFB" }}>
-                      <td className="border border-gray-300 px-3 py-1.5 font-medium">{type}</td>
-                      <td className="border border-gray-300 px-3 py-1.5 text-center">{totals.orderQty.toLocaleString()}</td>
-                      <td className="border border-gray-300 px-3 py-1.5 text-center font-bold" style={{ backgroundColor: "#FFF9E6" }}>{totals.inclWastage.toLocaleString()}</td>
+            const entries = Object.entries(typeTotals);
+            if (entries.length === 0) return null;
+            return (
+              <div className="rounded border border-gray-300 overflow-hidden shadow-sm">
+                <div className="px-3 py-2 text-xs font-bold text-white" style={{ backgroundColor: "#1F3864" }}>
+                  {subTab.toUpperCase()} — TOTALS BY TYPE
+                </div>
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr style={{ backgroundColor: "#EBF0FA" }}>
+                      <th className="border border-gray-300 px-3 py-1.5 text-left">{cfg.typeLabel}</th>
+                      <th className="border border-gray-300 px-3 py-1.5 text-center w-32">Total Order Qty</th>
+                      <th className="border border-gray-300 px-3 py-1.5 text-center w-40" style={{ backgroundColor: "#FFF2CC" }}>Total Incl. Wastage Qty</th>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr style={{ backgroundColor: "#1F3864", color: "white", fontWeight: "bold" }}>
-                    <td className="border border-gray-400 px-3 py-1.5">GRAND TOTAL</td>
-                    <td className="border border-gray-400 px-3 py-1.5 text-center">{entries.reduce((s, [, t]) => s + t.orderQty, 0).toLocaleString()}</td>
-                    <td className="border border-gray-400 px-3 py-1.5 text-center" style={{ backgroundColor: "#E6B800", color: "#1a1a1a" }}>{entries.reduce((s, [, t]) => s + t.inclWastage, 0).toLocaleString()}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          );
-        })()}
+                  </thead>
+                  <tbody>
+                    {entries.map(([type, totals], idx) => (
+                      <tr key={type} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#F9FAFB" }}>
+                        <td className="border border-gray-300 px-3 py-1.5 font-medium">{type}</td>
+                        <td className="border border-gray-300 px-3 py-1.5 text-center">{totals.orderQty.toLocaleString()}</td>
+                        <td className="border border-gray-300 px-3 py-1.5 text-center font-bold" style={{ backgroundColor: "#FFF9E6" }}>{totals.inclWastage.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ backgroundColor: "#1F3864", color: "white", fontWeight: "bold" }}>
+                      <td className="border border-gray-400 px-3 py-1.5">GRAND TOTAL</td>
+                      <td className="border border-gray-400 px-3 py-1.5 text-center">{entries.reduce((s, [, t]) => s + t.orderQty, 0).toLocaleString()}</td>
+                      <td className="border border-gray-400 px-3 py-1.5 text-center" style={{ backgroundColor: "#E6B800", color: "#1a1a1a" }}>{entries.reduce((s, [, t]) => s + t.inclWastage, 0).toLocaleString()}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            );
+          })()}
         </>
       )}
     </div>
