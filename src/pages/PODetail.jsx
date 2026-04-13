@@ -68,22 +68,49 @@ export default function PODetail() {
   const handleCSVUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const text = await file.text();
-    const lines = text.split("\n").map(l => l.split(",").map(c => c.replace(/^"|"$/g, "").trim()));
-    const headers = lines[0].map(h => h.toLowerCase().replace(/\s+/g, "_"));
+    const errors = [];
     const records = [];
-    for (const row of lines.slice(1)) {
-      if (row.length < 2 || !row[0]) continue;
-      const rec = { po_id: poId, po_number: po?.po_number || "", price_status: "Pending", unit: "Pieces" };
-      headers.forEach((h, i) => { if (row[i] !== undefined && row[i] !== "") rec[h] = row[i]; });
-      NUM_FIELDS.forEach(f => { if (rec[f] !== undefined) rec[f] = Number(rec[f]) || 0; });
-      if (rec.item_code && rec.quantity) records.push(rec);
-    }
-    if (records.length > 0) {
-      for (let i = 0; i < records.length; i += 5) {
-        await base44.entities.POItem.bulkCreate(records.slice(i, i + 5));
+    try {
+      const text = await file.text();
+      const lines = text.split("\n").map(l => l.split(",").map(c => c.replace(/^"|"$/g, "").trim()));
+      if (lines.length < 2) { alert("CSV file is empty or has no data rows."); e.target.value = ""; return; }
+      const headers = lines[0].map(h => h.toLowerCase().replace(/\s+/g, "_"));
+      if (!headers.includes("item_code")) { alert("CSV must have an 'item_code' column."); e.target.value = ""; return; }
+      if (!headers.includes("quantity")) { alert("CSV must have a 'quantity' column."); e.target.value = ""; return; }
+
+      lines.slice(1).forEach((row, idx) => {
+        const lineNum = idx + 2;
+        if (row.length < 2 || !row[0]) return; // skip blank rows
+        try {
+          const rec = { po_id: poId, po_number: po?.po_number || "", price_status: "Pending", unit: "Pieces" };
+          headers.forEach((h, i) => { if (row[i] !== undefined && row[i] !== "") rec[h] = row[i]; });
+          NUM_FIELDS.forEach(f => { if (rec[f] !== undefined) rec[f] = Number(rec[f]); });
+
+          // Validation
+          if (!rec.item_code) { errors.push(`Row ${lineNum}: missing item_code`); return; }
+          const qty = Number(rec.quantity);
+          if (!qty || isNaN(qty) || qty <= 0) { errors.push(`Row ${lineNum}: invalid quantity "${rec.quantity}"`); return; }
+          if (rec.unit_price !== undefined && isNaN(Number(rec.unit_price))) { errors.push(`Row ${lineNum}: invalid unit_price`); return; }
+
+          rec.quantity = qty;
+          records.push(rec);
+        } catch (rowErr) {
+          errors.push(`Row ${lineNum}: unexpected error — ${rowErr.message}`);
+        }
+      });
+
+      if (records.length > 0) {
+        for (let i = 0; i < records.length; i += 5) {
+          await base44.entities.POItem.bulkCreate(records.slice(i, i + 5));
+        }
+        queryClient.invalidateQueries({ queryKey: ["poItems", poId] });
       }
-      queryClient.invalidateQueries({ queryKey: ["poItems", poId] });
+
+      const summary = [`✅ ${records.length} item(s) imported successfully.`];
+      if (errors.length > 0) summary.push(`\n⚠️ ${errors.length} row(s) skipped:\n${errors.join("\n")}`);
+      alert(summary.join(""));
+    } catch (err) {
+      alert(`CSV upload failed: ${err.message}`);
     }
     e.target.value = "";
   };
