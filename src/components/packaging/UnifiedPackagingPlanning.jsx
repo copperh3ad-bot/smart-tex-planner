@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Save, Plus, Trash2, Upload, Download, Printer } from "lucide-react";
 import { jsPDF } from "jspdf";
 
+// splitDescSize tabs show two columns: Description + Size (instead of one quality column)
 const TAB_CONFIG = {
   Labels: {
     category: "Label",
@@ -42,24 +43,34 @@ const TAB_CONFIG = {
     category: "Polybag",
     typeOptions: ["PVC", "PP", "PE", "LDPE", "OPP"],
     typeLabel: "Polybag Type",
-    qualityLabel: "Size / Specs",
-    qualityPlaceholder: "e.g. 40x60cm, 50 micron, printed",
+    splitDescSize: true,
+    descLabel: "Description",
+    descPlaceholder: "e.g. 50 micron, printed",
+    sizeLabel: "Size",
+    sizePlaceholder: "e.g. 40x60cm",
     defaultWastage: 3,
   },
   Stiffener: {
     category: "Stiffener",
     typeOptions: ["Cardboard", "PVC Sheet", "Foam Board", "MDF", "Corrugated", "Other"],
     typeLabel: "Material Type",
-    qualityLabel: "Size / Specs",
-    qualityPlaceholder: "e.g. 20x30cm, 2mm thick",
+    splitDescSize: true,
+    descLabel: "Description",
+    descPlaceholder: "e.g. 2mm thick, white",
+    sizeLabel: "Size",
+    sizePlaceholder: "e.g. 20x30cm",
     defaultWastage: 3,
   },
   Carton: {
     category: "Carton",
     typeOptions: ["Printed", "Plain", "Brown", "White"],
     typeLabel: "Carton Type",
-    qualityLabel: "Quality / Size",
-    qualityPlaceholder: "e.g. 5-ply B-flute, 56x28x27cm",
+    splitDescSize: true,
+    descLabel: "Description",
+    descPlaceholder: "e.g. 5-ply B-flute",
+    sizeLabel: "Size (LxWxH cm)",
+    sizePlaceholder: "e.g. 56x28x27",
+    autoFillSize: true, // auto-filled from PO carton dimensions
     defaultWastage: 2,
   },
   Sticker: {
@@ -78,14 +89,31 @@ const SUB_TABS = Object.keys(TAB_CONFIG);
 const inputCls = "w-full text-xs border border-gray-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400";
 const numInputCls = "w-16 text-center text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400";
 const calcInclWastage = (qty, wastage) => Math.ceil((qty || 0) * (1 + (parseFloat(wastage) || 0) / 100));
-const defaultRow = (cfg) => ({ type: cfg.typeOptions[0], quality: "", wastage_percent: cfg.defaultWastage, existing_id: null, pc_ean_code: "", carton_ean_code: "", multiplier: 1 });
-const calcInclWastageWithMultiplier = (qty, wastage, multiplier) => Math.ceil((qty || 0) * (parseFloat(multiplier) || 1) * (1 + (parseFloat(wastage) || 0) / 100));
+const defaultRow = (cfg) => ({
+  type: cfg.typeOptions[0],
+  quality: "",
+  description: "",
+  size: "",
+  wastage_percent: cfg.defaultWastage,
+  existing_id: null,
+  pc_ean_code: "",
+  carton_ean_code: "",
+  multiplier: 1,
+});
+const calcInclWastageWithMultiplier = (qty, wastage, multiplier) =>
+  Math.ceil((qty || 0) * (parseFloat(multiplier) || 1) * (1 + (parseFloat(wastage) || 0) / 100));
 
-function ArticleBlock({ art, cfg, rows, onChange }) {
+// ─── Article block ────────────────────────────────────────────────────────────
+function ArticleBlock({ art, cfg, rows, onChange, cartonSize }) {
   const qty = art.order_quantity || 0;
   const artRows = rows[art.id] || [defaultRow(cfg)];
 
-  const add = () => onChange(art.id, [...artRows, defaultRow(cfg)]);
+  const add = () => {
+    const newRow = defaultRow(cfg);
+    // Auto-fill carton size for Carton tab
+    if (cfg.autoFillSize && cartonSize) newRow.size = cartonSize;
+    onChange(art.id, [...artRows, newRow]);
+  };
   const remove = (idx) => onChange(art.id, artRows.filter((_, i) => i !== idx));
   const update = (idx, field, val) => onChange(art.id, artRows.map((r, i) => i === idx ? { ...r, [field]: val } : r));
 
@@ -99,7 +127,14 @@ function ArticleBlock({ art, cfg, rows, onChange }) {
         <thead>
           <tr style={{ backgroundColor: "#EBF0FA" }}>
             <th className="border border-gray-300 px-2 py-1.5 text-left w-44">{cfg.typeLabel}</th>
-            <th className="border border-gray-300 px-2 py-1.5 text-left">{cfg.qualityLabel}</th>
+            {cfg.splitDescSize ? (
+              <>
+                <th className="border border-gray-300 px-2 py-1.5 text-left">{cfg.descLabel}</th>
+                <th className="border border-gray-300 px-2 py-1.5 text-left w-36" style={{ backgroundColor: "#E8F5E9" }}>{cfg.sizeLabel}</th>
+              </>
+            ) : (
+              <th className="border border-gray-300 px-2 py-1.5 text-left">{cfg.qualityLabel}</th>
+            )}
             <th className="border border-gray-300 px-2 py-1.5 text-center w-20">Qty</th>
             {cfg.showMultiplier && <th className="border border-gray-300 px-2 py-1.5 text-center w-24" style={{ backgroundColor: "#F3E5F5" }}>Multiplier</th>}
             <th className="border border-gray-300 px-2 py-1.5 text-center w-24">Wastage %</th>
@@ -117,10 +152,29 @@ function ArticleBlock({ art, cfg, rows, onChange }) {
                   {cfg.typeOptions.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </td>
-              <td className="border border-gray-300 px-1.5 py-1">
-                <input className={inputCls} placeholder={cfg.qualityPlaceholder} value={row.quality}
-                  onChange={e => update(idx, "quality", e.target.value)} />
-              </td>
+              {cfg.splitDescSize ? (
+                <>
+                  <td className="border border-gray-300 px-1.5 py-1">
+                    <input className={inputCls} placeholder={cfg.descPlaceholder} value={row.description || ""}
+                      onChange={e => update(idx, "description", e.target.value)} />
+                  </td>
+                  <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#F1F8E9" }}>
+                    <input
+                      className={inputCls}
+                      placeholder={cfg.sizePlaceholder}
+                      value={row.size || ""}
+                      onChange={e => update(idx, "size", e.target.value)}
+                      readOnly={cfg.autoFillSize && !!cartonSize}
+                      style={cfg.autoFillSize && cartonSize ? { backgroundColor: "#E8F5E9", cursor: "default" } : {}}
+                    />
+                  </td>
+                </>
+              ) : (
+                <td className="border border-gray-300 px-1.5 py-1">
+                  <input className={inputCls} placeholder={cfg.qualityPlaceholder} value={row.quality || ""}
+                    onChange={e => update(idx, "quality", e.target.value)} />
+                </td>
+              )}
               <td className="border border-gray-300 px-2 py-1 text-center font-medium">{qty.toLocaleString()}</td>
               {cfg.showMultiplier && (
                 <td className="border border-gray-300 px-1.5 py-1 text-center" style={{ backgroundColor: "#FDF6FF" }}>
@@ -128,7 +182,7 @@ function ArticleBlock({ art, cfg, rows, onChange }) {
                     className="w-14 text-center text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-purple-400"
                     value={row.multiplier || 1}
                     onChange={e => update(idx, "multiplier", parseFloat(e.target.value))}>
-                    {Array.from({length: 20}, (_, i) => i + 1).map(m => <option key={m} value={m}>x{m}</option>)}
+                    {Array.from({ length: 20 }, (_, i) => i + 1).map(m => <option key={m} value={m}>x{m}</option>)}
                   </select>
                 </td>
               )}
@@ -171,6 +225,7 @@ function ArticleBlock({ art, cfg, rows, onChange }) {
   );
 }
 
+// ─── Main component ───────────────────────────────────────────────────────────
 export default function UnifiedPackagingPlanning() {
   const queryClient = useQueryClient();
   const [selectedPoId, setSelectedPoId] = useState("");
@@ -183,9 +238,25 @@ export default function UnifiedPackagingPlanning() {
   const { data: pos = [] } = useQuery({ queryKey: ["purchaseOrders"], queryFn: () => base44.entities.PurchaseOrder.list() });
   const { data: articles = [] } = useQuery({ queryKey: ["articles"], queryFn: () => base44.entities.Article.list() });
   const { data: existingItems = [] } = useQuery({ queryKey: ["accessoryItems"], queryFn: () => base44.entities.AccessoryItem.list("-created_date", 500) });
+  const { data: poItems = [] } = useQuery({ queryKey: ["poItems"], queryFn: () => base44.entities.POItem.list("-created_date", 500) });
 
   const activePo = selectedPoId ? pos.find(p => p.id === selectedPoId) : pos[0];
   const poArticles = activePo ? articles.filter(a => a.po_id === activePo.id) : [];
+
+  // Build carton size map: article_code → "LxWxH" from POItems of this PO
+  const cartonSizeMap = {};
+  if (activePo) {
+    poItems.filter(i => i.po_id === activePo.id).forEach(item => {
+      if (item.item_code && item.carton_length && item.carton_width && item.carton_height) {
+        cartonSizeMap[item.item_code.trim().toUpperCase()] = `${item.carton_length}x${item.carton_width}x${item.carton_height}`;
+      }
+    });
+  }
+
+  const getCartonSize = (art) => {
+    if (!art.article_code) return "";
+    return cartonSizeMap[art.article_code.trim().toUpperCase()] || "";
+  };
 
   const poArticleIds = poArticles.map(a => a.id).sort().join(',');
   const itemIds = existingItems.map(i => i.id).sort().join(',');
@@ -204,17 +275,25 @@ export default function UnifiedPackagingPlanning() {
         const existing = existingItems.filter(
           i => i.po_id === activePo.id && i.article_code === art.article_code && i.category === cfg.category
         );
-        init[tab][art.id] = existing.length > 0
-          ? existing.map(e => ({
-              type: e.item_description,
-              quality: e.size_spec || "",
-              wastage_percent: e.wastage_percent ?? cfg.defaultWastage,
-              multiplier: e.multiplier ?? 1,
-              pc_ean_code: e.pc_ean_code || "",
-              carton_ean_code: e.carton_ean_code || "",
-              existing_id: e.id
-            }))
-          : [defaultRow(cfg)];
+        if (existing.length > 0) {
+          init[tab][art.id] = existing.map(e => ({
+            type: e.item_description,
+            // For splitDescSize tabs: description stored in size_spec, size in color field
+            quality: cfg.splitDescSize ? "" : (e.size_spec || ""),
+            description: cfg.splitDescSize ? (e.size_spec || "") : "",
+            size: cfg.splitDescSize ? (e.color || "") : "",
+            wastage_percent: e.wastage_percent ?? cfg.defaultWastage,
+            multiplier: e.multiplier ?? 1,
+            pc_ean_code: e.pc_ean_code || "",
+            carton_ean_code: e.carton_ean_code || "",
+            existing_id: e.id,
+          }));
+        } else {
+          const row = defaultRow(cfg);
+          // Auto-fill carton size for Carton tab
+          if (cfg.autoFillSize) row.size = getCartonSize(art);
+          init[tab][art.id] = [row];
+        }
       });
     });
     setAllRows(init);
@@ -231,14 +310,19 @@ export default function UnifiedPackagingPlanning() {
     for (const art of poArticles) {
       const rows = allRows[tab]?.[art.id] || [];
       for (const row of rows) {
-        if (!row.type && !row.quality) continue;
+        const hasContent = cfg.splitDescSize
+          ? (row.description || row.size)
+          : (row.type || row.quality);
+        if (!hasContent) continue;
         const qty = art.order_quantity || 0;
         const data = {
           po_id: activePo.id, po_number: activePo.po_number,
           article_name: art.article_name, article_code: art.article_code,
           category: cfg.category,
           item_description: row.type,
-          size_spec: row.quality,
+          // splitDescSize: description → size_spec, size → color
+          size_spec: cfg.splitDescSize ? (row.description || "") : (row.quality || ""),
+          color: cfg.splitDescSize ? (row.size || "") : "",
           quantity_required: calcInclWastageWithMultiplier(qty, row.wastage_percent, row.multiplier || 1),
           wastage_percent: parseFloat(row.wastage_percent) || 0,
           multiplier: parseFloat(row.multiplier) || 1,
@@ -271,7 +355,6 @@ export default function UnifiedPackagingPlanning() {
 
     // ── Auto-propagate to identical articles in other POs ──────────────────
     const cfg = TAB_CONFIG[tabToSave];
-    // Fetch all articles and all existing accessory items across all POs
     const [allArticles, allAccessoryItems] = await Promise.all([
       base44.entities.Article.list("-created_date", 1000),
       base44.entities.AccessoryItem.list("-created_date", 2000),
@@ -281,26 +364,29 @@ export default function UnifiedPackagingPlanning() {
     for (const art of poArticles) {
       if (!art.article_code) continue;
       const savedRows = allRows[tabToSave]?.[art.id] || [];
-      if (savedRows.every(r => !r.type && !r.quality)) continue;
+      if (savedRows.every(r => !r.type && !r.quality && !r.description)) continue;
 
-      // Find same article_code in other POs
-      const sibling = allArticles.filter(
+      const siblings = allArticles.filter(
         a => a.article_code === art.article_code && a.po_id !== activePo.id
       );
 
-      for (const sibArt of sibling) {
-        // Skip if this sibling already has accessory items for this category
+      for (const sibArt of siblings) {
         const alreadyHas = allAccessoryItems.some(
           i => i.po_id === sibArt.po_id && i.article_code === sibArt.article_code && i.category === cfg.category
         );
         if (alreadyHas) continue;
 
-        // Get the PO for this sibling to fill po_number
         const sibPo = pos.find(p => p.id === sibArt.po_id);
         const sibQty = sibArt.order_quantity || 0;
+        // Get carton size for sibling article
+        const sibCartonSize = cfg.autoFillSize
+          ? (poItems.filter(i => i.po_id === sibArt.po_id && i.item_code?.toUpperCase() === sibArt.article_code?.toUpperCase())
+              .map(i => i.carton_length && i.carton_width && i.carton_height ? `${i.carton_length}x${i.carton_width}x${i.carton_height}` : "")[0] || "")
+          : "";
 
         for (const row of savedRows) {
-          if (!row.type && !row.quality) continue;
+          const hasContent = cfg.splitDescSize ? (row.description || row.size) : (row.type || row.quality);
+          if (!hasContent) continue;
           propagateOps.push(base44.entities.AccessoryItem.create({
             po_id: sibArt.po_id,
             po_number: sibPo?.po_number || "",
@@ -308,7 +394,8 @@ export default function UnifiedPackagingPlanning() {
             article_code: sibArt.article_code,
             category: cfg.category,
             item_description: row.type,
-            size_spec: row.quality,
+            size_spec: cfg.splitDescSize ? (row.description || "") : (row.quality || ""),
+            color: cfg.splitDescSize ? (sibCartonSize || row.size || "") : "",
             quantity_required: calcInclWastageWithMultiplier(sibQty, row.wastage_percent, row.multiplier || 1),
             wastage_percent: parseFloat(row.wastage_percent) || 0,
             multiplier: parseFloat(row.multiplier) || 1,
@@ -360,10 +447,17 @@ export default function UnifiedPackagingPlanning() {
         const art = poArticles.find(a => a.article_code === artCode || a.article_name === artCode);
         const tabEntry = Object.entries(TAB_CONFIG).find(([, c]) => c.category.toLowerCase() === cat.toLowerCase());
         if (!art || !tabEntry) return;
-        const [tab] = tabEntry;
+        const [tab, tabCfg] = tabEntry;
         const existing = newRows[tab][art.id];
-        const emptyIdx = existing.findIndex(r => !r.quality && !r.type.includes(" "));
-        const newRow = { type: type || TAB_CONFIG[tab].typeOptions[0], quality, wastage_percent: parseFloat(wastage) || TAB_CONFIG[tab].defaultWastage, existing_id: null };
+        const emptyIdx = existing.findIndex(r => !r.quality && !r.description && !r.type.includes(" "));
+        const newRow = {
+          type: type || tabCfg.typeOptions[0],
+          quality: tabCfg.splitDescSize ? "" : quality,
+          description: tabCfg.splitDescSize ? quality : "",
+          size: tabCfg.splitDescSize ? getCol(row, "size") : "",
+          wastage_percent: parseFloat(wastage) || tabCfg.defaultWastage,
+          existing_id: null,
+        };
         if (emptyIdx >= 0) existing[emptyIdx] = newRow;
         else existing.push(newRow);
       });
@@ -378,16 +472,17 @@ export default function UnifiedPackagingPlanning() {
   };
 
   const handleDownloadCSV = () => {
-    const rows = [["PO Number", "Article Name", "Article Code", "Category", "Type", "Quality", "Order Qty", "Wastage %", "Incl. Wastage Qty"]];
+    const rows = [["PO Number", "Article Name", "Article Code", "Category", "Type", "Description", "Size", "Order Qty", "Wastage %", "Incl. Wastage Qty"]];
     SUB_TABS.forEach(tab => {
       const cfg = TAB_CONFIG[tab];
       poArticles.forEach(art => {
         const artRows = allRows[tab]?.[art.id] || [];
         artRows.forEach(row => {
-          if (!row.type && !row.quality) return;
           rows.push([
             activePo?.po_number || "", art.article_name, art.article_code || "",
-            cfg.category, row.type, row.quality,
+            cfg.category, row.type,
+            cfg.splitDescSize ? (row.description || "") : (row.quality || ""),
+            cfg.splitDescSize ? (row.size || "") : "",
             art.order_quantity || 0, row.wastage_percent,
             calcInclWastage(art.order_quantity || 0, row.wastage_percent)
           ]);
@@ -412,32 +507,41 @@ export default function UnifiedPackagingPlanning() {
     let y = 30; doc.setTextColor(0, 0, 0);
     SUB_TABS.forEach(tab => {
       const cfg = TAB_CONFIG[tab];
-      const tabHasData = poArticles.some(art => (allRows[tab]?.[art.id] || []).some(r => r.quality || r.type));
+      const tabHasData = poArticles.some(art => (allRows[tab]?.[art.id] || []).some(r => r.quality || r.type || r.description));
       if (!tabHasData) return;
       if (y > 170) { doc.addPage(); y = 20; }
       doc.setFillColor(61, 90, 153); doc.rect(14, y - 4, 269, 7, "F");
       doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(9);
       doc.text(tab.toUpperCase(), 16, y); y += 7; doc.setTextColor(0, 0, 0);
-      const colW = [60, 50, 35, 22, 22, 35];
+      const colW = cfg.splitDescSize ? [55, 40, 30, 22, 22, 35] : [60, 50, 35, 22, 22, 35];
       const colX = [14];
       colW.forEach((w, i) => colX.push(colX[i] + colW[i]));
-      const headers = ["Article", cfg.typeLabel, cfg.qualityLabel, "Qty", "Wastage %", "Incl. Wastage"];
+      const headers = cfg.splitDescSize
+        ? ["Article", cfg.typeLabel, cfg.descLabel, cfg.sizeLabel, "Qty", "Wastage %", "Incl. Wastage"]
+        : ["Article", cfg.typeLabel, cfg.qualityLabel || "Description", "Qty", "Wastage %", "Incl. Wastage"];
       doc.setFillColor(235, 240, 250); doc.rect(14, y - 3.5, 269, 6, "F");
       doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);
-      headers.forEach((h, i) => doc.text(h, colX[i] + 1, y));
+      headers.forEach((h, i) => colX[i] !== undefined && doc.text(h, colX[i] + 1, y));
       y += 6; doc.setFont("helvetica", "normal");
       poArticles.forEach(art => {
         const artRows = allRows[tab]?.[art.id] || [];
         artRows.forEach((row, idx) => {
           if (y > 185) { doc.addPage(); y = 20; }
           if (idx % 2 === 0) { doc.setFillColor(249, 250, 251); doc.rect(14, y - 3.5, 269, 6, "F"); }
-          const vals = [
-            idx === 0 ? `${art.article_name}${art.article_code ? ` (${art.article_code})` : ""}` : "",
-            row.type || "", row.quality || "",
-            String(art.order_quantity || 0), String(row.wastage_percent || 0),
-            String(calcInclWastage(art.order_quantity || 0, row.wastage_percent))
-          ];
-          vals.forEach((v, i) => doc.text(v.substring(0, 28), colX[i] + 1, y));
+          const vals = cfg.splitDescSize
+            ? [
+                idx === 0 ? `${art.article_name}${art.article_code ? ` (${art.article_code})` : ""}` : "",
+                row.type || "", row.description || "", row.size || "",
+                String(art.order_quantity || 0), String(row.wastage_percent || 0),
+                String(calcInclWastage(art.order_quantity || 0, row.wastage_percent))
+              ]
+            : [
+                idx === 0 ? `${art.article_name}${art.article_code ? ` (${art.article_code})` : ""}` : "",
+                row.type || "", row.quality || "",
+                String(art.order_quantity || 0), String(row.wastage_percent || 0),
+                String(calcInclWastage(art.order_quantity || 0, row.wastage_percent))
+              ];
+          vals.forEach((v, i) => colX[i] !== undefined && doc.text(v.substring(0, 25), colX[i] + 1, y));
           y += 6;
         });
       });
@@ -452,13 +556,20 @@ export default function UnifiedPackagingPlanning() {
       const cfg = TAB_CONFIG[tab];
       const tabRows = poArticles.flatMap(art =>
         (allRows[tab]?.[art.id] || []).map(row => ({ art, row, cfg, tab }))
-      ).filter(({ row }) => row.quality || row.type);
+      ).filter(({ row }) => row.quality || row.type || row.description);
       if (tabRows.length === 0) return;
-      rows.push(`<tr style="background:#1F3864"><td colspan="7" style="color:white;font-weight:bold;padding:6px 8px">${tab.toUpperCase()}</td></tr>`);
-      rows.push(`<tr style="background:#EBF0FA;font-weight:bold"><td>Article</td><td>${cfg.typeLabel}</td><td>${cfg.qualityLabel}</td><td>Order Qty</td><td>Wastage %</td><td style="background:#FFF2CC">Incl. Wastage Qty</td><td>Unit</td></tr>`);
+      const colCount = cfg.splitDescSize ? 8 : 7;
+      rows.push(`<tr style="background:#1F3864"><td colspan="${colCount}" style="color:white;font-weight:bold;padding:6px 8px">${tab.toUpperCase()}</td></tr>`);
+      const hdr = cfg.splitDescSize
+        ? `<tr style="background:#EBF0FA;font-weight:bold"><td>Article</td><td>${cfg.typeLabel}</td><td>${cfg.descLabel}</td><td>${cfg.sizeLabel}</td><td>Order Qty</td><td>Wastage %</td><td style="background:#FFF2CC">Incl. Wastage</td></tr>`
+        : `<tr style="background:#EBF0FA;font-weight:bold"><td>Article</td><td>${cfg.typeLabel}</td><td>${cfg.qualityLabel}</td><td>Order Qty</td><td>Wastage %</td><td style="background:#FFF2CC">Incl. Wastage</td></tr>`;
+      rows.push(hdr);
       tabRows.forEach(({ art, row }, i) => {
         const bg = i % 2 === 0 ? "#fff" : "#F9FAFB";
-        rows.push(`<tr style="background:${bg}"><td>${art.article_name}${art.article_code ? ` (${art.article_code})` : ""}</td><td>${row.type}</td><td>${row.quality}</td><td>${art.order_quantity || 0}</td><td>${row.wastage_percent}%</td><td style="background:#FFF2CC;font-weight:bold">${calcInclWastage(art.order_quantity || 0, row.wastage_percent)}</td><td>Pcs</td></tr>`);
+        const cells = cfg.splitDescSize
+          ? `<td>${art.article_name}</td><td>${row.type}</td><td>${row.description || ""}</td><td>${row.size || ""}</td><td>${art.order_quantity || 0}</td><td>${row.wastage_percent}%</td><td style="background:#FFF2CC;font-weight:bold">${calcInclWastage(art.order_quantity || 0, row.wastage_percent)}</td>`
+          : `<td>${art.article_name}</td><td>${row.type}</td><td>${row.quality || ""}</td><td>${art.order_quantity || 0}</td><td>${row.wastage_percent}%</td><td style="background:#FFF2CC;font-weight:bold">${calcInclWastage(art.order_quantity || 0, row.wastage_percent)}</td>`;
+        rows.push(`<tr style="background:${bg}">${cells}</tr>`);
       });
     });
     const html = `<html><head><title>Accessories & Packaging — ${activePo?.po_number || ""}</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px}h2{color:#1F3864}table{width:100%;border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 6px}</style></head><body><h2>Accessories & Packaging Planning</h2><p><b>PO:</b> ${activePo?.po_number || ""} &nbsp; <b>Customer:</b> ${activePo?.customer_name || ""} &nbsp; <b>Date:</b> ${new Date().toLocaleDateString()}</p><table>${rows.join("")}</table></body></html>`;
@@ -493,7 +604,7 @@ export default function UnifiedPackagingPlanning() {
         </div>
       </div>
 
-      {/* Sub-tabs with per-tab Save button */}
+      {/* Sub-tabs */}
       <div className="flex items-center gap-0 border-b border-gray-200 overflow-x-auto">
         {SUB_TABS.map(t => (
           <button key={t} onClick={() => setSubTab(t)}
@@ -524,6 +635,7 @@ export default function UnifiedPackagingPlanning() {
                 cfg={TAB_CONFIG[subTab]}
                 rows={allRows[subTab] || {}}
                 onChange={(artId, rows) => handleChange(subTab, artId, rows)}
+                cartonSize={getCartonSize(art)}
               />
             ))}
           </div>
