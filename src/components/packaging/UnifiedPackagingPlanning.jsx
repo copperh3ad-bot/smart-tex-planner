@@ -6,7 +6,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Save, Plus, Trash2, Upload, Download, Printer } from "lucide-react";
 import { jsPDF } from "jspdf";
 
-// ─── Tab config ───────────────────────────────────────────────────────────────
 const TAB_CONFIG = {
   Labels: {
     category: "Label",
@@ -79,11 +78,9 @@ const SUB_TABS = Object.keys(TAB_CONFIG);
 const inputCls = "w-full text-xs border border-gray-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400";
 const numInputCls = "w-16 text-center text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400";
 const calcInclWastage = (qty, wastage) => Math.ceil((qty || 0) * (1 + (parseFloat(wastage) || 0) / 100));
-
 const defaultRow = (cfg) => ({ type: cfg.typeOptions[0], quality: "", wastage_percent: cfg.defaultWastage, existing_id: null, pc_ean_code: "", carton_ean_code: "", multiplier: 1 });
 const calcInclWastageWithMultiplier = (qty, wastage, multiplier) => Math.ceil((qty || 0) * (parseFloat(multiplier) || 1) * (1 + (parseFloat(wastage) || 0) / 100));
 
-// ─── Article block with multi-row table ───────────────────────────────────────
 function ArticleBlock({ art, cfg, rows, onChange }) {
   const qty = art.order_quantity || 0;
   const artRows = rows[art.id] || [defaultRow(cfg)];
@@ -98,7 +95,6 @@ function ArticleBlock({ art, cfg, rows, onChange }) {
         <span>{art.article_name}{art.article_code ? ` (${art.article_code})` : ""}</span>
         <span className="font-normal opacity-80">Order Qty: {qty.toLocaleString()}</span>
       </div>
-
       <table className="w-full text-xs border-collapse">
         <thead>
           <tr style={{ backgroundColor: "#EBF0FA" }}>
@@ -166,7 +162,6 @@ function ArticleBlock({ art, cfg, rows, onChange }) {
           ))}
         </tbody>
       </table>
-
       <div className="px-3 py-1.5 bg-gray-50 border-t border-gray-200">
         <button onClick={add} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs font-medium">
           <Plus className="h-3 w-3" /> Add Row
@@ -176,7 +171,6 @@ function ArticleBlock({ art, cfg, rows, onChange }) {
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
 export default function UnifiedPackagingPlanning() {
   const queryClient = useQueryClient();
   const [selectedPoId, setSelectedPoId] = useState("");
@@ -184,7 +178,6 @@ export default function UnifiedPackagingPlanning() {
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef(null);
   const initKeyRef = useRef(null);
-
   const [allRows, setAllRows] = useState({});
 
   const { data: pos = [] } = useQuery({ queryKey: ["purchaseOrders"], queryFn: () => base44.entities.PurchaseOrder.list() });
@@ -194,7 +187,6 @@ export default function UnifiedPackagingPlanning() {
   const activePo = selectedPoId ? pos.find(p => p.id === selectedPoId) : pos[0];
   const poArticles = activePo ? articles.filter(a => a.po_id === activePo.id) : [];
 
-  // Stable keys from IDs only — avoids JSON.stringify re-render loops
   const poArticleIds = poArticles.map(a => a.id).sort().join(',');
   const itemIds = existingItems.map(i => i.id).sort().join(',');
 
@@ -231,6 +223,60 @@ export default function UnifiedPackagingPlanning() {
 
   const handleChange = (tab, artId, newRows) => {
     setAllRows(prev => ({ ...prev, [tab]: { ...prev[tab], [artId]: newRows } }));
+  };
+
+  const buildOpsForTab = (tab) => {
+    const cfg = TAB_CONFIG[tab];
+    const ops = [];
+    for (const art of poArticles) {
+      const rows = allRows[tab]?.[art.id] || [];
+      for (const row of rows) {
+        if (!row.type && !row.quality) continue;
+        const qty = art.order_quantity || 0;
+        const data = {
+          po_id: activePo.id, po_number: activePo.po_number,
+          article_name: art.article_name, article_code: art.article_code,
+          category: cfg.category,
+          item_description: row.type,
+          size_spec: row.quality,
+          quantity_required: calcInclWastageWithMultiplier(qty, row.wastage_percent, row.multiplier || 1),
+          wastage_percent: parseFloat(row.wastage_percent) || 0,
+          multiplier: parseFloat(row.multiplier) || 1,
+          pc_ean_code: row.pc_ean_code || "",
+          carton_ean_code: row.carton_ean_code || "",
+          unit: "Pcs", status: "Planned",
+        };
+        if (row.existing_id) {
+          ops.push(base44.entities.AccessoryItem.update(row.existing_id, data));
+        } else {
+          ops.push(base44.entities.AccessoryItem.create(data));
+        }
+      }
+    }
+    return ops;
+  };
+
+  const runOps = async (ops) => {
+    const BATCH = 3;
+    for (let i = 0; i < ops.length; i += BATCH) {
+      await Promise.all(ops.slice(i, i + BATCH));
+    }
+    queryClient.invalidateQueries({ queryKey: ["accessoryItems"] });
+  };
+
+  const handleSaveTab = async (tabToSave) => {
+    if (!activePo) return;
+    setSaving(true);
+    await runOps(buildOpsForTab(tabToSave));
+    setSaving(false);
+  };
+
+  const handleSave = async () => {
+    if (!activePo) return;
+    setSaving(true);
+    const ops = SUB_TABS.flatMap(tab => buildOpsForTab(tab));
+    await runOps(ops);
+    setSaving(false);
   };
 
   const handleUpload = (e) => {
@@ -359,48 +405,9 @@ export default function UnifiedPackagingPlanning() {
     const w = window.open("", "_blank"); w.document.write(html); w.document.close(); w.print();
   };
 
-  const handleSave = async () => {
-    if (!activePo) return;
-    setSaving(true);
-    const ops = [];
-    for (const tab of SUB_TABS) {
-      const cfg = TAB_CONFIG[tab];
-      for (const art of poArticles) {
-        const rows = allRows[tab]?.[art.id] || [];
-        for (const row of rows) {
-          if (!row.type && !row.quality) continue;
-          const qty = art.order_quantity || 0;
-          const data = {
-            po_id: activePo.id, po_number: activePo.po_number,
-            article_name: art.article_name, article_code: art.article_code,
-            category: cfg.category,
-            item_description: row.type,
-            size_spec: row.quality,
-            quantity_required: calcInclWastageWithMultiplier(qty, row.wastage_percent, row.multiplier || 1),
-            wastage_percent: parseFloat(row.wastage_percent) || 0,
-            multiplier: parseFloat(row.multiplier) || 1,
-            pc_ean_code: row.pc_ean_code || "",
-            carton_ean_code: row.carton_ean_code || "",
-            unit: "Pcs", status: "Planned",
-          };
-          if (row.existing_id) {
-            ops.push(base44.entities.AccessoryItem.update(row.existing_id, data));
-          } else {
-            ops.push(base44.entities.AccessoryItem.create(data));
-          }
-        }
-      }
-    }
-    const BATCH = 3;
-    for (let i = 0; i < ops.length; i += BATCH) {
-      await Promise.all(ops.slice(i, i + BATCH));
-    }
-    queryClient.invalidateQueries({ queryKey: ["accessoryItems"] });
-    setSaving(false);
-  };
-
   return (
     <div className="space-y-4">
+      {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap">
         <Select value={selectedPoId || activePo?.id || ""} onValueChange={setSelectedPoId}>
           <SelectTrigger className="w-72 h-8 text-xs"><SelectValue placeholder="Select Purchase Order" /></SelectTrigger>
@@ -426,7 +433,8 @@ export default function UnifiedPackagingPlanning() {
         </div>
       </div>
 
-      <div className="flex gap-0 border-b border-gray-200 overflow-x-auto">
+      {/* Sub-tabs with per-tab Save button */}
+      <div className="flex items-center gap-0 border-b border-gray-200 overflow-x-auto">
         {SUB_TABS.map(t => (
           <button key={t} onClick={() => setSubTab(t)}
             className={`px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
@@ -435,8 +443,15 @@ export default function UnifiedPackagingPlanning() {
             {t}
           </button>
         ))}
+        <div className="ml-auto pr-1 flex-shrink-0">
+          <Button size="sm" onClick={() => handleSaveTab(subTab)} disabled={saving || !activePo}
+            className="gap-1.5 h-7 text-xs bg-green-600 hover:bg-green-700 text-white">
+            <Save className="h-3 w-3" /> {saving ? "Saving..." : `Save ${subTab}`}
+          </Button>
+        </div>
       </div>
 
+      {/* Content */}
       {poArticles.length === 0 ? (
         <div className="py-12 text-center text-muted-foreground text-sm">No articles found for this PO.</div>
       ) : (
@@ -452,6 +467,8 @@ export default function UnifiedPackagingPlanning() {
               />
             ))}
           </div>
+
+          {/* Totals footer */}
           {(() => {
             const cfg = TAB_CONFIG[subTab];
             const typeTotals = {};
