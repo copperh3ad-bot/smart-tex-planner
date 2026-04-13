@@ -43,15 +43,49 @@ export default function PODetail() {
     queryClient.invalidateQueries({ queryKey: ["purchaseOrders"] });
   };
 
+  const NUM_FIELDS = ["quantity", "unit_price", "total_price", "gsm", "width", "cbm",
+    "pieces_per_carton", "carton_length", "carton_width", "carton_height", "expected_price"];
+
+  const castNumbers = (data) => {
+    const out = { ...data };
+    NUM_FIELDS.forEach(f => { if (out[f] !== undefined && out[f] !== "") out[f] = Number(out[f]) || 0; });
+    return out;
+  };
+
   const handleSaveItem = async (data) => {
+    const cast = castNumbers(data);
     if (editingItem) {
-      await base44.entities.POItem.update(editingItem.id, data);
+      // Merge with existing to prevent field loss
+      await base44.entities.POItem.update(editingItem.id, { ...editingItem, ...cast });
     } else {
-      await base44.entities.POItem.create(data);
+      await base44.entities.POItem.create({ po_id: poId, po_number: po?.po_number || "", price_status: "Pending", ...cast });
     }
     queryClient.invalidateQueries({ queryKey: ["poItems", poId] });
     setShowItemForm(false);
     setEditingItem(null);
+  };
+
+  const handleCSVUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const lines = text.split("\n").map(l => l.split(",").map(c => c.replace(/^"|"$/g, "").trim()));
+    const headers = lines[0].map(h => h.toLowerCase().replace(/\s+/g, "_"));
+    const records = [];
+    for (const row of lines.slice(1)) {
+      if (row.length < 2 || !row[0]) continue;
+      const rec = { po_id: poId, po_number: po?.po_number || "", price_status: "Pending", unit: "Pieces" };
+      headers.forEach((h, i) => { if (row[i] !== undefined && row[i] !== "") rec[h] = row[i]; });
+      NUM_FIELDS.forEach(f => { if (rec[f] !== undefined) rec[f] = Number(rec[f]) || 0; });
+      if (rec.item_code && rec.quantity) records.push(rec);
+    }
+    if (records.length > 0) {
+      for (let i = 0; i < records.length; i += 5) {
+        await base44.entities.POItem.bulkCreate(records.slice(i, i + 5));
+      }
+      queryClient.invalidateQueries({ queryKey: ["poItems", poId] });
+    }
+    e.target.value = "";
   };
 
   const handleDeleteItem = async (id) => {
@@ -67,7 +101,8 @@ export default function PODetail() {
   };
 
   const handleEditPO = async (data) => {
-    await base44.entities.PurchaseOrder.update(poId, data);
+    // Merge with existing PO to prevent field loss
+    await base44.entities.PurchaseOrder.update(poId, { ...po, ...data });
     queryClient.invalidateQueries({ queryKey: ["po", poId] });
     queryClient.invalidateQueries({ queryKey: ["purchaseOrders"] });
     setShowEditPO(false);
@@ -109,6 +144,7 @@ export default function PODetail() {
         onAdd={() => { setEditingItem(null); setShowItemForm(true); }}
         onEdit={handleEditItem}
         onDelete={handleDeleteItem}
+        onCSVUpload={handleCSVUpload}
       />
 
       <PriceVerification poId={poId} items={items} onEditItem={handleEditItem} />

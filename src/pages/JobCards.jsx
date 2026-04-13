@@ -33,7 +33,8 @@ export default function JobCards() {
 
   const handleSave = async (data) => {
     if (editing) {
-      await base44.entities.JobCard.update(editing.id, data);
+      // Merge with existing to prevent field loss (e.g. process_steps array)
+      await base44.entities.JobCard.update(editing.id, { ...editing, ...data });
     } else {
       await base44.entities.JobCard.create(data);
     }

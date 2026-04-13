@@ -1,18 +1,25 @@
-import React from "react";
+import React, { useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, Pencil } from "lucide-react";
+import { Plus, Trash2, Pencil, Upload } from "lucide-react";
 import StatusBadge from "../shared/StatusBadge";
 
-export default function POItemsTable({ items, onAdd, onEdit, onDelete }) {
+export default function POItemsTable({ items, onAdd, onEdit, onDelete, onCSVUpload }) {
+  const csvRef = useRef(null);
   return (
     <Card>
       <CardHeader className="pb-3 flex flex-row items-center justify-between">
         <CardTitle className="text-sm font-semibold">Item-wise Breakdown</CardTitle>
-        <Button size="sm" onClick={onAdd} className="bg-primary hover:bg-primary/90">
-          <Plus className="h-3.5 w-3.5 mr-1" /> Add Item
-        </Button>
+        <div className="flex gap-2">
+          <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={onCSVUpload} />
+          <Button size="sm" variant="outline" onClick={() => csvRef.current?.click()} title="Upload CSV to bulk-add items">
+            <Upload className="h-3.5 w-3.5 mr-1" /> CSV
+          </Button>
+          <Button size="sm" onClick={onAdd} className="bg-primary hover:bg-primary/90">
+            <Plus className="h-3.5 w-3.5 mr-1" /> Add Item
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         <div className="overflow-x-auto">
