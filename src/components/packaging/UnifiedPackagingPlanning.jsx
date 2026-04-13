@@ -231,6 +231,7 @@ export default function UnifiedPackagingPlanning() {
   const [selectedPoId, setSelectedPoId] = useState("");
   const [subTab, setSubTab] = useState("Labels");
   const [saving, setSaving] = useState(false);
+  const [csvUploadType, setCsvUploadType] = useState("Labels");
   const fileInputRef = useRef(null);
   const initKeyRef = useRef(null);
   const [allRows, setAllRows] = useState({});
@@ -433,37 +434,116 @@ export default function UnifiedPackagingPlanning() {
     reader.onload = (evt) => {
       const text = evt.target.result;
       const lines = text.split("\n").map(l => l.split(",").map(c => c.replace(/^"|"$/g, "").trim()));
-      const headers = lines[0].map(h => h.toLowerCase());
-      const getCol = (row, ...names) => { for (const n of names) { const i = headers.indexOf(n); if (i >= 0) return row[i] || ""; } return ""; };
+      if (lines.length < 2) return;
+      const headers = lines[0].map(h => h.toLowerCase().replace(/\s+/g, "_"));
+      const getCol = (row, ...names) => {
+        for (const n of names) { const i = headers.indexOf(n); if (i >= 0 && row[i]) return row[i]; }
+        return "";
+      };
+
+      // Determine which tab(s) to populate based on upload type
+      const typeToTab = { Labels: "Labels", Accessories: "Accessories", "Insert Card": "Insert Card", Polybag: "Polybag", Stiffener: "Stiffener", Carton: "Carton", Sticker: "Sticker" };
+      let targetTabs = [];
+      if (csvUploadType === "Labels") targetTabs = ["Labels"];
+      else if (csvUploadType === "Accessories") targetTabs = ["Accessories"];
+      else if (csvUploadType === "Packaging") targetTabs = ["Polybag", "Stiffener", "Carton"];
+
       const newRows = {};
-      SUB_TABS.forEach(tab => { newRows[tab] = {}; poArticles.forEach(art => { newRows[tab][art.id] = [defaultRow(TAB_CONFIG[tab])]; }); });
-      lines.slice(1).forEach(row => {
-        if (row.length < 3) return;
-        const artCode = getCol(row, "article_code", "article code");
-        const cat = getCol(row, "category");
-        const type = getCol(row, "type", "item_description", "description");
-        const quality = getCol(row, "quality", "size_spec", "spec");
-        const wastage = getCol(row, "wastage_percent", "wastage");
-        const art = poArticles.find(a => a.article_code === artCode || a.article_name === artCode);
-        const tabEntry = Object.entries(TAB_CONFIG).find(([, c]) => c.category.toLowerCase() === cat.toLowerCase());
-        if (!art || !tabEntry) return;
-        const [tab, tabCfg] = tabEntry;
+      targetTabs.forEach(tab => {
+        newRows[tab] = {};
+        poArticles.forEach(art => { newRows[tab][art.id] = [defaultRow(TAB_CONFIG[tab])]; });
+      });
+
+      lines.slice(1).forEach((row, rowIdx) => {
+        if (row.length < 2 || !row[0]) return;
+
+        // Resolve article
+        const artCode = getCol(row, "article_code", "articlecode");
+        const art = poArticles.find(a =>
+          (artCode && (a.article_code === artCode || a.article_name === artCode))
+        );
+        if (!art) {
+          console.warn(`CSV row ${rowIdx + 2}: no matching article for "${artCode}"`);
+          return;
+        }
+
+        // Determine tab
+        let tab = null;
+        if (csvUploadType === "Labels") {
+          tab = "Labels";
+        } else if (csvUploadType === "Accessories") {
+          tab = "Accessories";
+        } else if (csvUploadType === "Packaging") {
+          const packType = getCol(row, "pack_type", "packtype", "tab").toLowerCase();
+          if (packType.includes("polybag") || packType.includes("poly")) tab = "Polybag";
+          else if (packType.includes("stiffener") || packType.includes("stiff")) tab = "Stiffener";
+          else if (packType.includes("carton")) tab = "Carton";
+          else tab = "Polybag"; // default for Packaging
+        }
+        if (!tab || !newRows[tab]) return;
+
+        const cfg = TAB_CONFIG[tab];
+        let newRow = null;
+
+        if (csvUploadType === "Labels") {
+          // Columns: article_code, label_type, quality, wastage_percent, multiplier
+          const multiplierVal = Number(getCol(row, "multiplier")) || 1;
+          newRow = {
+            type: getCol(row, "label_type", "labeltype", "type") || cfg.typeOptions[0],
+            quality: getCol(row, "quality", "name", "description"),
+            description: "",
+            size: "",
+            wastage_percent: parseFloat(getCol(row, "wastage_percent", "wastage")) || cfg.defaultWastage,
+            multiplier: isNaN(multiplierVal) ? 1 : multiplierVal,
+            pc_ean_code: getCol(row, "pc_ean_code", "ean"),
+            carton_ean_code: getCol(row, "carton_ean_code"),
+            existing_id: null,
+          };
+        } else if (csvUploadType === "Accessories") {
+          // Columns: article_code, item_type, name, color, size, consumption, unit, wastage_percent
+          const consumption = Number(getCol(row, "consumption"));
+          if (getCol(row, "consumption") && isNaN(consumption)) {
+            console.warn(`CSV row ${rowIdx + 2}: invalid consumption value`);
+            return;
+          }
+          newRow = {
+            type: getCol(row, "item_type", "itemtype", "type") || cfg.typeOptions[0],
+            quality: getCol(row, "name", "quality", "description"),
+            description: "",
+            size: "",
+            wastage_percent: parseFloat(getCol(row, "wastage_percent", "wastage")) || cfg.defaultWastage,
+            multiplier: 1,
+            pc_ean_code: "",
+            carton_ean_code: "",
+            existing_id: null,
+          };
+        } else if (csvUploadType === "Packaging") {
+          // Columns: article_code, pack_type, type, description, size, wastage_percent
+          // size is validated as a string (e.g. "56x28x27")
+          const sizeVal = getCol(row, "size", "dimension");
+          newRow = {
+            type: getCol(row, "type") || cfg.typeOptions[0],
+            quality: "",
+            description: getCol(row, "description", "name"),
+            size: sizeVal,
+            wastage_percent: parseFloat(getCol(row, "wastage_percent", "wastage")) || cfg.defaultWastage,
+            multiplier: 1,
+            pc_ean_code: "",
+            carton_ean_code: "",
+            existing_id: null,
+          };
+        }
+
+        if (!newRow) return;
         const existing = newRows[tab][art.id];
-        const emptyIdx = existing.findIndex(r => !r.quality && !r.description && !r.type.includes(" "));
-        const newRow = {
-          type: type || tabCfg.typeOptions[0],
-          quality: tabCfg.splitDescSize ? "" : quality,
-          description: tabCfg.splitDescSize ? quality : "",
-          size: tabCfg.splitDescSize ? getCol(row, "size") : "",
-          wastage_percent: parseFloat(wastage) || tabCfg.defaultWastage,
-          existing_id: null,
-        };
+        const emptyIdx = existing.findIndex(r => !r.quality && !r.description);
         if (emptyIdx >= 0) existing[emptyIdx] = newRow;
         else existing.push(newRow);
       });
+
       setAllRows(prev => {
         const merged = { ...prev };
-        SUB_TABS.forEach(tab => { merged[tab] = { ...(prev[tab] || {}), ...newRows[tab] }; });
+        targetTabs.forEach(tab => { merged[tab] = { ...(prev[tab] || {}), ...newRows[tab] }; });
         return merged;
       });
     };
@@ -589,6 +669,15 @@ export default function UnifiedPackagingPlanning() {
         </Button>
         <div className="flex gap-1.5 ml-auto">
           <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleUpload} />
+          <select
+            className="h-8 text-xs border border-gray-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+            value={csvUploadType}
+            onChange={e => setCsvUploadType(e.target.value)}
+          >
+            <option value="Labels">Labels</option>
+            <option value="Accessories">Accessories</option>
+            <option value="Packaging">Packaging</option>
+          </select>
           <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={!activePo} className="gap-1.5">
             <Upload className="h-3.5 w-3.5" /> Upload CSV
           </Button>
