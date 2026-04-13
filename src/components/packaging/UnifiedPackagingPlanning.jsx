@@ -648,9 +648,20 @@ export default function UnifiedPackagingPlanning() {
               const artRows = allRows[subTab]?.[art.id] || [];
               artRows.forEach(row => {
                 if (!row.type) return;
-                if (!typeTotals[row.type]) typeTotals[row.type] = { orderQty: 0, inclWastage: 0 };
-                typeTotals[row.type].orderQty += (art.order_quantity || 0);
-                typeTotals[row.type].inclWastage += calcInclWastageWithMultiplier(art.order_quantity || 0, row.wastage_percent, row.multiplier || 1);
+                // Key includes description/size or quality for grouping
+                const descKey = cfg.splitDescSize
+                  ? `${row.description || ""}|${row.size || ""}`
+                  : (row.quality || "");
+                const key = `${row.type}||${descKey}`;
+                if (!typeTotals[key]) typeTotals[key] = {
+                  type: row.type,
+                  description: cfg.splitDescSize ? (row.description || "") : (row.quality || ""),
+                  size: cfg.splitDescSize ? (row.size || "") : "",
+                  orderQty: 0,
+                  inclWastage: 0,
+                };
+                typeTotals[key].orderQty += (art.order_quantity || 0);
+                typeTotals[key].inclWastage += calcInclWastageWithMultiplier(art.order_quantity || 0, row.wastage_percent, row.multiplier || 1);
               });
             });
             const entries = Object.entries(typeTotals);
@@ -658,20 +669,36 @@ export default function UnifiedPackagingPlanning() {
             return (
               <div className="rounded border border-gray-300 overflow-hidden shadow-sm">
                 <div className="px-3 py-2 text-xs font-bold text-white" style={{ backgroundColor: "#1F3864" }}>
-                  {subTab.toUpperCase()} — TOTALS BY TYPE
+                  {subTab.toUpperCase()} — TOTALS SUMMARY
                 </div>
                 <table className="w-full text-xs border-collapse">
                   <thead>
                     <tr style={{ backgroundColor: "#EBF0FA" }}>
                       <th className="border border-gray-300 px-3 py-1.5 text-left">{cfg.typeLabel}</th>
+                      {cfg.splitDescSize ? (
+                        <>
+                          <th className="border border-gray-300 px-3 py-1.5 text-left">{cfg.descLabel}</th>
+                          <th className="border border-gray-300 px-3 py-1.5 text-left" style={{ backgroundColor: "#E8F5E9" }}>{cfg.sizeLabel}</th>
+                        </>
+                      ) : (
+                        cfg.qualityLabel && <th className="border border-gray-300 px-3 py-1.5 text-left">{cfg.qualityLabel}</th>
+                      )}
                       <th className="border border-gray-300 px-3 py-1.5 text-center w-32">Total Order Qty</th>
                       <th className="border border-gray-300 px-3 py-1.5 text-center w-40" style={{ backgroundColor: "#FFF2CC" }}>Total Incl. Wastage Qty</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {entries.map(([type, totals], idx) => (
-                      <tr key={type} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#F9FAFB" }}>
-                        <td className="border border-gray-300 px-3 py-1.5 font-medium">{type}</td>
+                    {entries.map(([key, totals], idx) => (
+                      <tr key={key} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#F9FAFB" }}>
+                        <td className="border border-gray-300 px-3 py-1.5 font-medium">{totals.type}</td>
+                        {cfg.splitDescSize ? (
+                          <>
+                            <td className="border border-gray-300 px-3 py-1.5">{totals.description}</td>
+                            <td className="border border-gray-300 px-3 py-1.5" style={{ backgroundColor: "#F1F8E9" }}>{totals.size}</td>
+                          </>
+                        ) : (
+                          cfg.qualityLabel && <td className="border border-gray-300 px-3 py-1.5">{totals.description}</td>
+                        )}
                         <td className="border border-gray-300 px-3 py-1.5 text-center">{totals.orderQty.toLocaleString()}</td>
                         <td className="border border-gray-300 px-3 py-1.5 text-center font-bold" style={{ backgroundColor: "#FFF9E6" }}>{totals.inclWastage.toLocaleString()}</td>
                       </tr>
@@ -679,7 +706,7 @@ export default function UnifiedPackagingPlanning() {
                   </tbody>
                   <tfoot>
                     <tr style={{ backgroundColor: "#1F3864", color: "white", fontWeight: "bold" }}>
-                      <td className="border border-gray-400 px-3 py-1.5">GRAND TOTAL</td>
+                      <td className="border border-gray-400 px-3 py-1.5" colSpan={cfg.splitDescSize ? 3 : (cfg.qualityLabel ? 2 : 1)}>GRAND TOTAL</td>
                       <td className="border border-gray-400 px-3 py-1.5 text-center">{entries.reduce((s, [, t]) => s + t.orderQty, 0).toLocaleString()}</td>
                       <td className="border border-gray-400 px-3 py-1.5 text-center" style={{ backgroundColor: "#E6B800", color: "#1a1a1a" }}>{entries.reduce((s, [, t]) => s + t.inclWastage, 0).toLocaleString()}</td>
                     </tr>
