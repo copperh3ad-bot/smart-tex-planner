@@ -320,16 +320,22 @@ export default function UnifiedPackagingPlanning() {
           po_id: activePo.id, po_number: activePo.po_number,
           article_name: art.article_name, article_code: art.article_code,
           category: cfg.category,
-          item_description: row.type,
-          // splitDescSize: description → size_spec, size → color
-          size_spec: cfg.splitDescSize ? (row.description || "") : (row.quality || ""),
+          // Insert Card: item_description = quality (description text), size_spec = type (card sub-type)
+          // All other tabs: item_description = type, size_spec = quality
+          item_description: cfg.category === "Insert Card"
+            ? (row.quality || row.type || "")
+            : row.type,
+          size_spec: cfg.category === "Insert Card"
+            ? (row.type || "")
+            : (cfg.splitDescSize ? (row.description || "") : (row.quality || "")),
           color: cfg.splitDescSize ? (row.size || "") : "",
           quantity_required: calcInclWastageWithMultiplier(qty, row.wastage_percent, row.multiplier || 1),
           wastage_percent: parseFloat(row.wastage_percent) || 0,
           multiplier: parseFloat(row.multiplier) || 1,
           pc_ean_code: row.pc_ean_code || "",
           carton_ean_code: row.carton_ean_code || "",
-          unit: "Pcs", status: "Planned",
+          unit: row.unit || "Pcs",
+          status: "Planned",
         };
         if (row.existing_id) {
           ops.push(base44.entities.AccessoryItem.update(row.existing_id, data));
@@ -394,8 +400,12 @@ export default function UnifiedPackagingPlanning() {
             article_name: sibArt.article_name,
             article_code: sibArt.article_code,
             category: cfg.category,
-            item_description: row.type,
-            size_spec: cfg.splitDescSize ? (row.description || "") : (row.quality || ""),
+            item_description: cfg.category === "Insert Card"
+              ? (row.quality || row.type || "")
+              : row.type,
+            size_spec: cfg.category === "Insert Card"
+              ? (row.type || "")
+              : (cfg.splitDescSize ? (row.description || "") : (row.quality || "")),
             color: cfg.splitDescSize ? (sibCartonSize || row.size || "") : "",
             quantity_required: calcInclWastageWithMultiplier(sibQty, row.wastage_percent, row.multiplier || 1),
             wastage_percent: parseFloat(row.wastage_percent) || 0,
