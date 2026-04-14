@@ -1,0 +1,121 @@
+{
+  "name": "TrimItem",
+  "type": "object",
+  "properties": {
+    "po_id": {
+      "type": "string",
+      "description": "Reference to PurchaseOrder"
+    },
+    "po_number": {
+      "type": "string"
+    },
+    "article_name": {
+      "type": "string"
+    },
+    "article_code": {
+      "type": "string"
+    },
+    "trim_category": {
+      "type": "string",
+      "enum": [
+        "Zipper",
+        "Elastic",
+        "Button",
+        "Dori",
+        "Eyelet",
+        "Stitching Thread",
+        "Velcro",
+        "Snap Button",
+        "Hook & Eye",
+        "Buckle",
+        "Drawstring",
+        "Ribbon",
+        "Tape",
+        "Other"
+      ],
+      "description": "Category / type of trim"
+    },
+    "item_description": {
+      "type": "string",
+      "description": "Trim description / spec"
+    },
+    "color": {
+      "type": "string"
+    },
+    "size_spec": {
+      "type": "string"
+    },
+    "calc_type": {
+      "type": "string",
+      "enum": [
+        "Per Piece",
+        "Per Meter",
+        "Per Set",
+        "Percentage"
+      ],
+      "default": "Per Piece",
+      "description": "Calculation method for quantity"
+    },
+    "consumption_per_unit": {
+      "type": "number",
+      "description": "Amount used per piece/meter/set (or % for Percentage type)"
+    },
+    "wastage_percent": {
+      "type": "number",
+      "default": 5
+    },
+    "order_quantity": {
+      "type": "number",
+      "description": "Base order quantity (pieces)"
+    },
+    "fabric_meters": {
+      "type": "number",
+      "description": "Total fabric meters (used when calc_type=Per Meter)"
+    },
+    "quantity_required": {
+      "type": "number",
+      "description": "Calculated total quantity required"
+    },
+    "unit": {
+      "type": "string",
+      "enum": [
+        "Pcs",
+        "Meters",
+        "Kgs",
+        "Rolls",
+        "Dozens",
+        "Gross",
+        "Sets",
+        "Pairs"
+      ],
+      "default": "Pcs"
+    },
+    "supplier": {
+      "type": "string"
+    },
+    "unit_cost": {
+      "type": "number"
+    },
+    "total_cost": {
+      "type": "number"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Planned",
+        "Ordered",
+        "Received",
+        "Approved"
+      ],
+      "default": "Planned"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "trim_category",
+    "item_description",
+    "calc_type"
+  ]
+}

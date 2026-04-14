@@ -10,7 +10,6 @@ import { jsPDF } from "jspdf";
 // Category map: tab name → AccessoryTemplate category value
 const TAB_CATEGORY_MAP = {
   Labels: "Label",
-  Accessories: "Accessory",
   "Insert Card": "Insert Card",
   Polybag: "Polybag",
   Stiffener: "Stiffener",
@@ -32,14 +31,6 @@ const TAB_CONFIG = {
     qualityPlaceholder: "e.g. Woven, Satin, 3x5cm",
     defaultWastage: 5,
     showMultiplier: true,
-  },
-  Accessories: {
-    category: "Accessory",
-    typeOptions: ["Zipper", "Slider", "Elastic", "Button", "Dori", "Eyelet", "Stitching Thread", "Other"],
-    typeLabel: "Accessory Type",
-    qualityLabel: "Spec / Description",
-    qualityPlaceholder: "e.g. 5mm, #3, 10cm, color",
-    defaultWastage: 5,
   },
   "Insert Card": {
     category: "Insert Card",
@@ -548,7 +539,6 @@ export default function UnifiedPackagingPlanning() {
         // Validate required headers per upload type
         const REQUIRED_HEADERS = {
           Labels: ["article_code", "label_type"],
-          Accessories: ["article_code", "item_type"],
           "Insert Card": ["article_code", "type"],
           Packaging: ["article_code", "type"],
         };
@@ -565,7 +555,6 @@ export default function UnifiedPackagingPlanning() {
         // Determine target tabs from upload type
         const targetTabs =
           csvUploadType === "Labels" ? ["Labels"] :
-          csvUploadType === "Accessories" ? ["Accessories"] :
           csvUploadType === "Insert Card" ? ["Insert Card"] :
           ["Polybag", "Stiffener", "Carton"];
 
@@ -631,37 +620,6 @@ export default function UnifiedPackagingPlanning() {
                 multiplier: multiplier ?? 1,
                 pc_ean_code: get(row, "pc_ean_code", "ean", "pc_ean"),
                 carton_ean_code: get(row, "carton_ean_code", "carton_ean"),
-                existing_id: null,
-              };
-            }
-
-            // ── ACCESSORIES ──────────────────────────────────────────────────
-            else if (csvUploadType === "Accessories") {
-              tab = "Accessories";
-              const cfg = TAB_CONFIG[tab];
-              const itemType = get(row, "item_type", "itemtype", "type", "category");
-              if (!itemType) {
-                errorLog.push("Row " + lineNum + ": missing item_type — skipped");
-                skipped++; continue;
-              }
-              const wastageRaw = get(row, "wastage_percent", "wastage");
-              const consumptionRaw = get(row, "consumption", "consumption_per_unit");
-              if (consumptionRaw !== "") {
-                const consumption = toNum(consumptionRaw);
-                if (consumption === null || consumption < 0) {
-                  errorLog.push("Row " + lineNum + ": invalid consumption \"" + consumptionRaw + "\" — skipped");
-                  skipped++; continue;
-                }
-              }
-              newRow = {
-                type: itemType,
-                quality: get(row, "name", "description", "quality", "item_name"),
-                description: "",
-                size: get(row, "size", "size_spec"),
-                wastage_percent: toNum(wastageRaw) ?? cfg.defaultWastage,
-                multiplier: 1,
-                pc_ean_code: "",
-                carton_ean_code: "",
                 existing_id: null,
               };
             }
@@ -918,7 +876,6 @@ export default function UnifiedPackagingPlanning() {
             onChange={e => setCsvUploadType(e.target.value)}
           >
             <option value="Labels">Labels</option>
-            <option value="Accessories">Accessories</option>
             <option value="Insert Card">Insert Card</option>
             <option value="Packaging">Packaging</option>
           </select>
