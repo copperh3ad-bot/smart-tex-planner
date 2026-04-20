@@ -351,7 +351,7 @@ export default function UnifiedPackagingPlanning() {
 
   const { data: pos = [] } = useQuery({ queryKey: ["purchaseOrders"], queryFn: () => base44.entities.PurchaseOrder.list() });
   const { data: articles = [] } = useQuery({ queryKey: ["articles"], queryFn: () => base44.entities.Article.list() });
-  const { data: existingItems = [] } = useQuery({ queryKey: ["accessoryItems"], queryFn: () => base44.entities.AccessoryItem.list("-created_date", 500) });
+  const { data: existingItems = [] } = useQuery({ queryKey: ["accessoryItems"], queryFn: () => base44.entities.AccessoryItem.list("-created_date", 300) });
   const { data: poItems = [] } = useQuery({ queryKey: ["poItems"], queryFn: () => base44.entities.POItem.list("-created_date", 500) });
 
   const activePo = selectedPoId ? pos.find(p => p.id === selectedPoId) : pos[0];
@@ -476,9 +476,11 @@ export default function UnifiedPackagingPlanning() {
   };
 
   const runOps = async (ops) => {
-    const BATCH = 3;
+    const BATCH = 2;
     for (let i = 0; i < ops.length; i += BATCH) {
       await Promise.all(ops.slice(i, i + BATCH));
+      // Small delay between batches to avoid rate limiting
+      if (i + BATCH < ops.length) await new Promise(r => setTimeout(r, 150));
     }
     queryClient.invalidateQueries({ queryKey: ["accessoryItems"] });
   };
@@ -491,8 +493,8 @@ export default function UnifiedPackagingPlanning() {
     // ── Auto-propagate to identical articles in other POs ──────────────────
     const cfg = TAB_CONFIG[tabToSave];
     const [allArticles, allAccessoryItems] = await Promise.all([
-      base44.entities.Article.list("-created_date", 1000),
-      base44.entities.AccessoryItem.list("-created_date", 2000),
+      base44.entities.Article.list("-created_date", 500),
+      base44.entities.AccessoryItem.list("-created_date", 500),
     ]);
 
     const propagateOps = [];
@@ -547,9 +549,10 @@ export default function UnifiedPackagingPlanning() {
     }
 
     if (propagateOps.length > 0) {
-      const BATCH = 3;
+      const BATCH = 2;
       for (let i = 0; i < propagateOps.length; i += BATCH) {
         await Promise.all(propagateOps.slice(i, i + BATCH));
+        if (i + BATCH < propagateOps.length) await new Promise(r => setTimeout(r, 150));
       }
       queryClient.invalidateQueries({ queryKey: ["accessoryItems"] });
     }
@@ -560,8 +563,11 @@ export default function UnifiedPackagingPlanning() {
   const handleSave = async () => {
     if (!activePo) return;
     setSaving(true);
-    const ops = SUB_TABS.flatMap(tab => buildOpsForTab(tab));
-    await runOps(ops);
+    // Save one tab at a time to avoid flooding the API
+    for (const tab of SUB_TABS) {
+      const ops = buildOpsForTab(tab);
+      if (ops.length > 0) await runOps(ops);
+    }
     setSaving(false);
   };
 
