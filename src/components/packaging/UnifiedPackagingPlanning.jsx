@@ -87,6 +87,7 @@ const TAB_CONFIG = {
 };
 
 const SUB_TABS = Object.keys(TAB_CONFIG);
+const ROLL_PACK_HIDDEN_TABS = ["Stiffener", "Insert Card"];
 
 const inputCls = "w-full text-xs border border-gray-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400";
 const numInputCls = "w-16 text-center text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400";
@@ -110,10 +111,9 @@ function ArticleBlock({ art, cfg, rows, onChange, cartonSize, templates = [], su
   const qty = art.order_quantity || 0;
   const artRows = rows[art.id] || [defaultRow(cfg)];
   const isRollPack = packingType === "Roll Pack";
-
-  // Tabs that are disabled for Roll Pack
-  const rollPackDisabledTabs = ["Stiffener", "Insert Card"];
-  const isDisabledByRollPack = isRollPack && rollPackDisabledTabs.includes(subTab);
+  // Roll Pack: Bellyband Polybag tab shows qty based on bellyband option
+  const isRollPackPolybag = isRollPack && subTab === "Polybag";
+  const bellybandQty = bellybandOption === "With" ? qty : 0;
 
   const add = () => {
     const newRow = defaultRow(cfg);
@@ -145,24 +145,20 @@ function ArticleBlock({ art, cfg, rows, onChange, cartonSize, templates = [], su
       onChange(art.id, [...artRows, newRow]);
     }
   };
+
   const remove = (idx) => onChange(art.id, artRows.filter((_, i) => i !== idx));
   const update = (idx, field, val) => onChange(art.id, artRows.map((r, i) => i === idx ? { ...r, [field]: val } : r));
 
-  // Effective qty for a row (Roll Pack disables Stiffener/Insert Card, Bellyband controls Polybag bellyband row)
-  const getEffectiveQty = (row) => {
-    if (isDisabledByRollPack) return 0;
-    if (isRollPack && subTab === "Polybag" && row._isBellyband) {
-      return bellybandOption === "With" ? qty : 0;
-    }
-    return calcInclWastageWithMultiplier(qty, row.wastage_percent, row.multiplier || 1);
-  };
+  const getEffectiveQty = (row) =>
+    calcInclWastageWithMultiplier(qty, row.wastage_percent, row.multiplier || 1);
 
   return (
-    <div className={`rounded border shadow-sm overflow-hidden ${isDisabledByRollPack ? "opacity-50" : "border-gray-300"}`}>
-      <div className="px-3 py-2 text-xs font-bold text-white flex justify-between items-center flex-wrap gap-2" style={{ backgroundColor: isDisabledByRollPack ? "#6B7280" : "#1F3864" }}>
+    <div className="rounded border border-gray-300 shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className="px-3 py-2 text-xs font-bold text-white flex justify-between items-center flex-wrap gap-2" style={{ backgroundColor: "#1F3864" }}>
         <span>{art.article_name}{art.article_code ? ` (${art.article_code})` : ""}</span>
         <div className="flex items-center gap-3 flex-wrap">
-          {/* Packing Type — always visible */}
+          {/* Packing Type toggle */}
           <div className="flex items-center gap-1.5">
             <span className="opacity-70 font-normal">Packing:</span>
             {["Sheet Pack", "Roll Pack"].map(opt => (
@@ -174,8 +170,8 @@ function ArticleBlock({ art, cfg, rows, onChange, cartonSize, templates = [], su
                 }`}>{opt}</button>
             ))}
           </div>
-          {/* Bellyband — only for Roll Pack on Polybag tab */}
-          {isRollPack && subTab === "Polybag" && (
+          {/* Bellyband — only visible on Roll Pack Polybag tab */}
+          {isRollPackPolybag && (
             <div className="flex items-center gap-1.5">
               <span className="opacity-70 font-normal">Bellyband:</span>
               {["With", "Without"].map(opt => (
@@ -188,143 +184,131 @@ function ArticleBlock({ art, cfg, rows, onChange, cartonSize, templates = [], su
               ))}
             </div>
           )}
-          {isDisabledByRollPack && (
-            <span className="text-white/70 font-normal text-xs italic">Disabled (Roll Pack)</span>
-          )}
           <span className="font-normal opacity-80">Order Qty: {qty.toLocaleString()}</span>
         </div>
       </div>
-      <table className="w-full text-xs border-collapse">
-        <thead>
-          <tr style={{ backgroundColor: "#EBF0FA" }}>
-            <th className="border border-gray-300 px-2 py-1.5 text-left w-44">{cfg.typeLabel}</th>
-            {cfg.splitDescSize ? (
-              <>
-                <th className="border border-gray-300 px-2 py-1.5 text-left">{cfg.descLabel}</th>
-                <th className="border border-gray-300 px-2 py-1.5 text-left w-36" style={{ backgroundColor: "#E8F5E9" }}>{cfg.sizeLabel}</th>
-              </>
-            ) : (
-              <th className="border border-gray-300 px-2 py-1.5 text-left">{cfg.qualityLabel}</th>
-            )}
-            <th className="border border-gray-300 px-2 py-1.5 text-center w-20">Qty</th>
-            {cfg.showMultiplier && <th className="border border-gray-300 px-2 py-1.5 text-center w-24" style={{ backgroundColor: "#F3E5F5" }}>Multiplier</th>}
-            <th className="border border-gray-300 px-2 py-1.5 text-center w-24">Wastage %</th>
-            <th className="border border-gray-300 px-2 py-1.5 text-center w-28" style={{ backgroundColor: "#FFF2CC" }}>Incl. Wastage Qty</th>
-            {cfg.showEAN && <th className="border border-gray-300 px-2 py-1.5 text-left w-36" style={{ backgroundColor: "#E8F5E9" }}>PC EAN Code</th>}
-            {cfg.showEAN && <th className="border border-gray-300 px-2 py-1.5 text-left w-36" style={{ backgroundColor: "#E3F2FD" }}>Carton EAN Code</th>}
-            <th className="border border-gray-300 px-2 py-1.5 w-8"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {artRows.map((row, idx) => (
-            <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#F9FAFB" }}>
-              <td className="border border-gray-300 px-1.5 py-1">
-                <select className={inputCls} value={row.type} onChange={e => update(idx, "type", e.target.value)}>
-                  {cfg.typeOptions.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </td>
-              {cfg.splitDescSize ? (
-                <>
-                  <td className="border border-gray-300 px-1.5 py-1">
-                    <input className={inputCls} placeholder={cfg.descPlaceholder} value={row.description || ""}
-                      onChange={e => update(idx, "description", e.target.value)} />
-                  </td>
-                  <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#F1F8E9" }}>
-                    <input
-                      className={inputCls}
-                      placeholder={cfg.sizePlaceholder}
-                      value={row.size || ""}
-                      onChange={e => update(idx, "size", e.target.value)}
-                      readOnly={cfg.autoFillSize && !!cartonSize}
-                      style={cfg.autoFillSize && cartonSize ? { backgroundColor: "#E8F5E9", cursor: "default" } : {}}
-                    />
-                  </td>
-                </>
-              ) : (
-                <td className="border border-gray-300 px-1.5 py-1">
-                  <input className={inputCls} placeholder={cfg.qualityPlaceholder} value={row.quality || ""}
-                    onChange={e => update(idx, "quality", e.target.value)} />
-                </td>
-              )}
-              <td className="border border-gray-300 px-2 py-1 text-center font-medium">{qty.toLocaleString()}</td>
-              {cfg.showMultiplier && (
-                <td className="border border-gray-300 px-1.5 py-1 text-center" style={{ backgroundColor: "#FDF6FF" }}>
-                  <select
-                    className="w-14 text-center text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-purple-400"
-                    value={row.multiplier || 1}
-                    disabled={isDisabledByRollPack}
-                    onChange={e => update(idx, "multiplier", parseFloat(e.target.value))}>
-                    {Array.from({ length: 20 }, (_, i) => i + 1).map(m => <option key={m} value={m}>x{m}</option>)}
-                  </select>
-                </td>
-              )}
-              <td className="border border-gray-300 px-1.5 py-1 text-center">
-                <input type="number" min="0" max="100" step="0.5" className={numInputCls}
-                  disabled={isDisabledByRollPack}
-                  value={row.wastage_percent} onChange={e => update(idx, "wastage_percent", e.target.value)} />
-              </td>
-              <td className="border border-gray-300 px-2 py-1 text-center font-bold" style={{ backgroundColor: isDisabledByRollPack ? "#F3F4F6" : "#FFF2CC" }}>
-                {getEffectiveQty(row).toLocaleString()}
-                {isDisabledByRollPack && <span className="ml-1 text-gray-400 font-normal text-xs">(disabled)</span>}
-              </td>
-              {cfg.showEAN && (
-                <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#F1F8E9" }}>
-                  <input className={inputCls} placeholder="e.g. 1234567890123" value={row.pc_ean_code || ""}
-                    onChange={e => update(idx, "pc_ean_code", e.target.value)} />
-                </td>
-              )}
-              {cfg.showEAN && (
-                <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#E3F2FD" }}>
-                  <input className={inputCls} placeholder="e.g. 9876543210123" value={row.carton_ean_code || ""}
-                    onChange={e => update(idx, "carton_ean_code", e.target.value)} />
-                </td>
-              )}
-              <td className="border border-gray-300 px-1.5 py-1 text-center">
-                {artRows.length > 1 && (
-                  <button onClick={() => remove(idx)} className="text-red-400 hover:text-red-600">
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {/* Bellyband summary row for Roll Pack on Polybag tab */}
-      {isRollPack && subTab === "Polybag" && (
-        <div className="px-3 py-2 bg-amber-50 border-t border-amber-200 flex items-center gap-3 text-xs">
-          <span className="font-semibold text-amber-800">Bellyband:</span>
-          <span className={`font-bold ${bellybandOption === "With" ? "text-green-700" : "text-gray-500"}`}>
-            {bellybandOption === "With"
-              ? `Qty = ${qty.toLocaleString()} (= Order Qty)`
-              : "Qty = 0 (excluded)"}
+
+      {/* Roll Pack + Polybag: show simple bellyband qty display instead of table */}
+      {isRollPackPolybag ? (
+        <div className="px-4 py-4 bg-amber-50 flex items-center gap-4 text-sm">
+          <span className="font-semibold text-amber-800">Bellyband Qty:</span>
+          <span className={`text-lg font-bold ${bellybandOption === "With" ? "text-green-700" : "text-gray-400"}`}>
+            {bellybandQty.toLocaleString()}
           </span>
-          <span className="text-amber-600 text-xs italic">— Set via Bellyband option above</span>
+          <span className="text-amber-600 text-xs">
+            {bellybandOption === "With" ? "= Order Qty (bellyband included)" : "(bellyband excluded — Qty is 0)"}
+          </span>
         </div>
-      )}
-      {!isDisabledByRollPack && (
-        <div className="px-3 py-1.5 bg-gray-50 border-t border-gray-200 flex items-center gap-3">
-          <button onClick={add} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs font-medium">
-            <Plus className="h-3 w-3" /> Add Row
-          </button>
-          {templates.length > 0 && (
-            <select
-              className="h-6 text-xs border border-gray-300 rounded px-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 text-gray-600"
-              defaultValue=""
-              onChange={e => { applyTemplate(e.target.value); e.target.value = ""; }}
-            >
-              <option value="" disabled>+ Apply template…</option>
-              {templates.map(t => (
-                <option key={t.id} value={t.id}>{t.template_name} — {t.type}</option>
+      ) : (
+        <>
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr style={{ backgroundColor: "#EBF0FA" }}>
+                <th className="border border-gray-300 px-2 py-1.5 text-left w-44">{cfg.typeLabel}</th>
+                {cfg.splitDescSize ? (
+                  <>
+                    <th className="border border-gray-300 px-2 py-1.5 text-left">{cfg.descLabel}</th>
+                    <th className="border border-gray-300 px-2 py-1.5 text-left w-36" style={{ backgroundColor: "#E8F5E9" }}>{cfg.sizeLabel}</th>
+                  </>
+                ) : (
+                  <th className="border border-gray-300 px-2 py-1.5 text-left">{cfg.qualityLabel}</th>
+                )}
+                <th className="border border-gray-300 px-2 py-1.5 text-center w-20">Qty</th>
+                {cfg.showMultiplier && <th className="border border-gray-300 px-2 py-1.5 text-center w-24" style={{ backgroundColor: "#F3E5F5" }}>Multiplier</th>}
+                <th className="border border-gray-300 px-2 py-1.5 text-center w-24">Wastage %</th>
+                <th className="border border-gray-300 px-2 py-1.5 text-center w-28" style={{ backgroundColor: "#FFF2CC" }}>Incl. Wastage Qty</th>
+                {cfg.showEAN && <th className="border border-gray-300 px-2 py-1.5 text-left w-36" style={{ backgroundColor: "#E8F5E9" }}>PC EAN Code</th>}
+                {cfg.showEAN && <th className="border border-gray-300 px-2 py-1.5 text-left w-36" style={{ backgroundColor: "#E3F2FD" }}>Carton EAN Code</th>}
+                <th className="border border-gray-300 px-2 py-1.5 w-8"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {artRows.map((row, idx) => (
+                <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#F9FAFB" }}>
+                  <td className="border border-gray-300 px-1.5 py-1">
+                    <select className={inputCls} value={row.type} onChange={e => update(idx, "type", e.target.value)}>
+                      {cfg.typeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </td>
+                  {cfg.splitDescSize ? (
+                    <>
+                      <td className="border border-gray-300 px-1.5 py-1">
+                        <input className={inputCls} placeholder={cfg.descPlaceholder} value={row.description || ""}
+                          onChange={e => update(idx, "description", e.target.value)} />
+                      </td>
+                      <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#F1F8E9" }}>
+                        <input className={inputCls} placeholder={cfg.sizePlaceholder} value={row.size || ""}
+                          onChange={e => update(idx, "size", e.target.value)}
+                          readOnly={cfg.autoFillSize && !!cartonSize}
+                          style={cfg.autoFillSize && cartonSize ? { backgroundColor: "#E8F5E9", cursor: "default" } : {}}
+                        />
+                      </td>
+                    </>
+                  ) : (
+                    <td className="border border-gray-300 px-1.5 py-1">
+                      <input className={inputCls} placeholder={cfg.qualityPlaceholder} value={row.quality || ""}
+                        onChange={e => update(idx, "quality", e.target.value)} />
+                    </td>
+                  )}
+                  <td className="border border-gray-300 px-2 py-1 text-center font-medium">{qty.toLocaleString()}</td>
+                  {cfg.showMultiplier && (
+                    <td className="border border-gray-300 px-1.5 py-1 text-center" style={{ backgroundColor: "#FDF6FF" }}>
+                      <select
+                        className="w-14 text-center text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-purple-400"
+                        value={row.multiplier || 1}
+                        onChange={e => update(idx, "multiplier", parseFloat(e.target.value))}>
+                        {Array.from({ length: 20 }, (_, i) => i + 1).map(m => <option key={m} value={m}>x{m}</option>)}
+                      </select>
+                    </td>
+                  )}
+                  <td className="border border-gray-300 px-1.5 py-1 text-center">
+                    <input type="number" min="0" max="100" step="0.5" className={numInputCls}
+                      value={row.wastage_percent} onChange={e => update(idx, "wastage_percent", e.target.value)} />
+                  </td>
+                  <td className="border border-gray-300 px-2 py-1 text-center font-bold" style={{ backgroundColor: "#FFF2CC" }}>
+                    {getEffectiveQty(row).toLocaleString()}
+                  </td>
+                  {cfg.showEAN && (
+                    <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#F1F8E9" }}>
+                      <input className={inputCls} placeholder="e.g. 1234567890123" value={row.pc_ean_code || ""}
+                        onChange={e => update(idx, "pc_ean_code", e.target.value)} />
+                    </td>
+                  )}
+                  {cfg.showEAN && (
+                    <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#E3F2FD" }}>
+                      <input className={inputCls} placeholder="e.g. 9876543210123" value={row.carton_ean_code || ""}
+                        onChange={e => update(idx, "carton_ean_code", e.target.value)} />
+                    </td>
+                  )}
+                  <td className="border border-gray-300 px-1.5 py-1 text-center">
+                    {artRows.length > 1 && (
+                      <button onClick={() => remove(idx)} className="text-red-400 hover:text-red-600">
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  </td>
+                </tr>
               ))}
-            </select>
-          )}
-        </div>
-      )}
-      {isDisabledByRollPack && (
-        <div className="px-3 py-2 bg-gray-100 border-t border-gray-200 text-xs text-gray-500 italic">
-          This section is disabled for Roll Pack — Qty set to 0
-        </div>
+            </tbody>
+          </table>
+          <div className="px-3 py-1.5 bg-gray-50 border-t border-gray-200 flex items-center gap-3">
+            <button onClick={add} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs font-medium">
+              <Plus className="h-3 w-3" /> Add Row
+            </button>
+            {templates.length > 0 && (
+              <select
+                className="h-6 text-xs border border-gray-300 rounded px-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 text-gray-600"
+                defaultValue=""
+                onChange={e => { applyTemplate(e.target.value); e.target.value = ""; }}
+              >
+                <option value="" disabled>+ Apply template…</option>
+                {templates.map(t => (
+                  <option key={t.id} value={t.id}>{t.template_name} — {t.type}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
@@ -417,6 +401,15 @@ export default function UnifiedPackagingPlanning() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePo?.id, poArticleIds, itemIds]);
 
+  // Auto-switch away from hidden tab when all articles become Roll Pack
+  useEffect(() => {
+    if (poArticles.length === 0) return;
+    const allRollPack = poArticles.every(a => (artPackingType[a.id] || "Sheet Pack") === "Roll Pack");
+    if (allRollPack && ROLL_PACK_HIDDEN_TABS.includes(subTab)) {
+      setSubTab("Labels");
+    }
+  }, [artPackingType, poArticles, subTab]);
+
   const handleChange = (tab, artId, newRows) => {
     setAllRows(prev => ({ ...prev, [tab]: { ...prev[tab], [artId]: newRows } }));
   };
@@ -424,12 +417,42 @@ export default function UnifiedPackagingPlanning() {
   const buildOpsForTab = (tab) => {
     const cfg = TAB_CONFIG[tab];
     const ops = [];
-    const rollPackDisabledTabs = ["Stiffener", "Insert Card"];
     for (const art of poArticles) {
       const packType = artPackingType[art.id] || "Sheet Pack";
       const bellyband = artBellyband[art.id] || "Without";
       const isRollPack = packType === "Roll Pack";
-      const isDisabled = isRollPack && rollPackDisabledTabs.includes(tab);
+
+      // Skip Roll Pack hidden tabs entirely — no record written
+      if (isRollPack && ROLL_PACK_HIDDEN_TABS.includes(tab)) continue;
+
+      // Roll Pack + Polybag: save a single "Bellyband" record with bellyband qty
+      if (isRollPack && tab === "Polybag") {
+        const qty = art.order_quantity || 0;
+        const effectiveQty = bellyband === "With" ? qty : 0;
+        const existingBB = (allRows[tab]?.[art.id] || []).find(r => r.existing_id);
+        const data = {
+          po_id: activePo.id, po_number: activePo.po_number,
+          article_name: art.article_name, article_code: art.article_code,
+          category: cfg.category,
+          item_description: "Polybag",
+          size_spec: "Bellyband",
+          color: "",
+          quantity_required: effectiveQty,
+          wastage_percent: 0,
+          multiplier: 1,
+          unit: "Pcs",
+          status: "Planned",
+          notes: `Roll Pack — Bellyband: ${bellyband}`,
+        };
+        if (existingBB?.existing_id) {
+          ops.push(base44.entities.AccessoryItem.update(existingBB.existing_id, data));
+        } else {
+          ops.push(base44.entities.AccessoryItem.create(data));
+        }
+        continue;
+      }
+
+      // Normal save for all other tabs
       const rows = allRows[tab]?.[art.id] || [];
       for (const row of rows) {
         const hasContent = cfg.splitDescSize
@@ -437,27 +460,16 @@ export default function UnifiedPackagingPlanning() {
           : (row.type || row.quality);
         if (!hasContent) continue;
         const qty = art.order_quantity || 0;
-        // Determine effective quantity
-        let effectiveQty;
-        if (isDisabled) {
-          effectiveQty = 0;
-        } else if (isRollPack && tab === "Polybag" && row._isBellyband) {
-          effectiveQty = bellyband === "With" ? qty : 0;
-        } else {
-          effectiveQty = calcInclWastageWithMultiplier(qty, row.wastage_percent, row.multiplier || 1);
-        }
         const data = {
           po_id: activePo.id, po_number: activePo.po_number,
           article_name: art.article_name, article_code: art.article_code,
           category: cfg.category,
-          item_description: cfg.category === "Insert Card"
-            ? (row.quality || "")
-            : row.type,
+          item_description: cfg.category === "Insert Card" ? (row.quality || "") : row.type,
           size_spec: cfg.category === "Insert Card"
             ? (row.type || "")
             : (cfg.splitDescSize ? (row.description || "") : (row.quality || "")),
           color: cfg.splitDescSize ? (row.size || "") : "",
-          quantity_required: effectiveQty,
+          quantity_required: calcInclWastageWithMultiplier(qty, row.wastage_percent, row.multiplier || 1),
           wastage_percent: parseFloat(row.wastage_percent) || 0,
           multiplier: parseFloat(row.multiplier) || 1,
           pc_ean_code: row.pc_ean_code || "",
@@ -983,23 +995,33 @@ export default function UnifiedPackagingPlanning() {
         </div>
       </div>
 
-      {/* Sub-tabs */}
-      <div className="flex items-center gap-0 border-b border-gray-200 overflow-x-auto">
-        {SUB_TABS.map(t => (
-          <button key={t} onClick={() => setSubTab(t)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
-              subTab === t ? "border-blue-600 text-blue-700" : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}>
-            {t}
-          </button>
-        ))}
-        <div className="ml-auto pr-1 flex-shrink-0">
-          <Button size="sm" onClick={() => handleSaveTab(subTab)} disabled={saving || !activePo}
-            className="gap-1.5 h-7 text-xs bg-green-600 hover:bg-green-700 text-white">
-            <Save className="h-3 w-3" /> {saving ? "Saving..." : `Save ${subTab}`}
-          </Button>
-        </div>
-      </div>
+      {/* Sub-tabs — hide Roll Pack-specific hidden tabs only if ALL articles are Roll Pack */}
+      {(() => {
+        const allRollPack = poArticles.length > 0 && poArticles.every(a => (artPackingType[a.id] || "Sheet Pack") === "Roll Pack");
+        const visibleTabs = allRollPack ? SUB_TABS.filter(t => !ROLL_PACK_HIDDEN_TABS.includes(t)) : SUB_TABS;
+        // Auto-switch away from a now-hidden tab
+        if (allRollPack && ROLL_PACK_HIDDEN_TABS.includes(subTab) && visibleTabs.length > 0 && visibleTabs[0] !== subTab) {
+          // We can't call setSubTab here directly; handled below via effect
+        }
+        return (
+          <div className="flex items-center gap-0 border-b border-gray-200 overflow-x-auto">
+            {visibleTabs.map(t => (
+              <button key={t} onClick={() => setSubTab(t)}
+                className={`px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+                  subTab === t ? "border-blue-600 text-blue-700" : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}>
+                {t}
+              </button>
+            ))}
+            <div className="ml-auto pr-1 flex-shrink-0">
+              <Button size="sm" onClick={() => handleSaveTab(subTab)} disabled={saving || !activePo}
+                className="gap-1.5 h-7 text-xs bg-green-600 hover:bg-green-700 text-white">
+                <Save className="h-3 w-3" /> {saving ? "Saving..." : `Save ${subTab}`}
+              </Button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Content */}
       {poArticles.length === 0 ? (
@@ -1032,22 +1054,30 @@ export default function UnifiedPackagingPlanning() {
             poArticles.forEach(art => {
               const packType = artPackingType[art.id] || "Sheet Pack";
               const bellyband = artBellyband[art.id] || "Without";
-              // For Roll Pack: Stiffener and Insert Card are excluded from totals
-              if (packType === "Roll Pack" && (subTab === "Stiffener" || subTab === "Insert Card")) return;
-              // For Roll Pack on Polybag: add bellyband total if "With"
-              if (packType === "Roll Pack" && subTab === "Polybag" && bellyband === "With") {
-                const bbKey = "Bellyband||";
+              const isRollPack = packType === "Roll Pack";
+              const qty = art.order_quantity || 0;
+
+              // Roll Pack hidden tabs: skip entirely
+              if (isRollPack && ROLL_PACK_HIDDEN_TABS.includes(subTab)) return;
+
+              // Roll Pack Polybag: just add bellyband entry
+              if (isRollPack && subTab === "Polybag") {
+                const bbQty = bellyband === "With" ? qty : 0;
+                const bbKey = "Bellyband (Roll Pack)||";
                 if (!typeTotals[bbKey]) typeTotals[bbKey] = {
-                  type: "Bellyband", description: "(Roll Pack)", size: "", orderQty: 0, inclWastage: 0,
+                  type: "Bellyband (Roll Pack)", description: bellyband === "With" ? "With Bellyband" : "Without Bellyband",
+                  size: "", orderQty: 0, inclWastage: 0,
                 };
-                typeTotals[bbKey].orderQty += (art.order_quantity || 0);
-                typeTotals[bbKey].inclWastage += (art.order_quantity || 0);
+                typeTotals[bbKey].orderQty += qty;
+                typeTotals[bbKey].inclWastage += bbQty;
+                return;
               }
+
+              // Normal articles
               const artRows = allRows[subTab]?.[art.id] || [];
               artRows.forEach(row => {
                 if (!row.type) return;
-                const inclWastageQty = calcInclWastageWithMultiplier(art.order_quantity || 0, row.wastage_percent, row.multiplier || 1);
-                // Key includes description/size or quality for grouping
+                const inclWastageQty = calcInclWastageWithMultiplier(qty, row.wastage_percent, row.multiplier || 1);
                 const descKey = cfg.splitDescSize
                   ? `${row.description || ""}|${row.size || ""}`
                   : (row.quality || "");
@@ -1056,10 +1086,9 @@ export default function UnifiedPackagingPlanning() {
                   type: row.type,
                   description: cfg.splitDescSize ? (row.description || "") : (row.quality || ""),
                   size: cfg.splitDescSize ? (row.size || "") : "",
-                  orderQty: 0,
-                  inclWastage: 0,
+                  orderQty: 0, inclWastage: 0,
                 };
-                typeTotals[key].orderQty += (art.order_quantity || 0);
+                typeTotals[key].orderQty += qty;
                 typeTotals[key].inclWastage += inclWastageQty;
               });
             });
