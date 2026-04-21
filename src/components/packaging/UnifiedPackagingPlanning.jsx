@@ -107,11 +107,10 @@ const calcInclWastageWithMultiplier = (qty, wastage, multiplier) =>
   Math.ceil((qty || 0) * (parseFloat(multiplier) || 1) * (1 + (parseFloat(wastage) || 0) / 100));
 
 // ─── Article block ────────────────────────────────────────────────────────────
-function ArticleBlock({ art, cfg, rows, onChange, cartonSize, templates = [], subTab, packingType, onPackingTypeChange, bellybandOption, onBellybandChange }) {
+function ArticleBlock({ art, cfg, rows, onChange, cartonSize, templates = [], subTab, packingType, bellybandOption }) {
   const qty = art.order_quantity || 0;
   const artRows = rows[art.id] || [defaultRow(cfg)];
   const isRollPack = packingType === "Roll Pack";
-  // Roll Pack: Bellyband Polybag tab shows qty based on bellyband option
   const isRollPackPolybag = isRollPack && subTab === "Polybag";
   const bellybandQty = bellybandOption === "With" ? qty : 0;
 
@@ -157,35 +156,7 @@ function ArticleBlock({ art, cfg, rows, onChange, cartonSize, templates = [], su
       {/* Header */}
       <div className="px-3 py-2 text-xs font-bold text-white flex justify-between items-center flex-wrap gap-2" style={{ backgroundColor: "#1F3864" }}>
         <span>{art.article_name}{art.article_code ? ` (${art.article_code})` : ""}</span>
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* Packing Type toggle */}
-          <div className="flex items-center gap-1.5">
-            <span className="opacity-70 font-normal">Packing:</span>
-            {["Sheet Pack", "Roll Pack"].map(opt => (
-              <button key={opt} onClick={() => onPackingTypeChange(opt)}
-                className={`px-2 py-0.5 rounded text-xs font-medium border transition-colors ${
-                  packingType === opt
-                    ? "bg-white text-blue-800 border-white"
-                    : "bg-transparent text-white border-white/40 hover:border-white"
-                }`}>{opt}</button>
-            ))}
-          </div>
-          {/* Bellyband — only visible on Roll Pack Polybag tab */}
-          {isRollPackPolybag && (
-            <div className="flex items-center gap-1.5">
-              <span className="opacity-70 font-normal">Bellyband:</span>
-              {["With", "Without"].map(opt => (
-                <button key={opt} onClick={() => onBellybandChange(opt)}
-                  className={`px-2 py-0.5 rounded text-xs font-medium border transition-colors ${
-                    bellybandOption === opt
-                      ? "bg-white text-blue-800 border-white"
-                      : "bg-transparent text-white border-white/40 hover:border-white"
-                  }`}>{opt}</button>
-              ))}
-            </div>
-          )}
-          <span className="font-normal opacity-80">Order Qty: {qty.toLocaleString()}</span>
-        </div>
+        <span className="font-normal opacity-80">Order Qty: {qty.toLocaleString()}</span>
       </div>
 
       {/* Roll Pack + Polybag: show simple bellyband qty display instead of table */}
@@ -328,10 +299,9 @@ export default function UnifiedPackagingPlanning() {
   const fileInputRef = useRef(null);
   const initKeyRef = useRef(null);
   const [allRows, setAllRows] = useState({});
-  // artPackingType: { [artId]: "Sheet Pack" | "Roll Pack" }
-  // artBellyband:   { [artId]: "With" | "Without" }
-  const [artPackingType, setArtPackingType] = useState({});
-  const [artBellyband, setArtBellyband] = useState({});
+  // PO-level packing type and bellyband option
+  const [packingType, setPackingType] = useState("Sheet Pack"); // "Sheet Pack" | "Roll Pack"
+  const [bellybandOption, setBellybandOption] = useState("Without"); // "With" | "Without"
 
   const { data: pos = [] } = useQuery({ queryKey: ["purchaseOrders"], queryFn: () => base44.entities.PurchaseOrder.list() });
   const { data: articles = [] } = useQuery({ queryKey: ["articles"], queryFn: () => base44.entities.Article.list() });
@@ -401,14 +371,12 @@ export default function UnifiedPackagingPlanning() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePo?.id, poArticleIds, itemIds]);
 
-  // Auto-switch away from hidden tab when all articles become Roll Pack
+  // Auto-switch away from hidden tab when packing type changes to Roll Pack
   useEffect(() => {
-    if (poArticles.length === 0) return;
-    const allRollPack = poArticles.every(a => (artPackingType[a.id] || "Sheet Pack") === "Roll Pack");
-    if (allRollPack && ROLL_PACK_HIDDEN_TABS.includes(subTab)) {
+    if (packingType === "Roll Pack" && ROLL_PACK_HIDDEN_TABS.includes(subTab)) {
       setSubTab("Labels");
     }
-  }, [artPackingType, poArticles, subTab]);
+  }, [packingType, subTab]);
 
   const handleChange = (tab, artId, newRows) => {
     setAllRows(prev => ({ ...prev, [tab]: { ...prev[tab], [artId]: newRows } }));
@@ -417,18 +385,17 @@ export default function UnifiedPackagingPlanning() {
   const buildOpsForTab = (tab) => {
     const cfg = TAB_CONFIG[tab];
     const ops = [];
+    const isRollPack = packingType === "Roll Pack";
+
+    // Skip Roll Pack hidden tabs entirely
+    if (isRollPack && ROLL_PACK_HIDDEN_TABS.includes(tab)) return ops;
+
     for (const art of poArticles) {
-      const packType = artPackingType[art.id] || "Sheet Pack";
-      const bellyband = artBellyband[art.id] || "Without";
-      const isRollPack = packType === "Roll Pack";
+      const qty = art.order_quantity || 0;
 
-      // Skip Roll Pack hidden tabs entirely — no record written
-      if (isRollPack && ROLL_PACK_HIDDEN_TABS.includes(tab)) continue;
-
-      // Roll Pack + Polybag: save a single "Bellyband" record with bellyband qty
+      // Roll Pack + Polybag: save a single bellyband record
       if (isRollPack && tab === "Polybag") {
-        const qty = art.order_quantity || 0;
-        const effectiveQty = bellyband === "With" ? qty : 0;
+        const effectiveQty = bellybandOption === "With" ? qty : 0;
         const existingBB = (allRows[tab]?.[art.id] || []).find(r => r.existing_id);
         const data = {
           po_id: activePo.id, po_number: activePo.po_number,
@@ -442,24 +409,18 @@ export default function UnifiedPackagingPlanning() {
           multiplier: 1,
           unit: "Pcs",
           status: "Planned",
-          notes: `Roll Pack — Bellyband: ${bellyband}`,
+          notes: `Roll Pack — Bellyband: ${bellybandOption}`,
         };
-        if (existingBB?.existing_id) {
-          ops.push(base44.entities.AccessoryItem.update(existingBB.existing_id, data));
-        } else {
-          ops.push(base44.entities.AccessoryItem.create(data));
-        }
+        if (existingBB?.existing_id) ops.push(base44.entities.AccessoryItem.update(existingBB.existing_id, data));
+        else ops.push(base44.entities.AccessoryItem.create(data));
         continue;
       }
 
-      // Normal save for all other tabs
+      // Normal save
       const rows = allRows[tab]?.[art.id] || [];
       for (const row of rows) {
-        const hasContent = cfg.splitDescSize
-          ? (row.description || row.size)
-          : (row.type || row.quality);
+        const hasContent = cfg.splitDescSize ? (row.description || row.size) : (row.type || row.quality);
         if (!hasContent) continue;
-        const qty = art.order_quantity || 0;
         const data = {
           po_id: activePo.id, po_number: activePo.po_number,
           article_name: art.article_name, article_code: art.article_code,
@@ -477,11 +438,8 @@ export default function UnifiedPackagingPlanning() {
           unit: row.unit || "Pcs",
           status: "Planned",
         };
-        if (row.existing_id) {
-          ops.push(base44.entities.AccessoryItem.update(row.existing_id, data));
-        } else {
-          ops.push(base44.entities.AccessoryItem.create(data));
-        }
+        if (row.existing_id) ops.push(base44.entities.AccessoryItem.update(row.existing_id, data));
+        else ops.push(base44.entities.AccessoryItem.create(data));
       }
     }
     return ops;
@@ -966,6 +924,36 @@ export default function UnifiedPackagingPlanning() {
           <SelectTrigger className="w-72 h-8 text-xs"><SelectValue placeholder="Select Purchase Order" /></SelectTrigger>
           <SelectContent>{pos.map(p => <SelectItem key={p.id} value={p.id}>{p.po_number} – {p.customer_name}</SelectItem>)}</SelectContent>
         </Select>
+
+        {/* Packing Type — PO level */}
+        <div className="flex items-center gap-1 border border-gray-300 rounded overflow-hidden text-xs font-medium">
+          {["Sheet Pack", "Roll Pack"].map(opt => (
+            <button key={opt} onClick={() => setPackingType(opt)}
+              className={`px-3 py-1.5 transition-colors ${
+                packingType === opt
+                  ? "bg-blue-700 text-white"
+                  : "bg-white text-gray-600 hover:bg-gray-50"
+              }`}>{opt}</button>
+          ))}
+        </div>
+
+        {/* Bellyband — only when Roll Pack */}
+        {packingType === "Roll Pack" && (
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="text-gray-500 font-medium">Bellyband:</span>
+            <div className="flex items-center gap-0 border border-gray-300 rounded overflow-hidden font-medium">
+              {["With", "Without"].map(opt => (
+                <button key={opt} onClick={() => setBellybandOption(opt)}
+                  className={`px-3 py-1.5 transition-colors ${
+                    bellybandOption === opt
+                      ? "bg-amber-500 text-white"
+                      : "bg-white text-gray-600 hover:bg-gray-50"
+                  }`}>{opt}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <Button size="sm" onClick={handleSave} disabled={saving || !activePo} className="gap-1.5">
           <Save className="h-3.5 w-3.5" /> {saving ? "Saving..." : "Save All"}
         </Button>
@@ -995,14 +983,11 @@ export default function UnifiedPackagingPlanning() {
         </div>
       </div>
 
-      {/* Sub-tabs — hide Roll Pack-specific hidden tabs only if ALL articles are Roll Pack */}
+      {/* Sub-tabs */}
       {(() => {
-        const allRollPack = poArticles.length > 0 && poArticles.every(a => (artPackingType[a.id] || "Sheet Pack") === "Roll Pack");
-        const visibleTabs = allRollPack ? SUB_TABS.filter(t => !ROLL_PACK_HIDDEN_TABS.includes(t)) : SUB_TABS;
-        // Auto-switch away from a now-hidden tab
-        if (allRollPack && ROLL_PACK_HIDDEN_TABS.includes(subTab) && visibleTabs.length > 0 && visibleTabs[0] !== subTab) {
-          // We can't call setSubTab here directly; handled below via effect
-        }
+        const visibleTabs = packingType === "Roll Pack"
+          ? SUB_TABS.filter(t => !ROLL_PACK_HIDDEN_TABS.includes(t))
+          : SUB_TABS;
         return (
           <div className="flex items-center gap-0 border-b border-gray-200 overflow-x-auto">
             {visibleTabs.map(t => (
@@ -1039,10 +1024,8 @@ export default function UnifiedPackagingPlanning() {
                 cartonSize={getCartonSize(art)}
                 templates={allTemplates.filter(t => t.category === TAB_CATEGORY_MAP[subTab])}
                 subTab={subTab}
-                packingType={artPackingType[art.id] || "Sheet Pack"}
-                onPackingTypeChange={(val) => setArtPackingType(prev => ({ ...prev, [art.id]: val }))}
-                bellybandOption={artBellyband[art.id] || "Without"}
-                onBellybandChange={(val) => setArtBellyband(prev => ({ ...prev, [art.id]: val }))}
+                packingType={packingType}
+                bellybandOption={bellybandOption}
               />
             ))}
           </div>
@@ -1051,21 +1034,16 @@ export default function UnifiedPackagingPlanning() {
           {(() => {
             const cfg = TAB_CONFIG[subTab];
             const typeTotals = {};
+            const isRollPack = packingType === "Roll Pack";
             poArticles.forEach(art => {
-              const packType = artPackingType[art.id] || "Sheet Pack";
-              const bellyband = artBellyband[art.id] || "Without";
-              const isRollPack = packType === "Roll Pack";
               const qty = art.order_quantity || 0;
 
-              // Roll Pack hidden tabs: skip entirely
-              if (isRollPack && ROLL_PACK_HIDDEN_TABS.includes(subTab)) return;
-
-              // Roll Pack Polybag: just add bellyband entry
+              // Roll Pack Polybag: show bellyband totals
               if (isRollPack && subTab === "Polybag") {
-                const bbQty = bellyband === "With" ? qty : 0;
+                const bbQty = bellybandOption === "With" ? qty : 0;
                 const bbKey = "Bellyband (Roll Pack)||";
                 if (!typeTotals[bbKey]) typeTotals[bbKey] = {
-                  type: "Bellyband (Roll Pack)", description: bellyband === "With" ? "With Bellyband" : "Without Bellyband",
+                  type: "Bellyband (Roll Pack)", description: bellybandOption === "With" ? "With Bellyband" : "Without Bellyband",
                   size: "", orderQty: 0, inclWastage: 0,
                 };
                 typeTotals[bbKey].orderQty += qty;
