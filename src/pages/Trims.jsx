@@ -69,7 +69,8 @@ const CALC_TYPES = {
 };
 
 const TRIM_CATEGORIES = [
-  "Zipper", "Elastic", "Button", "Dori", "Eyelet", "Stitching Thread",
+  "Zipper", "Slider", "Slider Metal", "Slider Stopper",
+  "Elastic", "Button", "Dori", "Eyelet", "Stitching Thread",
   "Velcro", "Snap Button", "Hook & Eye", "Buckle", "Drawstring",
   "Ribbon", "Tape", "Other"
 ];

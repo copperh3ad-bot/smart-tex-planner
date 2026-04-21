@@ -19,6 +19,9 @@
       "type": "string",
       "enum": [
         "Zipper",
+        "Slider",
+        "Slider Metal",
+        "Slider Stopper",
         "Elastic",
         "Button",
         "Dori",
