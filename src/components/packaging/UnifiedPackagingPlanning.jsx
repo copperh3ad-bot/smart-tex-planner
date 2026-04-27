@@ -15,6 +15,7 @@ const TAB_CATEGORY_MAP = {
   Stiffener: "Stiffener",
   Carton: "Carton",
   Sticker: "Sticker",
+  "Bellyband (BB)": "Polybag",
 };
 
 const TAB_CONFIG = {
@@ -84,10 +85,23 @@ const TAB_CONFIG = {
     defaultWastage: 5,
     showEAN: true,
   },
+  "Bellyband (BB)": {
+    category: "Polybag",
+    typeOptions: ["Paper", "Poly", "Woven", "Non-woven", "Other"],
+    typeLabel: "BB Type",
+    splitDescSize: true,
+    descLabel: "Description",
+    descPlaceholder: "e.g. printed, 100gsm",
+    sizeLabel: "Size",
+    sizePlaceholder: "e.g. 10x30cm",
+    defaultWastage: 5,
+    isBellyband: true,
+  },
 };
 
 const SUB_TABS = Object.keys(TAB_CONFIG);
-const ROLL_PACK_HIDDEN_TABS = ["Stiffener", "Insert Card"];
+// Sheet Pack shows all tabs; Roll Pack shows only Polybag + Bellyband (BB)
+const ROLL_PACK_ALLOWED_TABS = ["Polybag", "Bellyband (BB)"];
 
 const inputCls = "w-full text-xs border border-gray-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400";
 const numInputCls = "w-16 text-center text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400";
@@ -102,17 +116,16 @@ const defaultRow = (cfg) => ({
   pc_ean_code: "",
   carton_ean_code: "",
   multiplier: 1,
+  bbOption: "With",
 });
 const calcInclWastageWithMultiplier = (qty, wastage, multiplier) =>
   Math.ceil((qty || 0) * (parseFloat(multiplier) || 1) * (1 + (parseFloat(wastage) || 0) / 100));
 
 // ─── Article block ────────────────────────────────────────────────────────────
-function ArticleBlock({ art, cfg, rows, onChange, cartonSize, templates = [], subTab, packingType, bellybandOption }) {
+function ArticleBlock({ art, cfg, rows, onChange, cartonSize, templates = [], subTab, bbOption }) {
   const qty = art.order_quantity || 0;
   const artRows = rows[art.id] || [defaultRow(cfg)];
-  const isRollPack = packingType === "Roll Pack";
-  const isRollPackPolybag = isRollPack && subTab === "Polybag";
-  const bellybandQty = bellybandOption === "With" ? qty : 0;
+  const isBBTab = cfg.isBellyband;
 
   const add = () => {
     const newRow = defaultRow(cfg);
@@ -159,16 +172,80 @@ function ArticleBlock({ art, cfg, rows, onChange, cartonSize, templates = [], su
         <span className="font-normal opacity-80">Order Qty: {qty.toLocaleString()}</span>
       </div>
 
-      {/* Roll Pack + Polybag: show simple bellyband qty display instead of table */}
-      {isRollPackPolybag ? (
-        <div className="px-4 py-4 bg-amber-50 flex items-center gap-4 text-sm">
-          <span className="font-semibold text-amber-800">Bellyband Qty:</span>
-          <span className={`text-lg font-bold ${bellybandOption === "With" ? "text-green-700" : "text-gray-400"}`}>
-            {bellybandQty.toLocaleString()}
-          </span>
-          <span className="text-amber-600 text-xs">
-            {bellybandOption === "With" ? "= Order Qty (bellyband included)" : "(bellyband excluded — Qty is 0)"}
-          </span>
+      {/* Bellyband tab: show BB option toggle + computed qty per article */}
+      {isBBTab ? (
+        <div className="overflow-hidden">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr style={{ backgroundColor: "#EBF0FA" }}>
+                <th className="border border-gray-300 px-2 py-1.5 text-left w-44">{cfg.typeLabel}</th>
+                <th className="border border-gray-300 px-2 py-1.5 text-left">{cfg.descLabel}</th>
+                <th className="border border-gray-300 px-2 py-1.5 text-left w-36" style={{ backgroundColor: "#E8F5E9" }}>{cfg.sizeLabel}</th>
+                <th className="border border-gray-300 px-2 py-1.5 text-center w-20">Order Qty</th>
+                <th className="border border-gray-300 px-2 py-1.5 text-center w-24">With / Without BB</th>
+                <th className="border border-gray-300 px-2 py-1.5 text-center w-24">Wastage %</th>
+                <th className="border border-gray-300 px-2 py-1.5 text-center w-28" style={{ backgroundColor: "#FFF2CC" }}>BB Qty</th>
+                <th className="border border-gray-300 px-2 py-1.5 w-8"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {artRows.map((row, idx) => {
+                const withBB = row.bbOption !== "Without";
+                const bbQty = withBB ? calcInclWastage(qty, row.wastage_percent) : 0;
+                return (
+                  <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#F9FAFB" }}>
+                    <td className="border border-gray-300 px-1.5 py-1">
+                      <select className={inputCls} value={row.type} onChange={e => update(idx, "type", e.target.value)}>
+                        {cfg.typeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </td>
+                    <td className="border border-gray-300 px-1.5 py-1">
+                      <input className={inputCls} placeholder={cfg.descPlaceholder} value={row.description || ""}
+                        onChange={e => update(idx, "description", e.target.value)} />
+                    </td>
+                    <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#F1F8E9" }}>
+                      <input className={inputCls} placeholder={cfg.sizePlaceholder} value={row.size || ""}
+                        onChange={e => update(idx, "size", e.target.value)} />
+                    </td>
+                    <td className="border border-gray-300 px-2 py-1 text-center font-medium">{qty.toLocaleString()}</td>
+                    <td className="border border-gray-300 px-1.5 py-1 text-center">
+                      <div className="flex justify-center">
+                        <div className="flex border border-gray-300 rounded overflow-hidden text-xs font-medium">
+                          {["With", "Without"].map(opt => (
+                            <button key={opt} onClick={() => update(idx, "bbOption", opt)}
+                              className={`px-2 py-0.5 transition-colors ${
+                                (row.bbOption || "With") === opt
+                                  ? "bg-amber-500 text-white"
+                                  : "bg-white text-gray-600 hover:bg-gray-50"
+                              }`}>{opt}</button>
+                          ))}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="border border-gray-300 px-1.5 py-1 text-center">
+                      <input type="number" min="0" max="100" step="0.5" className={numInputCls}
+                        value={row.wastage_percent} onChange={e => update(idx, "wastage_percent", e.target.value)} />
+                    </td>
+                    <td className="border border-gray-300 px-2 py-1 text-center font-bold" style={{ backgroundColor: "#FFF2CC" }}>
+                      <span className={withBB ? "text-green-700" : "text-gray-400"}>{bbQty.toLocaleString()}</span>
+                    </td>
+                    <td className="border border-gray-300 px-1.5 py-1 text-center">
+                      {artRows.length > 1 && (
+                        <button onClick={() => remove(idx)} className="text-red-400 hover:text-red-600">
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div className="px-3 py-1.5 bg-gray-50 border-t border-gray-200 flex items-center gap-3">
+            <button onClick={add} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs font-medium">
+              <Plus className="h-3 w-3" /> Add Row
+            </button>
+          </div>
         </div>
       ) : (
         <>
@@ -301,7 +378,6 @@ export default function UnifiedPackagingPlanning() {
   const [allRows, setAllRows] = useState({});
   // PO-level packing type and bellyband option
   const [packingType, setPackingType] = useState("Sheet Pack"); // "Sheet Pack" | "Roll Pack"
-  const [bellybandOption, setBellybandOption] = useState("Without"); // "With" | "Without"
 
   const { data: pos = [] } = useQuery({ queryKey: ["purchaseOrders"], queryFn: () => base44.entities.PurchaseOrder.list() });
   const { data: articles = [] } = useQuery({ queryKey: ["articles"], queryFn: () => base44.entities.Article.list() });
@@ -340,13 +416,36 @@ export default function UnifiedPackagingPlanning() {
       const cfg = TAB_CONFIG[tab];
       init[tab] = {};
       poArticles.forEach(art => {
+        // BB tab: load existing BB records (item_description = "Bellyband")
+        if (cfg.isBellyband) {
+          const existingBB = existingItems.filter(
+            i => i.po_id === activePo.id && i.article_code === art.article_code
+              && i.category === "Polybag" && i.item_description === "Bellyband"
+          );
+          if (existingBB.length > 0) {
+            init[tab][art.id] = existingBB.map(e => ({
+              type: cfg.typeOptions[0],
+              description: e.size_spec || "",
+              size: e.color || "",
+              wastage_percent: e.wastage_percent ?? cfg.defaultWastage,
+              multiplier: 1,
+              bbOption: (e.quantity_required === 0) ? "Without" : "With",
+              pc_ean_code: "",
+              carton_ean_code: "",
+              existing_id: e.id,
+            }));
+          } else {
+            init[tab][art.id] = [defaultRow(cfg)];
+          }
+          return;
+        }
+
         const existing = existingItems.filter(
           i => i.po_id === activePo.id && i.article_code === art.article_code && i.category === cfg.category
+            && i.item_description !== "Bellyband"
         );
         if (existing.length > 0) {
           init[tab][art.id] = existing.map(e => ({
-            // Insert Card: type=size_spec (card type), quality=item_description (description)
-            // All others: type=item_description, quality/description=size_spec
             type: cfg.category === "Insert Card" ? (e.size_spec || "") : e.item_description,
             quality: cfg.category === "Insert Card"
               ? (e.item_description || "")
@@ -358,10 +457,10 @@ export default function UnifiedPackagingPlanning() {
             pc_ean_code: e.pc_ean_code || "",
             carton_ean_code: e.carton_ean_code || "",
             existing_id: e.id,
+            bbOption: "With",
           }));
         } else {
           const row = defaultRow(cfg);
-          // Auto-fill carton size for Carton tab
           if (cfg.autoFillSize) row.size = getCartonSize(art);
           init[tab][art.id] = [row];
         }
@@ -371,10 +470,10 @@ export default function UnifiedPackagingPlanning() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePo?.id, poArticleIds, itemIds]);
 
-  // Auto-switch away from hidden tab when packing type changes to Roll Pack
+  // Auto-switch to Polybag when switching to Roll Pack and current tab isn't allowed
   useEffect(() => {
-    if (packingType === "Roll Pack" && ROLL_PACK_HIDDEN_TABS.includes(subTab)) {
-      setSubTab("Labels");
+    if (packingType === "Roll Pack" && !ROLL_PACK_ALLOWED_TABS.includes(subTab)) {
+      setSubTab("Polybag");
     }
   }, [packingType, subTab]);
 
@@ -387,37 +486,41 @@ export default function UnifiedPackagingPlanning() {
     const ops = [];
     const isRollPack = packingType === "Roll Pack";
 
-    // Skip Roll Pack hidden tabs entirely
-    if (isRollPack && ROLL_PACK_HIDDEN_TABS.includes(tab)) return ops;
+    // Skip tabs not visible in current packing mode
+    if (isRollPack && !ROLL_PACK_ALLOWED_TABS.includes(tab)) return ops;
+    if (!isRollPack && tab === "Bellyband (BB)") return ops;
 
     for (const art of poArticles) {
       const qty = art.order_quantity || 0;
+      const rows = allRows[tab]?.[art.id] || [];
 
-      // Roll Pack + Polybag: save a single bellyband record
-      if (isRollPack && tab === "Polybag") {
-        const effectiveQty = bellybandOption === "With" ? qty : 0;
-        const existingBB = (allRows[tab]?.[art.id] || []).find(r => r.existing_id);
-        const data = {
-          po_id: activePo.id, po_number: activePo.po_number,
-          article_name: art.article_name, article_code: art.article_code,
-          category: cfg.category,
-          item_description: "Polybag",
-          size_spec: "Bellyband",
-          color: "",
-          quantity_required: effectiveQty,
-          wastage_percent: 0,
-          multiplier: 1,
-          unit: "Pcs",
-          status: "Planned",
-          notes: `Roll Pack — Bellyband: ${bellybandOption}`,
-        };
-        if (existingBB?.existing_id) ops.push(base44.entities.AccessoryItem.update(existingBB.existing_id, data));
-        else ops.push(base44.entities.AccessoryItem.create(data));
+      // Bellyband (BB) tab: save each BB row
+      if (cfg.isBellyband) {
+        for (const row of rows) {
+          if (!row.type && !row.description) continue;
+          const withBB = (row.bbOption || "With") !== "Without";
+          const bbQty = withBB ? calcInclWastage(qty, row.wastage_percent) : 0;
+          const data = {
+            po_id: activePo.id, po_number: activePo.po_number,
+            article_name: art.article_name, article_code: art.article_code,
+            category: "Polybag",
+            item_description: "Bellyband",
+            size_spec: row.description || "",
+            color: row.size || "",
+            quantity_required: bbQty,
+            wastage_percent: parseFloat(row.wastage_percent) || 0,
+            multiplier: 1,
+            unit: "Pcs",
+            status: "Planned",
+            notes: `BB Type: ${row.type} — ${withBB ? "With BB" : "Without BB"}`,
+          };
+          if (row.existing_id) ops.push(base44.entities.AccessoryItem.update(row.existing_id, data));
+          else ops.push(base44.entities.AccessoryItem.create(data));
+        }
         continue;
       }
 
       // Normal save
-      const rows = allRows[tab]?.[art.id] || [];
       for (const row of rows) {
         const hasContent = cfg.splitDescSize ? (row.description || row.size) : (row.type || row.quality);
         if (!hasContent) continue;
@@ -533,8 +636,10 @@ export default function UnifiedPackagingPlanning() {
   const handleSave = async () => {
     if (!activePo) return;
     setSaving(true);
-    // Save one tab at a time to avoid flooding the API
-    for (const tab of SUB_TABS) {
+    const tabsToSave = packingType === "Roll Pack"
+      ? SUB_TABS.filter(t => ROLL_PACK_ALLOWED_TABS.includes(t))
+      : SUB_TABS.filter(t => t !== "Bellyband (BB)");
+    for (const tab of tabsToSave) {
       const ops = buildOpsForTab(tab);
       if (ops.length > 0) await runOps(ops);
     }
@@ -937,23 +1042,6 @@ export default function UnifiedPackagingPlanning() {
           ))}
         </div>
 
-        {/* Bellyband — only when Roll Pack */}
-        {packingType === "Roll Pack" && (
-          <div className="flex items-center gap-1.5 text-xs">
-            <span className="text-gray-500 font-medium">Bellyband:</span>
-            <div className="flex items-center gap-0 border border-gray-300 rounded overflow-hidden font-medium">
-              {["With", "Without"].map(opt => (
-                <button key={opt} onClick={() => setBellybandOption(opt)}
-                  className={`px-3 py-1.5 transition-colors ${
-                    bellybandOption === opt
-                      ? "bg-amber-500 text-white"
-                      : "bg-white text-gray-600 hover:bg-gray-50"
-                  }`}>{opt}</button>
-              ))}
-            </div>
-          </div>
-        )}
-
         <Button size="sm" onClick={handleSave} disabled={saving || !activePo} className="gap-1.5">
           <Save className="h-3.5 w-3.5" /> {saving ? "Saving..." : "Save All"}
         </Button>
@@ -986,8 +1074,8 @@ export default function UnifiedPackagingPlanning() {
       {/* Sub-tabs */}
       {(() => {
         const visibleTabs = packingType === "Roll Pack"
-          ? SUB_TABS.filter(t => !ROLL_PACK_HIDDEN_TABS.includes(t))
-          : SUB_TABS;
+          ? SUB_TABS.filter(t => ROLL_PACK_ALLOWED_TABS.includes(t))
+          : SUB_TABS.filter(t => t !== "Bellyband (BB)");
         return (
           <div className="flex items-center gap-0 border-b border-gray-200 overflow-x-auto">
             {visibleTabs.map(t => (
@@ -1024,8 +1112,6 @@ export default function UnifiedPackagingPlanning() {
                 cartonSize={getCartonSize(art)}
                 templates={allTemplates.filter(t => t.category === TAB_CATEGORY_MAP[subTab])}
                 subTab={subTab}
-                packingType={packingType}
-                bellybandOption={bellybandOption}
               />
             ))}
           </div>
@@ -1034,20 +1120,20 @@ export default function UnifiedPackagingPlanning() {
           {(() => {
             const cfg = TAB_CONFIG[subTab];
             const typeTotals = {};
-            const isRollPack = packingType === "Roll Pack";
             poArticles.forEach(art => {
               const qty = art.order_quantity || 0;
 
-              // Roll Pack Polybag: show bellyband totals
-              if (isRollPack && subTab === "Polybag") {
-                const bbQty = bellybandOption === "With" ? qty : 0;
-                const bbKey = "Bellyband (Roll Pack)||";
-                if (!typeTotals[bbKey]) typeTotals[bbKey] = {
-                  type: "Bellyband (Roll Pack)", description: bellybandOption === "With" ? "With Bellyband" : "Without Bellyband",
-                  size: "", orderQty: 0, inclWastage: 0,
-                };
-                typeTotals[bbKey].orderQty += qty;
-                typeTotals[bbKey].inclWastage += bbQty;
+              // BB tab totals
+              if (cfg.isBellyband) {
+                const artRows = allRows[subTab]?.[art.id] || [];
+                artRows.forEach(row => {
+                  const withBB = (row.bbOption || "With") !== "Without";
+                  const bbQty = withBB ? calcInclWastage(qty, row.wastage_percent) : 0;
+                  const key = `${row.type}||${row.description || ""}`;
+                  if (!typeTotals[key]) typeTotals[key] = { type: row.type || "BB", description: row.description || "", size: row.size || "", orderQty: 0, inclWastage: 0 };
+                  typeTotals[key].orderQty += qty;
+                  typeTotals[key].inclWastage += bbQty;
+                });
                 return;
               }
 
@@ -1090,7 +1176,7 @@ export default function UnifiedPackagingPlanning() {
                         cfg.qualityLabel && <th className="border border-gray-300 px-3 py-1.5 text-left">{cfg.qualityLabel}</th>
                       )}
                       <th className="border border-gray-300 px-3 py-1.5 text-center w-32">Total Order Qty</th>
-                      <th className="border border-gray-300 px-3 py-1.5 text-center w-40" style={{ backgroundColor: "#FFF2CC" }}>Total Incl. Wastage Qty</th>
+                      <th className="border border-gray-300 px-3 py-1.5 text-center w-40" style={{ backgroundColor: "#FFF2CC" }}>{cfg.isBellyband ? "Total BB Qty" : "Total Incl. Wastage Qty"}</th>
                     </tr>
                   </thead>
                   <tbody>
