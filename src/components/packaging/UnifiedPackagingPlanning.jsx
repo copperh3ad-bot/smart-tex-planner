@@ -101,7 +101,7 @@ const TAB_CONFIG = {
 
 const SUB_TABS = Object.keys(TAB_CONFIG);
 // Sheet Pack shows all tabs; Roll Pack shows only Polybag + Bellyband (BB)
-const ROLL_PACK_ALLOWED_TABS = ["Polybag", "Bellyband (BB)"];
+const ROLL_PACK_ALLOWED_TABS = ["Labels", "Polybag", "Carton", "Sticker", "Bellyband (BB)"];
 
 const inputCls = "w-full text-xs border border-gray-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400";
 const numInputCls = "w-16 text-center text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400";
