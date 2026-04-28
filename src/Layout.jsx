@@ -27,6 +27,7 @@ const navItems = [
   { name: "Trims", icon: Layers, page: "Trims" },
   { name: "Accessories & Packaging", icon: Tag, page: "AccessoriesPackaging" },
   { name: "Accessory Orders", icon: Package, page: "AccessoryPurchaseOrders" },
+  { name: "Tech Pack", icon: FileText, page: "TechPack" },
   { name: "Shipping Docs", icon: FileText, page: "ShippingDocuments" },
   { name: "Production", icon: Factory, page: "Production" },
   { name: "Job Cards", icon: ClipboardList, page: "JobCards" },
