@@ -3,9 +3,9 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Upload, FileText, CheckCircle, Loader2, ChevronDown, ChevronUp, Save, Edit2, X } from "lucide-react";
+import { Upload, FileText, CheckCircle, Loader2, X, AlertTriangle } from "lucide-react";
 import TechPackReview from "../components/techpack/TechPackReview";
+import * as XLSX from "xlsx";
 
 const STEPS = ["Upload", "Extracting", "Review & Edit", "Saved"];
 
@@ -14,8 +14,41 @@ export default function TechPack() {
   const [file, setFile] = useState(null);
   const [extractedData, setExtractedData] = useState(null);
   const [error, setError] = useState(null);
+  const [extractionWarning, setExtractionWarning] = useState(null);
   const [selectedPoId, setSelectedPoId] = useState("");
   const queryClient = useQueryClient();
+
+  const isExcel = (f) => f && (f.name.endsWith(".xlsx") || f.name.endsWith(".xls"));
+
+  // Parse Excel file client-side into a plain text representation of all sheets
+  const parseExcelToText = (f) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: "array", cellDates: true, raw: false });
+        let text = "";
+        workbook.SheetNames.forEach((sheetName) => {
+          const sheet = workbook.Sheets[sheetName];
+          // Convert to array of arrays, skipping empty rows
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", blankrows: false });
+          if (rows.length === 0) return;
+          text += `\n\n=== SHEET: ${sheetName} ===\n`;
+          rows.forEach((row) => {
+            const cells = row.map(c => String(c ?? "").trim());
+            if (cells.some(c => c !== "")) {
+              text += cells.join(" | ") + "\n";
+            }
+          });
+        });
+        resolve(text.trim());
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsArrayBuffer(f);
+  });
 
   const { data: pos = [] } = useQuery({
     queryKey: ["purchaseOrders"],
@@ -27,15 +60,8 @@ export default function TechPack() {
     if (f) { setFile(f); setError(null); }
   };
 
-  const handleExtract = async () => {
-    if (!file) return;
-    setStep(1);
-    setError(null);
-    try {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
-
-      const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `You are a textile/garment tech pack expert. Extract all relevant data from this tech pack document.
+  const LLM_PROMPT = (extraContext = "") => `You are a textile/garment tech pack expert. Extract all relevant data from this tech pack.
+${extraContext ? `\nThe document is an Excel file. Here is its full text content extracted from all sheets:\n\n${extraContext}\n\nUse this text as your primary source.` : ""}
 Return a structured JSON with the following keys:
 
 {
@@ -92,27 +118,82 @@ Return a structured JSON with the following keys:
   }
 }
 
-Extract as much as you can from the document. Use null for fields you cannot find. Do not invent data.`,
-        file_urls: [file_url],
-        response_json_schema: {
-          type: "object",
-          properties: {
-            article: { type: "object" },
-            fabric_components: { type: "array" },
-            stitching: { type: "array" },
-            accessories: { type: "array" },
-            packaging: { type: "object" },
-          },
-        },
-        model: "claude_sonnet_4_6",
-      });
+Extract as much as you can. Use null for fields you cannot find. Do not invent data. For Excel data: look across all sheets — Article/General info is usually on the first sheet, Fabric/BOM on a second, Accessories/Trims on another, and Packaging separately.`;
+
+  const RESPONSE_SCHEMA = {
+    type: "object",
+    properties: {
+      article: { type: "object" },
+      fabric_components: { type: "array" },
+      stitching: { type: "array" },
+      accessories: { type: "array" },
+      packaging: { type: "object" },
+    },
+  };
+
+  const handleExtract = async () => {
+    if (!file) return;
+    setStep(1);
+    setError(null);
+    setExtractionWarning(null);
+
+    try {
+      let result;
+
+      if (isExcel(file)) {
+        // Step 1: Parse Excel client-side to text
+        let excelText = "";
+        let excelParseWarning = null;
+        try {
+          excelText = await parseExcelToText(file);
+        } catch (parseErr) {
+          excelParseWarning = "Excel parsing had issues — proceeding with file upload fallback.";
+        }
+
+        if (excelText && excelText.length > 100) {
+          // Use text content as context in the prompt (no file_url needed)
+          // Truncate if very large to avoid token limits
+          const truncated = excelText.length > 40000 ? excelText.slice(0, 40000) + "\n...[truncated]" : excelText;
+          result = await base44.integrations.Core.InvokeLLM({
+            prompt: LLM_PROMPT(truncated),
+            response_json_schema: RESPONSE_SCHEMA,
+            model: "claude_sonnet_4_6",
+          });
+          if (excelParseWarning) setExtractionWarning(excelParseWarning);
+        } else {
+          // Fallback: upload file and let LLM read it directly
+          const { file_url } = await base44.integrations.Core.UploadFile({ file });
+          result = await base44.integrations.Core.InvokeLLM({
+            prompt: LLM_PROMPT(),
+            file_urls: [file_url],
+            response_json_schema: RESPONSE_SCHEMA,
+            model: "claude_sonnet_4_6",
+          });
+          setExtractionWarning("Excel text extraction yielded minimal data — used file upload fallback. Some fields may need manual review.");
+        }
+      } else {
+        // PDF or image: upload and let LLM read visually
+        const { file_url } = await base44.integrations.Core.UploadFile({ file });
+        result = await base44.integrations.Core.InvokeLLM({
+          prompt: LLM_PROMPT(),
+          file_urls: [file_url],
+          response_json_schema: RESPONSE_SCHEMA,
+          model: "claude_sonnet_4_6",
+        });
+      }
 
       setExtractedData(result);
       setStep(2);
     } catch (err) {
-      setError("Extraction failed: " + err.message);
+      setError("Extraction failed: " + err.message + ". You can proceed to manual entry.");
       setStep(0);
     }
+  };
+
+  const handleManualEntry = () => {
+    setExtractedData({ article: {}, fabric_components: [], stitching: [], accessories: [], packaging: {} });
+    setError(null);
+    setStep(2);
   };
 
   const handleSaved = () => {
@@ -207,7 +288,14 @@ Extract as much as you can from the document. Use null for fields you cannot fin
               </select>
             </div>
 
-            {error && <p className="text-sm text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 space-y-2">
+                <p className="text-sm text-red-600">{error}</p>
+                <button onClick={handleManualEntry} className="text-xs text-red-500 underline hover:text-red-700">
+                  Skip extraction and enter data manually →
+                </button>
+              </div>
+            )}
 
             <Button onClick={handleExtract} disabled={!file} className="w-full gap-2">
               <Upload className="h-4 w-4" /> Extract Data from Tech Pack
@@ -235,6 +323,7 @@ Extract as much as you can from the document. Use null for fields you cannot fin
           pos={pos}
           onSaved={handleSaved}
           onBack={() => setStep(0)}
+          warning={extractionWarning}
         />
       )}
 

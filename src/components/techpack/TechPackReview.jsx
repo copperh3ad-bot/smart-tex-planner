@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Save, ChevronDown, ChevronUp, Plus, Trash2, ArrowLeft } from "lucide-react";
+import { Save, ChevronDown, ChevronUp, Plus, Trash2, ArrowLeft, AlertTriangle } from "lucide-react";
 
 const inputCls = "w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white";
 const numCls = "w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white text-right";
@@ -39,7 +39,7 @@ function Field({ label, value, onChange, type = "text", wide = false }) {
   );
 }
 
-export default function TechPackReview({ extractedData, selectedPoId, pos, onSaved, onBack }) {
+export default function TechPackReview({ extractedData, selectedPoId, pos, onSaved, onBack, warning }) {
   const [article, setArticle] = useState(extractedData.article || {});
   const [fabrics, setFabrics] = useState(extractedData.fabric_components || []);
   const [stitching, setStitching] = useState(extractedData.stitching || []);
@@ -179,6 +179,12 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
 
   return (
     <div className="space-y-4">
+      {warning && (
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
+          <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-700">{warning} Please review all fields carefully before saving.</p>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <button onClick={onBack} className="text-gray-400 hover:text-gray-600">
