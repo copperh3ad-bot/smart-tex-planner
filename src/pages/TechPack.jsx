@@ -169,7 +169,7 @@ Extract as much as you can from the document. Use null for fields you cannot fin
             >
               <Upload className="h-10 w-10 mx-auto text-gray-400 mb-3" />
               <p className="text-sm font-medium text-gray-700">Click to upload or drag & drop</p>
-              <p className="text-xs text-gray-400 mt-1">PDF, Excel (.xlsx), or Image (JPG, PNG) — max 20MB</p>
+              <p className="text-xs text-gray-400 mt-1">PDF, Excel (.xlsx), or Image (JPG, PNG) — max 100MB</p>
               <input
                 id="techpack-file"
                 type="file"
