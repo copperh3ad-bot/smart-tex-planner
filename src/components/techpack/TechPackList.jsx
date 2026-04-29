@@ -31,6 +31,9 @@ export default function TechPackList({ onEdit, onNew }) {
   const [sortField, setSortField] = useState("created_date");
   const [sortDir, setSortDir] = useState("desc");
   const [deleting, setDeleting] = useState(null);
+  const [selected, setSelected] = useState(new Set());
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState("Approved");
 
   const { data: records = [], isLoading } = useQuery({
     queryKey: ["techPackRecords"],
@@ -122,6 +125,43 @@ export default function TechPackList({ onEdit, onNew }) {
     if (onEdit) onEdit(record, false, true);
   };
 
+  const toggleSelect = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === filtered.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filtered.map(r => r.id)));
+    }
+  };
+
+  const handleBulkStatusUpdate = async () => {
+    if (selected.size === 0) return;
+    setBulkUpdating(true);
+    await Promise.all([...selected].map(id =>
+      base44.entities.TechPackRecord.update(id, { status: bulkStatus })
+    ));
+    queryClient.invalidateQueries({ queryKey: ["techPackRecords"] });
+    setSelected(new Set());
+    setBulkUpdating(false);
+  };
+
+  const handleBulkDelete = async () => {
+    if (selected.size === 0) return;
+    if (!window.confirm(`Delete ${selected.size} selected tech pack record(s)? This cannot be undone.`)) return;
+    setBulkUpdating(true);
+    await Promise.all([...selected].map(id => base44.entities.TechPackRecord.delete(id)));
+    queryClient.invalidateQueries({ queryKey: ["techPackRecords"] });
+    setSelected(new Set());
+    setBulkUpdating(false);
+  };
+
   const cols = [
     { field: "article_name",  label: "Article Name" },
     { field: "article_code",  label: "Article Code" },
@@ -164,6 +204,45 @@ export default function TechPackList({ onEdit, onNew }) {
         </Button>
       </div>
 
+      {/* Bulk action bar — shown when rows are selected */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 flex-wrap bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+          <span className="text-xs font-semibold text-blue-800">{selected.size} selected</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-blue-700">Set status to:</span>
+            <select
+              className="text-xs border border-blue-300 rounded px-2 py-1 bg-white focus:outline-none"
+              value={bulkStatus}
+              onChange={e => setBulkStatus(e.target.value)}
+            >
+              <option value="Draft">Draft</option>
+              <option value="Approved">Approved</option>
+              <option value="Updated">Updated</option>
+            </select>
+            <button
+              onClick={handleBulkStatusUpdate}
+              disabled={bulkUpdating}
+              className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
+            >
+              {bulkUpdating ? "Updating…" : "Apply"}
+            </button>
+          </div>
+          <button
+            onClick={handleBulkDelete}
+            disabled={bulkUpdating}
+            className="text-xs bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 disabled:opacity-50 ml-auto"
+          >
+            Delete Selected
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="text-xs text-blue-600 hover:text-blue-800 underline"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+
       {/* Stats row */}
       <div className="flex gap-4 text-xs text-gray-500">
         <span><strong className="text-gray-800">{records.length}</strong> total</span>
@@ -181,6 +260,14 @@ export default function TechPackList({ onEdit, onNew }) {
           <table className="w-full text-xs border-collapse min-w-[900px]">
             <thead style={{ backgroundColor: "#1F3864" }}>
               <tr>
+                <th className="px-3 py-2.5 text-center" style={{ width: 36 }}>
+                  <input
+                    type="checkbox"
+                    className="rounded"
+                    checked={filtered.length > 0 && selected.size === filtered.length}
+                    onChange={toggleSelectAll}
+                  />
+                </th>
                 {cols.map(c => (
                   <th key={c.field} className="px-3 py-2.5 text-left text-[11px] font-semibold text-white whitespace-nowrap cursor-pointer hover:bg-white/10 border-r border-white/10 last:border-r-0"
                     onClick={() => handleSort(c.field)}>
@@ -195,19 +282,28 @@ export default function TechPackList({ onEdit, onNew }) {
             </thead>
             <tbody>
               {isLoading && (
-                <tr><td colSpan={9} className="text-center py-10 text-gray-400 text-xs">Loading…</td></tr>
+                <tr><td colSpan={10} className="text-center py-10 text-gray-400 text-xs">Loading…</td></tr>
               )}
               {!isLoading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="text-center py-14 text-gray-400">
+                  <td colSpan={10} className="text-center py-14 text-gray-400">
                     <p className="text-sm font-medium">No tech packs found</p>
                     <p className="text-xs mt-1">Upload a tech pack to get started.</p>
                   </td>
                 </tr>
               )}
               {filtered.map((r, idx) => (
-                <tr key={r.id} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#F9FAFB" }}
+                <tr key={r.id}
+                  style={{ backgroundColor: selected.has(r.id) ? "#EFF6FF" : idx % 2 === 0 ? "#fff" : "#F9FAFB" }}
                   className="hover:bg-blue-50/30 transition-colors">
+                  <td className="px-3 py-1.5 text-center border-b border-gray-100">
+                    <input
+                      type="checkbox"
+                      className="rounded"
+                      checked={selected.has(r.id)}
+                      onChange={() => toggleSelect(r.id)}
+                    />
+                  </td>
                   <td className={td + " font-medium text-gray-900 max-w-[180px] truncate"} title={r.article_name}>
                     {r.article_name || <span className="text-gray-400 italic">—</span>}
                   </td>

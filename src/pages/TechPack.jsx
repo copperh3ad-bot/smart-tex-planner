@@ -3,9 +3,12 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload, FileText, CheckCircle, Loader2, X, AlertTriangle, List, Plus } from "lucide-react";
+import { Upload, FileText, CheckCircle, Loader2, X, AlertTriangle, List, Plus, Table2, Eye } from "lucide-react";
 import TechPackReview from "../components/techpack/TechPackReview";
 import TechPackList from "../components/techpack/TechPackList";
+import ExtractionDebugView from "../components/techpack/ExtractionDebugView";
+import ExtractionSummaryTable from "../components/techpack/ExtractionSummaryTable";
+import BulkEditTable from "../components/techpack/BulkEditTable";
 import * as XLSX from "xlsx";
 
 const STEPS = ["Upload", "Extracting", "Review & Edit", "Saved"];
@@ -21,6 +24,8 @@ export default function TechPack() {
   const [selectedPoId, setSelectedPoId] = useState("");
   const [editingRecord, setEditingRecord] = useState(null); // TechPackRecord being edited
   const [isNewVersion, setIsNewVersion] = useState(false);
+  const [rawExcelText, setRawExcelText] = useState(null);
+  const [reviewTab, setReviewTab] = useState("bulk"); // "bulk" | "summary" | "review"
   const queryClient = useQueryClient();
 
   const isExcel = (f) => f && (f.name.endsWith(".xlsx") || f.name.endsWith(".xls"));
@@ -59,69 +64,138 @@ export default function TechPack() {
     if (f) { setFile(f); setError(null); }
   };
 
-  const LLM_PROMPT = (extraContext = "") => `You are a textile/garment tech pack expert. Extract ALL relevant data from this tech pack document.
-${extraContext ? `\nThis is an Excel file. Full text content from all sheets:\n\n${extraContext}\n\nThis is your primary data source. Parse every table, row and column carefully.` : ""}
+  const LLM_PROMPT = (extraContext = "") => `You are a textile/garment tech pack data extraction expert. Your job is to extract ALL data accurately from this tech pack document.
 
-IMPORTANT EXTRACTION RULES:
-- For Excel: Article/general info is typically on sheet 1, Fabric/BOM on sheet 2, Accessories/Trims on another, Packaging on another
-- Look for tables, key-value pairs, merged cells (the header may span multiple rows)
-- Extract ALL accessories including elastic, zipper, buttons, labels, threads, tags, polybags, cartons
-- For stitching: look for thread details, SPI (stitches per inch), stitch type
-- For packaging: extract all label types, polybag specs, carton dimensions, stickers
-- Do NOT skip sections even if data looks partial
-- Use null only if a field truly cannot be found
+${extraContext ? `=== EXCEL FILE TEXT CONTENT (ALL SHEETS) ===\n${extraContext}\n=== END OF EXCEL CONTENT ===\n\nThis text is your primary data source — parse EVERY table row and column carefully.` : ""}
 
-Return ONLY this exact JSON structure:
+## MULTI-SHEET EXTRACTION STRATEGY
+
+For Excel files with multiple sheets, extract data as follows:
+
+**Sheet 1 (Articles / SKUs / General Info):**
+- Look for columns: item_code, sku, article_code, product_code → map to article.article_code
+- Look for: brand, product_type, product_category, product_name, description → concatenate or use best match for article.article_name
+- Look for: size, size_label, size_range → article.size_label
+- Look for: color, colour, colorway → article.color
+- Look for: units_per_carton, pcs_per_carton, qty_per_set → article.order_quantity
+
+**Sheet 2 (Fabric / BOM / Fabric Consumption):**
+- Each row = one fabric component. Extract ALL rows.
+- Columns to find: component, component_type, panel, part → fabric_components[].component_type
+- fabric_type, fabric_construction, knit_type, weave → fabric_components[].fabric_type
+- gsm, grams → fabric_components[].gsm (number only)
+- width, fabric_width, width_cm → fabric_components[].width (cm as number)
+- composition, fiber_content, content → fabric_components[].composition
+- consumption, consumption_per_unit, mtrs_per_pc → fabric_components[].consumption_per_unit (number)
+- wastage, wastage_percent, waste_% → fabric_components[].wastage_percent (number)
+- dimensions, product_size, cut_size → fabric_components[].product_size
+- direction, knitting_direction → fabric_components[].direction
+
+**Sheet 3 (Accessories / Trims / Accessory Consumption):**
+- Each row = one accessory/trim item. Extract ALL rows including packaging rows.
+- For rows where category/type is NOT "Packaging" or "Label" or "Carton" or "Polybag":
+  → Add to accessories[] array
+  → Map category/type column to accessories[].category using these rules:
+    * zipper/zip → "Zipper"
+    * slider → "Slider"
+    * elastic/elastic tape → "Elastic"
+    * button/snap → "Button"
+    * dori/cord/drawstring → "Dori"
+    * eyelet/grommet → "Eyelet"
+    * thread/sewing thread → "Stitching Thread"
+    * insert card/hang tag/swing tag that is not a fabric label → "Insert Card"
+    * label (woven, printed, care, brand) → "Label"
+    * polybag/poly bag → "Polybag"
+    * stiffener/board → "Stiffener"
+    * carton/box → "Carton"
+    * sticker/barcode sticker → "Sticker"
+    * otherwise → "Accessory" or "Other"
+  → item_name/description → accessories[].item_description
+  → size_spec/size/dimension → accessories[].size_spec
+  → color/colour → accessories[].color
+  → qty_per_piece/consumption/multiplier → accessories[].quantity_per_piece
+  → unit (pcs/meters/kgs) → accessories[].unit
+
+- For packaging-related rows, map to packaging object:
+  * If item_name contains "Satin Label" or "Woven Label" or "Care Label" or "Brand Label" or "Size Label" or "Law Tag" or "Wash Label" or "Content Label" or "Country of Origin" or "Barcode Label" or "Price Ticket" or "Hang Tag":
+    → Add to packaging.labels[] with label_type = item_name, description = material, size_spec = size
+  * If item_name contains "Polybag" or "Poly Bag":
+    → packaging.polybag: type = material (PVC/PP/PE/LDPE/OPP), size_cm = size, thickness_microns = thickness
+  * If item_name contains "Stiffener" or "Board":
+    → packaging.stiffener: used=true, material = material column, size_cm = size
+  * If item_name contains "Box" or "Carton" or "Printed Box" or "Master Carton":
+    → packaging.carton: type = "Printed" or "Plain" or "Brown" based on description, quality = material (e.g. 5-ply), size_cm = size, pieces_per_carton = qty_per_piece or units_per_carton
+  * If item_name contains "Sticker" or "Barcode Sticker" or "UPC":
+    → Add to packaging.stickers[] with sticker_type = item_name, description = material
+
+**Sheet 4+ (Carton Master / Packing):**
+- Extract carton dimensions: length × width × height → packaging.carton.size_cm (format "LxWxH")
+- gross_weight, net_weight → packaging.carton notes
+- pieces_per_carton / units_per_carton → packaging.carton.pieces_per_carton
+
+## STITCHING
+- Look for a stitching/sewing sheet or rows with stitch_type, SPI, stitches_per_inch, thread_type
+- Map to stitching[]: stitch_type, thread_type, thread_count, color, location
+
+## CRITICAL RULES
+1. NEVER return empty arrays unless you've exhausted all possible column name variants
+2. Use null for numeric fields that cannot be found — do NOT use 0 or ""
+3. Do NOT skip rows — if a table has 8 fabric rows, extract all 8
+4. Cross-reference item_code/sku across sheets to link related data
+5. For merged cell headers in Excel text: the header will appear on first row, sub-rows inherit it
+6. article_code MUST be the SKU/item code (e.g. FT2-TW, MP-QU-GY), NOT the product name
+
+Return ONLY this exact JSON structure (no markdown, no explanation):
 {
   "article": {
-    "article_name": "string — product name",
-    "article_code": "string — SKU or item code",
-    "size_label": "string — e.g. Twin, Queen, King, S, M, L",
+    "article_name": "full product name string",
+    "article_code": "SKU/item code — alphanumeric with dashes e.g. FT2-TW-WH",
+    "size_label": "e.g. Twin, Queen, King, S, M, L",
     "color": "string",
     "description": "string",
     "order_quantity": number or null
   },
   "fabric_components": [
     {
-      "component_type": "e.g. Flat Sheet, Fitted Sheet, Pillow Case, Body, Front Panel, Skirt, Bottom",
-      "product_size": "dimensions e.g. 70x96+4 inches",
-      "direction": "knitting direction e.g. WXL, LXL, WXW",
-      "fabric_type": "e.g. Jersey, Terry, Woven, Flannel, Fleece",
+      "component_type": "e.g. Flat Sheet, Fitted Sheet, Pillow Case, Body, Front Panel",
+      "product_size": "e.g. 70x96+4",
+      "direction": "e.g. WXL, LXL, WXW",
+      "fabric_type": "e.g. Jersey, Terry, Woven, Flannel",
       "gsm": number or null,
       "width": number or null,
-      "composition": "e.g. 100% Cotton, 60% Cotton 40% Polyester",
+      "composition": "e.g. 100% Cotton",
       "consumption_per_unit": number or null,
       "wastage_percent": number or null
     }
   ],
   "stitching": [
     {
-      "stitch_type": "e.g. Overlock 3-thread, Flatlock, Chain stitch, Lock stitch",
-      "thread_type": "e.g. Polyester, Cotton, Spun Polyester",
-      "thread_count": "e.g. 40/2, 20/2",
+      "stitch_type": "e.g. Overlock 3-thread, Flatlock",
+      "thread_type": "e.g. Polyester, Cotton",
+      "thread_count": "e.g. 40/2",
       "color": "string",
-      "location": "e.g. Side seam, Hem, Collar, Cuff, All seams"
+      "location": "e.g. Side seam, All seams"
     }
   ],
   "accessories": [
     {
-      "category": "one of: Zipper, Slider, Elastic, Button, Dori, Eyelet, Stitching Thread, Insert Card, Label, Accessory, Polybag, Stiffener, Carton, Sticker, Other",
-      "item_description": "detailed description",
+      "category": "Zipper|Slider|Elastic|Button|Dori|Eyelet|Stitching Thread|Insert Card|Label|Accessory|Polybag|Stiffener|Carton|Sticker|Other",
+      "item_description": "full description",
       "color": "string",
-      "size_spec": "specification e.g. 20mm, 30cm, 4 inch",
+      "size_spec": "e.g. 20mm, 4 inch",
       "quantity_per_piece": number or null,
-      "unit": "Pcs, Meters, or Kgs"
+      "unit": "Pcs or Meters or Kgs"
     }
   ],
   "packaging": {
     "labels": [
-      { "label_type": "e.g. Brand Label, Care Label, Size Label, Country of Origin, Composition Label, Barcode Label, Hang Tag", "description": "string", "size_spec": "string" }
+      { "label_type": "e.g. Brand Label, Care Label, Hang Tag", "description": "string", "size_spec": "string" }
     ],
-    "polybag": { "type": "PVC or PP or PE or LDPE or OPP", "size_cm": "LxW string", "thickness_microns": number or null, "printed": true or false },
+    "polybag": { "type": "PVC|PP|PE|LDPE|OPP", "size_cm": "LxW", "thickness_microns": number or null, "printed": true or false },
     "stiffener": { "used": true or false, "material": "string", "size_cm": "string" },
-    "carton": { "type": "Printed or Plain or Brown or White", "quality": "e.g. 5-ply B-flute", "size_cm": "LxWxH string", "pieces_per_carton": number or null },
+    "carton": { "type": "Printed|Plain|Brown|White", "quality": "e.g. 5-ply B-flute", "size_cm": "LxWxH", "pieces_per_carton": number or null },
     "stickers": [
-      { "sticker_type": "e.g. UPC Sticker, Barcode Sticker, Retailer Sticker", "description": "string" }
+      { "sticker_type": "e.g. UPC Sticker, Barcode Sticker", "description": "string" }
     ]
   }
 }`;
@@ -152,12 +226,14 @@ Return ONLY this exact JSON structure:
         let excelParseWarning = null;
         try {
           excelText = await parseExcelToText(file);
+          setRawExcelText(excelText); // store for debug view
         } catch {
           excelParseWarning = "Excel parsing had issues — proceeding with file upload fallback.";
+          setRawExcelText("(parse error — fell back to file upload)");
         }
 
         if (excelText && excelText.length > 100) {
-          const truncated = excelText.length > 50000 ? excelText.slice(0, 50000) + "\n...[truncated]" : excelText;
+          const truncated = excelText.length > 60000 ? excelText.slice(0, 60000) + "\n...[truncated at 60k chars]" : excelText;
           result = await base44.integrations.Core.InvokeLLM({
             prompt: LLM_PROMPT(truncated),
             response_json_schema: RESPONSE_SCHEMA,
@@ -230,6 +306,8 @@ Return ONLY this exact JSON structure:
     setSelectedPoId("");
     setEditingRecord(null);
     setIsNewVersion(false);
+    setRawExcelText(null);
+    setReviewTab("bulk");
   };
 
   const handleStartNew = () => {
@@ -382,29 +460,87 @@ Return ONLY this exact JSON structure:
           {/* Step 1: Extracting */}
           {step === 1 && (
             <Card>
-              <CardContent className="py-16 text-center">
-                <Loader2 className="h-12 w-12 mx-auto text-primary animate-spin mb-4" />
+              <CardContent className="py-10 text-center space-y-4">
+                <Loader2 className="h-12 w-12 mx-auto text-primary animate-spin" />
                 <p className="text-base font-semibold text-gray-800">Extracting Tech Pack Data...</p>
-                <p className="text-sm text-gray-500 mt-1">AI is reading the document and mapping to all fields.</p>
-                <p className="text-xs text-gray-400 mt-2">This may take 15–30 seconds for complex documents.</p>
+                <p className="text-sm text-gray-500">AI is reading the document and mapping all fields.</p>
+                <p className="text-xs text-gray-400">This may take 15–30 seconds for complex documents.</p>
+                {rawExcelText && (
+                  <div className="mt-4 text-left max-w-2xl mx-auto">
+                    <ExtractionDebugView rawText={rawExcelText} />
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
 
           {/* Step 2: Review */}
           {step === 2 && extractedData && (
-            <TechPackReview
-              extractedData={extractedData}
-              selectedPoId={selectedPoId}
-              pos={pos}
-              onSaved={handleSaved}
-              onBack={() => { setStep(0); setEditingRecord(null); }}
-              warning={extractionWarning}
-              fileName={file?.name || editingRecord?.file_name || ""}
-              fileUrl={fileUrl || editingRecord?.file_url || ""}
-              existingRecordId={editingRecord?.id || null}
-              existingVersion={editingRecord?.version || 1}
-            />
+            <div className="space-y-3">
+              {/* Sub-tabs */}
+              <div className="flex border-b border-gray-200 bg-white rounded-t-lg overflow-hidden">
+                <button
+                  onClick={() => setReviewTab("bulk")}
+                  className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${reviewTab === "bulk" ? "border-primary text-primary bg-blue-50/40" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+                >
+                  <Table2 className="h-3.5 w-3.5" /> Bulk Edit & Validate
+                </button>
+                <button
+                  onClick={() => setReviewTab("summary")}
+                  className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${reviewTab === "summary" ? "border-primary text-primary bg-blue-50/40" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+                >
+                  <Eye className="h-3.5 w-3.5" /> Extraction Summary
+                </button>
+                <button
+                  onClick={() => setReviewTab("review")}
+                  className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${reviewTab === "review" ? "border-primary text-primary bg-blue-50/40" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+                >
+                  <CheckCircle className="h-3.5 w-3.5" /> Full Review & Save
+                </button>
+                {rawExcelText && (
+                  <button
+                    onClick={() => setReviewTab("debug")}
+                    className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${reviewTab === "debug" ? "border-amber-500 text-amber-700 bg-amber-50/40" : "border-transparent text-amber-500 hover:text-amber-700"}`}
+                  >
+                    🔍 Raw Debug
+                  </button>
+                )}
+              </div>
+
+              {/* Bulk Edit tab */}
+              {reviewTab === "bulk" && (
+                <BulkEditTable
+                  extractedData={extractedData}
+                  onChange={setExtractedData}
+                />
+              )}
+
+              {/* Summary tab */}
+              {reviewTab === "summary" && (
+                <ExtractionSummaryTable extractedData={extractedData} />
+              )}
+
+              {/* Full review tab */}
+              {reviewTab === "review" && (
+                <TechPackReview
+                  extractedData={extractedData}
+                  selectedPoId={selectedPoId}
+                  pos={pos}
+                  onSaved={handleSaved}
+                  onBack={() => { setStep(0); setEditingRecord(null); }}
+                  warning={extractionWarning}
+                  fileName={file?.name || editingRecord?.file_name || ""}
+                  fileUrl={fileUrl || editingRecord?.file_url || ""}
+                  existingRecordId={editingRecord?.id || null}
+                  existingVersion={editingRecord?.version || 1}
+                />
+              )}
+
+              {/* Debug tab */}
+              {reviewTab === "debug" && rawExcelText && (
+                <ExtractionDebugView rawText={rawExcelText} />
+              )}
+            </div>
           )}
 
           {/* Step 3: Saved */}
