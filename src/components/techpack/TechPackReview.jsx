@@ -86,14 +86,14 @@ function countMissing(obj, keys) {
 
 const ACC_CATEGORIES = ["Zipper", "Slider", "Elastic", "Button", "Dori", "Eyelet", "Stitching Thread", "Insert Card", "Label", "Accessory", "Polybag", "Stiffener", "Carton", "Sticker", "Other"];
 
-export default function TechPackReview({ extractedData, selectedPoId, pos, onSaved, onBack, warning }) {
+export default function TechPackReview({ extractedData, selectedPoId, pos, onSaved, onBack, warning, fileName, fileUrl, existingRecordId, existingVersion }) {
   const [article, setArticle] = useState(extractedData.article || {});
   const [fabrics, setFabrics] = useState(extractedData.fabric_components || []);
   const [stitching, setStitching] = useState(extractedData.stitching || []);
   const [accessories, setAccessories] = useState(extractedData.accessories || []);
   const [packaging, setPackaging] = useState(extractedData.packaging || {});
   const [saving, setSaving] = useState(false);
-  const [saveLog, setSaveLog] = useState(null); // null = not saved yet, [] = saved
+  const [saveLog, setSaveLog] = useState(null);
   const [poId, setPoId] = useState(selectedPoId || "");
 
   // ── Updaters ─────────────────────────────────────────────────────────────────
@@ -295,6 +295,36 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
       if (pkgOps.length > 0) {
         await Promise.all(pkgOps);
         log.push(`✅ ${pkgOps.length} packaging item(s) saved`);
+      }
+
+      // ── 6. Save / Update TechPackRecord ──────────────────────────────────
+      const recordData = {
+        article_name: artName,
+        article_code: artCode,
+        customer_name: selectedPo?.customer_name || "",
+        size_label: article.size_label || "",
+        color: article.color || "",
+        file_name: fileName || "",
+        file_url: fileUrl || "",
+        version: existingRecordId ? (existingVersion || 1) + 1 : 1,
+        status: "Draft",
+        po_id: poId || null,
+        po_number: selectedPo?.po_number || "",
+        article_id: savedArticle?.id || null,
+        extracted_data: {
+          article,
+          fabric_components: fabrics,
+          stitching,
+          accessories,
+          packaging,
+        },
+      };
+      if (existingRecordId) {
+        await base44.entities.TechPackRecord.update(existingRecordId, recordData);
+        log.push(`✅ Tech Pack Record updated (v${recordData.version})`);
+      } else {
+        await base44.entities.TechPackRecord.create(recordData);
+        log.push(`✅ Tech Pack Record saved to library`);
       }
 
       setSaveLog(log);

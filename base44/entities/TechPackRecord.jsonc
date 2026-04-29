@@ -1,0 +1,68 @@
+{
+  "name": "TechPackRecord",
+  "type": "object",
+  "properties": {
+    "article_name": {
+      "type": "string",
+      "description": "Article name extracted from tech pack"
+    },
+    "article_code": {
+      "type": "string",
+      "description": "Article code / SKU"
+    },
+    "customer_name": {
+      "type": "string",
+      "description": "Customer / brand name"
+    },
+    "size_label": {
+      "type": "string",
+      "description": "Size label e.g. Twin, Queen, King"
+    },
+    "color": {
+      "type": "string"
+    },
+    "file_name": {
+      "type": "string",
+      "description": "Original uploaded file name"
+    },
+    "file_url": {
+      "type": "string",
+      "description": "URL of uploaded original file"
+    },
+    "version": {
+      "type": "number",
+      "description": "Version number of this tech pack",
+      "default": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Draft",
+        "Approved",
+        "Updated"
+      ],
+      "default": "Draft"
+    },
+    "po_id": {
+      "type": "string",
+      "description": "Linked Purchase Order ID"
+    },
+    "po_number": {
+      "type": "string"
+    },
+    "extracted_data": {
+      "type": "object",
+      "description": "Full JSON of all extracted sections (article, fabrics, stitching, accessories, packaging)"
+    },
+    "article_id": {
+      "type": "string",
+      "description": "ID of the Article record created from this tech pack"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "article_name"
+  ]
+}
