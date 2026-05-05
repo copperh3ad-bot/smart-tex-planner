@@ -9,12 +9,13 @@ import TechPackList from "../components/techpack/TechPackList";
 import ExtractionDebugView from "../components/techpack/ExtractionDebugView";
 import ExtractionSummaryTable from "../components/techpack/ExtractionSummaryTable";
 import BulkEditTable from "../components/techpack/BulkEditTable";
+import SmartExcelImport from "../components/techpack/SmartExcelImport";
 import * as XLSX from "xlsx";
 
 const STEPS = ["Upload", "Extracting", "Review & Edit", "Saved"];
 
 export default function TechPack() {
-  const [mainTab, setMainTab] = useState("list"); // "list" | "process"
+  const [mainTab, setMainTab] = useState("list"); // "list" | "process" | "import"
   const [step, setStep] = useState(0); // 0=upload, 1=extracting, 2=review, 3=saved
   const [file, setFile] = useState(null);
   const [fileUrl, setFileUrl] = useState(null);
@@ -366,13 +367,36 @@ Return ONLY this exact JSON structure (no markdown, no explanation):
             mainTab === "process" ? "border-primary text-primary" : "border-transparent text-gray-500 hover:text-gray-700"
           }`}
         >
-          <Upload className="h-4 w-4" /> Process New
+          <Upload className="h-4 w-4" /> AI Extract (PDF/Image)
+        </button>
+        <button
+          onClick={() => setMainTab("import")}
+          className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+            mainTab === "import" ? "border-primary text-primary" : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <Plus className="h-4 w-4" /> Structured Excel Import
         </button>
       </div>
 
       {/* ── Tab: Saved Tech Packs ────────────────────────────────────────────── */}
       {mainTab === "list" && (
         <TechPackList onEdit={handleEditRecord} onNew={handleStartNew} />
+      )}
+
+      {/* ── Tab: Structured Excel Import ─────────────────────────────────── */}
+      {mainTab === "import" && (
+        <SmartExcelImport
+          pos={pos}
+          selectedPoId={selectedPoId}
+          onSaved={() => {
+            queryClient.invalidateQueries({ queryKey: ["techPackRecords"] });
+          }}
+          onClose={() => {
+            queryClient.invalidateQueries({ queryKey: ["techPackRecords"] });
+            setMainTab("list");
+          }}
+        />
       )}
 
       {/* ── Tab: Process New ────────────────────────────────────────────────── */}
