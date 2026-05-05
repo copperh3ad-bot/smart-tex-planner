@@ -122,8 +122,10 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
       const selectedPo = pos.find(p => p.id === poId);
       const artName = article.article_name || "Unnamed Article";
       const artCode = article.article_code || "";
+      const poNum = selectedPo?.po_number || "";
+      const custName = selectedPo?.customer_name || article.customer_name || "";
 
-      // ── 1. Save Article (with fabric components embedded) ──────────────────
+      // ── 1. Article + fabric components ────────────────────────────────────
       const componentData = fabrics.map(f => ({
         component_type: f.component_type || "",
         product_size: f.product_size || "",
@@ -140,6 +142,7 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
       const savedArticle = await base44.entities.Article.create({
         article_name: artName,
         article_code: artCode,
+        customer_name: custName,
         color: article.color || "",
         size_label: article.size_label || "",
         order_quantity: article.order_quantity || null,
@@ -148,7 +151,7 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
       });
       log.push(`✅ Article saved: ${artName}`);
 
-      // ── 2. Save FabricTemplate (for repeat orders) ─────────────────────────
+      // ── 2. FabricTemplate (repeat orders) ─────────────────────────────────
       if (artCode && fabrics.length > 0) {
         const existing = await base44.entities.FabricTemplate.filter({ article_code: artCode });
         if (existing.length === 0) {
@@ -158,88 +161,112 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
             components: componentData,
             notes: `Auto-created from Tech Pack — ${new Date().toLocaleDateString()}`,
           });
-          log.push(`✅ Fabric Template saved for repeat orders (code: ${artCode})`);
+          log.push(`✅ Fabric Template saved (${artCode})`);
         } else {
-          log.push(`ℹ️ Fabric Template already exists for ${artCode} — not overwritten`);
+          // Update existing template with latest fabric data
+          await base44.entities.FabricTemplate.update(existing[0].id, {
+            article_name: artName,
+            components: componentData,
+          });
+          log.push(`🔄 Fabric Template updated (${artCode})`);
         }
       }
 
-      // ── 3. Stitching → AccessoryItem (Stitching Thread) ───────────────────
+      // ── 3. PriceList upsert ────────────────────────────────────────────────
+      if (artCode && (article.price_usd != null || packaging.carton?.cbm_per_carton != null)) {
+        const ppcRaw = packaging.carton?.pieces_per_carton;
+        const cbmRaw = packaging.carton?.cbm_per_carton;
+        const plData = {
+          item_code: artCode,
+          article: artName,
+          price_usd: article.price_usd != null ? Number(article.price_usd) : undefined,
+          qty_per_carton: ppcRaw != null ? Number(ppcRaw) : undefined,
+          cbm_per_carton: cbmRaw != null ? Number(cbmRaw) : undefined,
+        };
+        // Remove undefined keys
+        Object.keys(plData).forEach(k => plData[k] === undefined && delete plData[k]);
+        const existingPl = await base44.entities.PriceList.filter({ item_code: artCode });
+        if (existingPl.length > 0) {
+          await base44.entities.PriceList.update(existingPl[0].id, plData);
+          log.push(`🔄 Price List updated (${artCode}: $${article.price_usd ?? "—"})`);
+        } else if (Object.keys(plData).length > 1) {
+          await base44.entities.PriceList.create(plData);
+          log.push(`✅ Price List entry created (${artCode})`);
+        }
+      }
+
+      // ── 4. Stitching → AccessoryItem ──────────────────────────────────────
       const stitchOps = stitching
         .filter(s => s.stitch_type || s.thread_type)
         .map(s => base44.entities.AccessoryItem.create({
-          po_id: poId || null,
-          po_number: selectedPo?.po_number || "",
-          article_name: artName,
-          article_code: artCode,
+          po_id: poId || null, po_number: poNum,
+          article_name: artName, article_code: artCode,
           category: "Stitching Thread",
           item_description: s.stitch_type || "Stitching",
           color: s.color || "",
           size_spec: s.thread_count || "",
-          unit: "Pcs",
-          wastage_percent: 5,
-          multiplier: 1,
-          status: "Planned",
+          unit: "Pcs", wastage_percent: 5, multiplier: 1, status: "Planned",
           notes: [s.thread_type, s.location].filter(Boolean).join(" — "),
         }));
       if (stitchOps.length > 0) {
         await Promise.all(stitchOps);
-        log.push(`✅ ${stitchOps.length} stitching entry(ies) saved to Accessories`);
+        log.push(`✅ ${stitchOps.length} stitching entry(ies) → Accessories`);
       }
 
-      // ── 4. Accessories / Trims ─────────────────────────────────────────────
+      // ── 5. Accessories / Trims → AccessoryItem ────────────────────────────
+      const TRIM_CATS = ["Zipper", "Slider", "Elastic", "Button", "Dori", "Eyelet", "Stitching Thread"];
       const accOps = accessories
         .filter(a => a.item_description)
         .map(a => base44.entities.AccessoryItem.create({
-          po_id: poId || null,
-          po_number: selectedPo?.po_number || "",
-          article_name: artName,
-          article_code: artCode,
+          po_id: poId || null, po_number: poNum,
+          article_name: artName, article_code: artCode,
           category: a.category || "Accessory",
           item_description: a.item_description || "",
           color: a.color || "",
           size_spec: a.size_spec || "",
           multiplier: a.quantity_per_piece || 1,
+          consumption_per_unit: a.quantity_per_piece || null,
           unit: a.unit || "Pcs",
           quantity_required: null,
-          wastage_percent: 5,
+          wastage_percent: a.wastage_percent || 5,
           status: "Planned",
+          notes: [a.placement, a.variant].filter(Boolean).join(" | ") || "",
         }));
       if (accOps.length > 0) {
         await Promise.all(accOps);
-        log.push(`✅ ${accOps.length} accessory/trim item(s) saved`);
+        log.push(`✅ ${accOps.length} accessory/trim item(s) → Accessories module`);
       }
 
-      // ── 5. Packaging → AccessoryItems ─────────────────────────────────────
+      // ── 6. Packaging → AccessoryItems ─────────────────────────────────────
       const pkgOps = [];
 
       (packaging.labels || []).filter(l => l.label_type).forEach(l => {
         pkgOps.push(base44.entities.AccessoryItem.create({
-          po_id: poId || null, po_number: selectedPo?.po_number || "",
+          po_id: poId || null, po_number: poNum,
           article_name: artName, article_code: artCode,
           category: "Label",
           item_description: l.label_type,
           size_spec: l.size_spec || l.description || "",
+          notes: [l.placement, l.variant].filter(Boolean).join(" | ") || "",
           unit: "Pcs", wastage_percent: 5, multiplier: 1, status: "Planned",
         }));
       });
 
       if (packaging.polybag?.type) {
         pkgOps.push(base44.entities.AccessoryItem.create({
-          po_id: poId || null, po_number: selectedPo?.po_number || "",
+          po_id: poId || null, po_number: poNum,
           article_name: artName, article_code: artCode,
           category: "Polybag",
-          item_description: packaging.polybag.type,
+          item_description: `${packaging.polybag.type} Polybag${packaging.polybag.printed ? " (Printed)" : ""}`,
           size_spec: packaging.polybag.size_cm || "",
-          color: String(packaging.polybag.thickness_microns || ""),
+          notes: packaging.polybag.thickness_microns ? `${packaging.polybag.thickness_microns} microns` : "",
           unit: "Pcs", wastage_percent: 3, multiplier: 1, status: "Planned",
-          notes: packaging.polybag.printed ? "Printed" : "Plain",
         }));
       }
 
       if (packaging.stiffener?.used) {
         pkgOps.push(base44.entities.AccessoryItem.create({
-          po_id: poId || null, po_number: selectedPo?.po_number || "",
+          po_id: poId || null, po_number: poNum,
           article_name: artName, article_code: artCode,
           category: "Stiffener",
           item_description: packaging.stiffener.material || "Stiffener",
@@ -248,33 +275,40 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
         }));
       }
 
-      if (packaging.carton?.type) {
+      if (packaging.carton?.type || packaging.carton?.size_cm) {
         pkgOps.push(base44.entities.AccessoryItem.create({
-          po_id: poId || null, po_number: selectedPo?.po_number || "",
+          po_id: poId || null, po_number: poNum,
           article_name: artName, article_code: artCode,
           category: "Carton",
-          item_description: packaging.carton.type,
+          item_description: packaging.carton.type || "Carton",
           size_spec: packaging.carton.size_cm || "",
           notes: packaging.carton.quality || "",
           multiplier: packaging.carton.pieces_per_carton || 1,
           unit: "Pcs", wastage_percent: 2, status: "Planned",
         }));
 
-        // Also try to backfill carton dimensions into matching POItem
-        if (poId && artCode && packaging.carton.size_cm) {
+        // Backfill carton dims into POItem
+        if (poId && artCode) {
           try {
-            const parts = packaging.carton.size_cm.replace(/\s/g, "").split(/[xX×]/);
-            if (parts.length === 3) {
-              const [cl, cw, ch] = parts.map(Number);
+            const cartonData = {};
+            if (packaging.carton.length_cm) cartonData.carton_length = Number(packaging.carton.length_cm);
+            if (packaging.carton.width_cm) cartonData.carton_width = Number(packaging.carton.width_cm);
+            if (packaging.carton.height_cm) cartonData.carton_height = Number(packaging.carton.height_cm);
+            if (packaging.carton.pieces_per_carton) cartonData.pieces_per_carton = Number(packaging.carton.pieces_per_carton);
+            // Also parse from size_cm string if individual dims not available
+            if (!cartonData.carton_length && packaging.carton.size_cm) {
+              const parts = packaging.carton.size_cm.replace(/\s|cm/gi, "").split(/[xX×]/);
+              if (parts.length === 3) {
+                cartonData.carton_length = Number(parts[0]) || null;
+                cartonData.carton_width = Number(parts[1]) || null;
+                cartonData.carton_height = Number(parts[2]) || null;
+              }
+            }
+            if (Object.keys(cartonData).length > 0) {
               const poItems = await base44.entities.POItem.filter({ po_id: poId, item_code: artCode });
               if (poItems.length > 0) {
-                await base44.entities.POItem.update(poItems[0].id, {
-                  carton_length: cl || null,
-                  carton_width: cw || null,
-                  carton_height: ch || null,
-                  pieces_per_carton: packaging.carton.pieces_per_carton || null,
-                });
-                log.push(`✅ Carton dimensions written to PO Item (${artCode})`);
+                await base44.entities.POItem.update(poItems[0].id, cartonData);
+                log.push(`✅ Carton dims → PO Item (${artCode})`);
               }
             }
           } catch (_) { /* non-critical */ }
@@ -283,7 +317,7 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
 
       (packaging.stickers || []).filter(s => s.sticker_type).forEach(s => {
         pkgOps.push(base44.entities.AccessoryItem.create({
-          po_id: poId || null, po_number: selectedPo?.po_number || "",
+          po_id: poId || null, po_number: poNum,
           article_name: artName, article_code: artCode,
           category: "Sticker",
           item_description: s.sticker_type,
@@ -294,14 +328,59 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
 
       if (pkgOps.length > 0) {
         await Promise.all(pkgOps);
-        log.push(`✅ ${pkgOps.length} packaging item(s) saved`);
+        log.push(`✅ ${pkgOps.length} packaging item(s) → Accessories & Packaging module`);
       }
 
-      // ── 6. Save / Update TechPackRecord ──────────────────────────────────
+      // ── 7. ArticlePackaging record ─────────────────────────────────────────
+      if (artCode && (packaging.labels?.length || packaging.polybag || packaging.carton)) {
+        const apExisting = await base44.entities.ArticlePackaging.filter({ article_code: artCode });
+        const apData = {
+          article_name: artName,
+          article_code: artCode,
+          customer_name: custName,
+          labels: (packaging.labels || []).map(l => ({
+            label_type: l.label_type || "",
+            description: l.description || "",
+            supplier: "",
+            notes: [l.placement, l.variant].filter(Boolean).join(" | ") || "",
+          })),
+          polybag: packaging.polybag ? {
+            type: packaging.polybag.type || "PE",
+            size_cm: packaging.polybag.size_cm || "",
+            thickness_microns: packaging.polybag.thickness_microns || null,
+            printed: !!packaging.polybag.printed,
+          } : undefined,
+          stiffener: packaging.stiffener?.used ? {
+            used: true,
+            material: packaging.stiffener.material || "",
+            size_cm: packaging.stiffener.size_cm || "",
+          } : undefined,
+          carton: packaging.carton ? {
+            type: packaging.carton.type || "Printed",
+            quality: packaging.carton.quality || "",
+            size_cm: packaging.carton.size_cm || "",
+            pieces_per_carton: packaging.carton.pieces_per_carton || null,
+            cbm_per_carton: packaging.carton.cbm_per_carton || null,
+          } : undefined,
+          stickers: (packaging.stickers || []).map(s => ({
+            sticker_type: s.sticker_type || "",
+            description: s.description || "",
+          })),
+        };
+        if (apExisting.length > 0) {
+          await base44.entities.ArticlePackaging.update(apExisting[0].id, apData);
+          log.push(`🔄 Article Packaging record updated (${artCode})`);
+        } else {
+          await base44.entities.ArticlePackaging.create(apData);
+          log.push(`✅ Article Packaging record created (${artCode})`);
+        }
+      }
+
+      // ── 8. Save / Update TechPackRecord ──────────────────────────────────
       const recordData = {
         article_name: artName,
         article_code: artCode,
-        customer_name: selectedPo?.customer_name || "",
+        customer_name: custName,
         size_label: article.size_label || "",
         color: article.color || "",
         file_name: fileName || "",
@@ -309,15 +388,9 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
         version: existingRecordId ? (existingVersion || 1) + 1 : 1,
         status: "Draft",
         po_id: poId || null,
-        po_number: selectedPo?.po_number || "",
+        po_number: poNum,
         article_id: savedArticle?.id || null,
-        extracted_data: {
-          article,
-          fabric_components: fabrics,
-          stitching,
-          accessories,
-          packaging,
-        },
+        extracted_data: { article, fabric_components: fabrics, stitching, accessories, packaging },
       };
       if (existingRecordId) {
         await base44.entities.TechPackRecord.update(existingRecordId, recordData);
@@ -381,11 +454,12 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
 
       {/* Save destination info bar */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 flex flex-wrap gap-3 text-[10px] text-blue-800 font-medium">
-        <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-blue-500" /> Article Details → <strong>Article Master</strong></span>
-        <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-blue-500" /> Fabric / BOM → <strong>Article + Fabric Template</strong></span>
-        <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-blue-500" /> Stitching → <strong>Accessories (Stitching Thread)</strong></span>
+        <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-blue-500" /> Article → <strong>Article Master</strong></span>
+        <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-blue-500" /> Fabric → <strong>Article + Fabric Template</strong></span>
+        <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-blue-500" /> Price/CBM → <strong>Price List</strong></span>
         <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-blue-500" /> Accessories → <strong>Accessories Module</strong></span>
-        <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-blue-500" /> Packaging → <strong>Accessories & Packaging</strong></span>
+        <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-blue-500" /> Packaging → <strong>Accessories & Packaging + Article Packaging</strong></span>
+        <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-blue-500" /> Carton → <strong>PO Item dimensions (if linked)</strong></span>
       </div>
 
       {/* ── Section 1: Article ───────────────────────────────────────────────── */}
