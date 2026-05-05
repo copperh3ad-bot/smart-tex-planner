@@ -1,0 +1,169 @@
+{
+  "name": "ProductionOrder",
+  "type": "object",
+  "properties": {
+    "po_id": {
+      "type": "string",
+      "description": "Reference to PurchaseOrder"
+    },
+    "po_number": {
+      "type": "string",
+      "description": "PO Number for display"
+    },
+    "article_id": {
+      "type": "string",
+      "description": "Reference to Article"
+    },
+    "article_name": {
+      "type": "string"
+    },
+    "article_code": {
+      "type": "string"
+    },
+    "customer_name": {
+      "type": "string"
+    },
+    "color": {
+      "type": "string"
+    },
+    "size": {
+      "type": "string"
+    },
+    "quantity_planned": {
+      "type": "number"
+    },
+    "shipment_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "ex_factory_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "factory": {
+      "type": "string"
+    },
+    "production_line": {
+      "type": "string"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "Low",
+        "Medium",
+        "High",
+        "Urgent"
+      ],
+      "default": "Medium"
+    },
+    "packaging_type": {
+      "type": "string"
+    },
+    "overall_status": {
+      "type": "string",
+      "enum": [
+        "Pending",
+        "In Progress",
+        "On Hold",
+        "Completed",
+        "Shipped",
+        "Delayed",
+        "Cancelled"
+      ],
+      "default": "Pending"
+    },
+    "current_stage": {
+      "type": "string",
+      "enum": [
+        "Fabric Inhouse",
+        "Cutting",
+        "Stitching",
+        "Filling",
+        "Inspection",
+        "Packing",
+        "Carton Packing",
+        "Warehouse",
+        "Shipment Ready",
+        "Shipped"
+      ],
+      "default": "Fabric Inhouse"
+    },
+    "material_readiness_status": {
+      "type": "string",
+      "enum": [
+        "Pending",
+        "Partial",
+        "Ready",
+        "Blocked"
+      ],
+      "default": "Pending"
+    },
+    "fabric_status": {
+      "type": "string",
+      "enum": [
+        "Pending",
+        "Ordered",
+        "Inhouse",
+        "Shortage"
+      ],
+      "default": "Pending"
+    },
+    "accessories_status": {
+      "type": "string",
+      "enum": [
+        "Pending",
+        "Ordered",
+        "Inhouse",
+        "Shortage"
+      ],
+      "default": "Pending"
+    },
+    "packaging_status": {
+      "type": "string",
+      "enum": [
+        "Pending",
+        "Ordered",
+        "Inhouse",
+        "Shortage"
+      ],
+      "default": "Pending"
+    },
+    "target_completion_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "estimated_completion_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "delay_risk": {
+      "type": "string",
+      "enum": [
+        "Low",
+        "Medium",
+        "High",
+        "Critical"
+      ],
+      "default": "Low"
+    },
+    "quantity_packed": {
+      "type": "number",
+      "default": 0
+    },
+    "quantity_rejected_total": {
+      "type": "number",
+      "default": 0
+    },
+    "shipment_readiness_pct": {
+      "type": "number",
+      "default": 0
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "article_name",
+    "quantity_planned"
+  ]
+}

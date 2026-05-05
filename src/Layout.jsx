@@ -13,7 +13,8 @@ import {
   Package,
   Receipt,
   Shirt,
-  Tag
+  Tag,
+  Cog
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +29,7 @@ const navItems = [
   { name: "Accessories & Packaging", icon: Tag, page: "AccessoriesPackaging" },
   { name: "Accessory Orders", icon: Package, page: "AccessoryPurchaseOrders" },
   { name: "Tech Pack", icon: FileText, page: "TechPack" },
+  { name: "Production", icon: Cog, page: "Production" },
   { name: "Shipping Docs", icon: FileText, page: "ShippingDocuments" },
   { name: "Production", icon: Factory, page: "Production" },
   { name: "Job Cards", icon: ClipboardList, page: "JobCards" },

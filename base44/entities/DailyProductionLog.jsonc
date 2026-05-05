@@ -1,0 +1,74 @@
+{
+  "name": "DailyProductionLog",
+  "type": "object",
+  "properties": {
+    "production_order_id": {
+      "type": "string"
+    },
+    "production_stage_id": {
+      "type": "string"
+    },
+    "po_number": {
+      "type": "string"
+    },
+    "article_name": {
+      "type": "string"
+    },
+    "stage_name": {
+      "type": "string"
+    },
+    "log_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "shift": {
+      "type": "string",
+      "enum": [
+        "Morning",
+        "Evening",
+        "Night"
+      ],
+      "default": "Morning"
+    },
+    "operator_name": {
+      "type": "string"
+    },
+    "line_name": {
+      "type": "string"
+    },
+    "factory": {
+      "type": "string"
+    },
+    "quantity_produced": {
+      "type": "number",
+      "default": 0
+    },
+    "quantity_rejected": {
+      "type": "number",
+      "default": 0
+    },
+    "quantity_reworked": {
+      "type": "number",
+      "default": 0
+    },
+    "target_quantity": {
+      "type": "number"
+    },
+    "efficiency_percentage": {
+      "type": "number",
+      "default": 0
+    },
+    "hours_worked": {
+      "type": "number",
+      "default": 8
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "production_order_id",
+    "log_date",
+    "stage_name"
+  ]
+}

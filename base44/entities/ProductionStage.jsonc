@@ -1,0 +1,95 @@
+{
+  "name": "ProductionStage",
+  "type": "object",
+  "properties": {
+    "production_order_id": {
+      "type": "string",
+      "description": "Reference to ProductionOrder"
+    },
+    "po_number": {
+      "type": "string"
+    },
+    "article_name": {
+      "type": "string"
+    },
+    "stage_name": {
+      "type": "string",
+      "enum": [
+        "Fabric Inhouse",
+        "Cutting",
+        "Stitching",
+        "Filling",
+        "Inspection",
+        "Packing",
+        "Carton Packing",
+        "Warehouse",
+        "Shipment Ready",
+        "Shipped"
+      ]
+    },
+    "stage_order": {
+      "type": "number",
+      "description": "Sequence order 1-10"
+    },
+    "planned_quantity": {
+      "type": "number"
+    },
+    "actual_quantity": {
+      "type": "number",
+      "default": 0
+    },
+    "rejection_quantity": {
+      "type": "number",
+      "default": 0
+    },
+    "rework_quantity": {
+      "type": "number",
+      "default": 0
+    },
+    "balance_quantity": {
+      "type": "number",
+      "default": 0
+    },
+    "start_date_planned": {
+      "type": "string",
+      "format": "date"
+    },
+    "end_date_planned": {
+      "type": "string",
+      "format": "date"
+    },
+    "start_date_actual": {
+      "type": "string",
+      "format": "date"
+    },
+    "end_date_actual": {
+      "type": "string",
+      "format": "date"
+    },
+    "worker_names": {
+      "type": "string",
+      "description": "Comma-separated worker names"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Pending",
+        "In Progress",
+        "Completed",
+        "Delayed",
+        "On Hold"
+      ],
+      "default": "Pending"
+    },
+    "remarks": {
+      "type": "string"
+    },
+    "delay_reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "production_order_id",
+    "stage_name"
+  ]
+}

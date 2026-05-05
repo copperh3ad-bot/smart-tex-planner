@@ -1,0 +1,50 @@
+{
+  "name": "FactoryResource",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "Factory",
+        "Production Line",
+        "Machine",
+        "Worker"
+      ],
+      "default": "Production Line"
+    },
+    "factory_name": {
+      "type": "string",
+      "description": "Parent factory name"
+    },
+    "capacity_units_per_day": {
+      "type": "number"
+    },
+    "available_hours_per_day": {
+      "type": "number",
+      "default": 8
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Active",
+        "Maintenance",
+        "Inactive"
+      ],
+      "default": "Active"
+    },
+    "specialization": {
+      "type": "string",
+      "description": "e.g. Stitching, Cutting, Packing"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "type"
+  ]
+}
