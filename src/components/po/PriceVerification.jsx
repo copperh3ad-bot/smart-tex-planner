@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, AlertTriangle, HelpCircle, ShieldCheck, Pencil, Check, X } from "lucide-react";
+import { CheckCircle2, AlertTriangle, HelpCircle, ShieldCheck, Pencil, Check, X, RefreshCw } from "lucide-react";
 
 function MatchBadge({ status }) {
   if (status === "Matched")
@@ -21,7 +21,9 @@ export default function PriceVerification({ poId, items, onEditItem }) {
   const queryClient = useQueryClient();
   const [editingRefPrice, setEditingRefPrice] = useState({});
   const [editingRefCbm, setEditingRefCbm] = useState({});
-  const [editingPoPrice, setEditingPoPrice] = useState({}); // { [itemId]: string }
+  const [editingPoPrice, setEditingPoPrice] = useState({});
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState(null);
 
   const handleSavePoPrice = async (item, newPrice) => {
     const price = Number(newPrice);
@@ -124,6 +126,45 @@ export default function PriceVerification({ poId, items, onEditItem }) {
     queryClient.invalidateQueries({ queryKey: ["poItems", poId] });
   };
 
+  // Sync ref prices from TechPackRecords by matching item_code
+  const handleSyncFromTechPack = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const techPacks = await base44.entities.TechPackRecord.list("-created_date", 500);
+      // Build a map: item_code (upper) => { price_usd, cbm_per_carton, qty_per_carton }
+      const tpPriceMap = {};
+      techPacks.forEach(tp => {
+        const code = tp.article_code?.trim().toUpperCase();
+        if (!code) return;
+        const price = tp.extracted_data?.article?.price_usd;
+        if (price != null) {
+          tpPriceMap[code] = { price_usd: Number(price) };
+        }
+      });
+
+      let updated = 0;
+      let skipped = 0;
+      for (const item of items) {
+        const key = item.item_code?.trim().toUpperCase();
+        if (!key || !tpPriceMap[key]) { skipped++; continue; }
+        const { price_usd } = tpPriceMap[key];
+        const existing = priceMap[key];
+        if (existing) {
+          await base44.entities.PriceList.update(existing.id, { price_usd });
+        } else {
+          await base44.entities.PriceList.create({ item_code: item.item_code, price_usd, article: item.item_description || "" });
+        }
+        updated++;
+      }
+      queryClient.invalidateQueries({ queryKey: ["priceList"] });
+      setSyncResult({ updated, skipped });
+    } catch (err) {
+      setSyncResult({ error: err.message });
+    }
+    setSyncing(false);
+  };
+
   const allMatchCount = rows.filter((r) => r.priceStatus === "Matched" && r.cbmStatus === "Matched").length;
   const mismatchCount = rows.filter((r) => r.priceStatus === "Mismatch" || r.cbmStatus === "Mismatch").length;
   const notFoundCount = rows.filter((r) => r.priceStatus === "Not Found").length;
@@ -153,6 +194,16 @@ export default function PriceVerification({ poId, items, onEditItem }) {
               </span>
             )}
           </div>
+          <Button size="sm" variant="outline" onClick={handleSyncFromTechPack} disabled={syncing} className="text-xs h-7 gap-1">
+            <RefreshCw className={`h-3 w-3 ${syncing ? "animate-spin" : ""}`} />
+            {syncing ? "Syncing…" : "Sync Ref Price from Tech Pack"}
+          </Button>
+          {syncResult && !syncResult.error && (
+            <span className="text-xs text-emerald-600 font-medium">{syncResult.updated} updated, {syncResult.skipped} not found</span>
+          )}
+          {syncResult?.error && (
+            <span className="text-xs text-red-500">{syncResult.error}</span>
+          )}
           {allMatchCount > 0 && (
             <Button size="sm" variant="outline" onClick={handleApproveAll} className="text-xs h-7">
               Approve All Matched
