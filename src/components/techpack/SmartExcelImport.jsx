@@ -375,188 +375,216 @@ export default function SmartExcelImport({ pos = [], selectedPoId, onSaved, onCl
     setParsing(false);
   };
 
-  // Full sync: TechPackRecord + Article + FabricTemplate + AccessoryItems + ArticlePackaging + PriceList
+  // Full sync — bulk pre-load existing records then process efficiently
   const handleSave = async () => {
     if (!preview?.length) return;
     setSaving(true);
     const savedList = [];
     const errorList = [];
     const poRecord = pos.find(p => p.id === localPoId);
+    const poNum = poRecord?.po_number || "";
 
-    for (const rec of preview) {
-      try {
-        const artCode = rec.article_code;
-        const artName = rec.article_name;
-        const poNum = poRecord?.po_number || "";
-        const custName = rec.customer_name || poRecord?.customer_name || "";
-        const ed = rec.extracted_data || {};
-        const fabricComponents = ed.fabric_components || [];
-        const accessories = ed.accessories || [];
-        const packaging = ed.packaging || {};
-        const pl = ed.price_list || {};
+    try {
+      // ── Step 1: Bulk pre-load all existing records to avoid N×filter() calls ──
+      const [existingTPs, existingArticles, existingTemplates, existingPriceLists, existingPackaging] = await Promise.all([
+        base44.entities.TechPackRecord.list("-created_date", 1000),
+        base44.entities.Article.list("-created_date", 1000),
+        base44.entities.FabricTemplate.list("-created_date", 1000),
+        base44.entities.PriceList.list("-created_date", 1000),
+        base44.entities.ArticlePackaging.list("-created_date", 1000),
+      ]);
 
-        // 1. TechPackRecord upsert
-        const existing = await base44.entities.TechPackRecord.filter({ article_code: artCode });
-        if (existing.length > 0) {
-          await base44.entities.TechPackRecord.update(existing[0].id, {
-            ...rec, version: (existing[0].version || 1) + 1, status: "Updated",
-          });
-          savedList.push({ code: artCode, action: "updated" });
-        } else {
-          await base44.entities.TechPackRecord.create(rec);
-          savedList.push({ code: artCode, action: "created" });
-        }
+      // Build lookup maps by article_code / item_code
+      const tpMap = {};
+      existingTPs.forEach(r => { if (r.article_code) tpMap[r.article_code.toUpperCase()] = r; });
+      const artMap = {};
+      existingArticles.forEach(r => { if (r.article_code) artMap[r.article_code.toUpperCase()] = r; });
+      const tplMap = {};
+      existingTemplates.forEach(r => { if (r.article_code) tplMap[r.article_code.toUpperCase()] = r; });
+      const plMap = {};
+      existingPriceLists.forEach(r => { if (r.item_code) plMap[r.item_code.toUpperCase()] = r; });
+      const apMap = {};
+      existingPackaging.forEach(r => { if (r.article_code) apMap[r.article_code.toUpperCase()] = r; });
 
-        // 2. Article upsert (check by article_code)
-        const componentData = fabricComponents.map(f => ({
-          component_type: f.component_type || "",
-          product_size: f.product_size || "",
-          direction: f.direction || "",
-          fabric_type: f.fabric_type || "",
-          gsm: f.gsm || null,
-          width: f.width || null,
-          composition: f.composition || "",
-          consumption_per_unit: f.consumption_per_unit || null,
-          wastage_percent: f.wastage_percent || null,
-          total_required: null,
-        }));
-        const existingArt = artCode ? await base44.entities.Article.filter({ article_code: artCode }) : [];
-        if (existingArt.length > 0) {
-          await base44.entities.Article.update(existingArt[0].id, {
-            article_name: artName, customer_name: custName,
-            color: rec.color || "", size_label: rec.size_label || "",
-            po_id: localPoId || null, components: componentData,
-          });
-        } else {
-          await base44.entities.Article.create({
+      // ── Step 2: Process each SKU ──────────────────────────────────────────────
+      for (const rec of preview) {
+        try {
+          const artCode = rec.article_code;
+          const artCodeKey = artCode.toUpperCase();
+          const artName = rec.article_name;
+          const custName = rec.customer_name || poRecord?.customer_name || "";
+          const ed = rec.extracted_data || {};
+          const fabricComponents = ed.fabric_components || [];
+          const accessories = ed.accessories || [];
+          const packaging = ed.packaging || {};
+          const pl = ed.price_list || {};
+
+          const componentData = fabricComponents.map(f => ({
+            component_type: f.component_type || "",
+            product_size: f.product_size || "",
+            direction: f.direction || "",
+            fabric_type: f.fabric_type || "",
+            gsm: f.gsm || null,
+            width: f.width || null,
+            composition: f.composition || "",
+            consumption_per_unit: f.consumption_per_unit || null,
+            wastage_percent: f.wastage_percent || null,
+            total_required: null,
+          }));
+
+          // All upserts run in parallel per SKU
+          const ops = [];
+
+          // 1. TechPackRecord
+          const existingTP = tpMap[artCodeKey];
+          if (existingTP) {
+            ops.push(base44.entities.TechPackRecord.update(existingTP.id, {
+              ...rec, version: (existingTP.version || 1) + 1, status: "Updated",
+            }).then(() => savedList.push({ code: artCode, action: "updated" })));
+          } else {
+            ops.push(base44.entities.TechPackRecord.create(rec)
+              .then(() => savedList.push({ code: artCode, action: "created" })));
+          }
+
+          // 2. Article
+          const existingArt = artMap[artCodeKey];
+          const artData = {
             article_name: artName, article_code: artCode, customer_name: custName,
             color: rec.color || "", size_label: rec.size_label || "",
             po_id: localPoId || null, components: componentData,
-          });
-        }
-
-        // 3. FabricTemplate upsert
-        if (artCode && fabricComponents.length > 0) {
-          const existingTpl = await base44.entities.FabricTemplate.filter({ article_code: artCode });
-          if (existingTpl.length > 0) {
-            await base44.entities.FabricTemplate.update(existingTpl[0].id, { article_name: artName, components: componentData });
-          } else {
-            await base44.entities.FabricTemplate.create({ article_code: artCode, article_name: artName, components: componentData });
-          }
-        }
-
-        // 4. PriceList upsert
-        if (artCode && (pl.price_usd != null || pl.cbm_per_carton != null)) {
-          const plData = {
-            item_code: artCode,
-            article: pl.item_description || artName,
-            price_usd: pl.price_usd ?? null,
-            qty_per_carton: pl.qty_per_carton ?? null,
-            cbm_per_carton: pl.cbm_per_carton ?? null,
           };
-          const existingPl = await base44.entities.PriceList.filter({ item_code: artCode });
-          if (existingPl.length > 0) {
-            await base44.entities.PriceList.update(existingPl[0].id, plData);
+          if (existingArt) {
+            ops.push(base44.entities.Article.update(existingArt.id, artData));
           } else {
-            await base44.entities.PriceList.create(plData);
+            ops.push(base44.entities.Article.create(artData));
           }
-        }
 
-        // 5. AccessoryItems — only create if PO linked (avoid duplicates without context)
-        if (localPoId && accessories.length > 0) {
-          const accOps = accessories.filter(a => a.item_description).map(a =>
-            base44.entities.AccessoryItem.create({
-              po_id: localPoId, po_number: poNum,
+          // 3. FabricTemplate
+          if (fabricComponents.length > 0) {
+            const existingTpl = tplMap[artCodeKey];
+            const tplData = { article_code: artCode, article_name: artName, components: componentData };
+            if (existingTpl) {
+              ops.push(base44.entities.FabricTemplate.update(existingTpl.id, tplData));
+            } else {
+              ops.push(base44.entities.FabricTemplate.create(tplData));
+            }
+          }
+
+          // 4. PriceList
+          if (pl.price_usd != null || pl.cbm_per_carton != null) {
+            const plData = {
+              item_code: artCode,
+              article: pl.item_description || artName,
+              price_usd: pl.price_usd ?? null,
+              qty_per_carton: pl.qty_per_carton ?? null,
+              cbm_per_carton: pl.cbm_per_carton ?? null,
+            };
+            const existingPl = plMap[artCodeKey];
+            if (existingPl) {
+              ops.push(base44.entities.PriceList.update(existingPl.id, plData));
+            } else {
+              ops.push(base44.entities.PriceList.create(plData));
+            }
+          }
+
+          // 5. ArticlePackaging (always — no PO required)
+          if (packaging.labels?.length || packaging.polybag || packaging.carton || packaging.stiffener) {
+            const apData = {
+              article_name: artName, article_code: artCode, customer_name: custName,
+              labels: (packaging.labels || []).map(l => ({
+                label_type: l.label_type || "", description: l.description || "",
+                notes: [l.placement, l.variant].filter(Boolean).join(" | ") || "",
+              })),
+              polybag: packaging.polybag ? {
+                type: packaging.polybag.type || "PE",
+                size_cm: packaging.polybag.size_cm || "",
+                thickness_microns: packaging.polybag.thickness_microns || null,
+                printed: !!packaging.polybag.printed,
+              } : undefined,
+              stiffener: packaging.stiffener?.used ? {
+                used: true, material: packaging.stiffener.material || "", size_cm: packaging.stiffener.size_cm || "",
+              } : undefined,
+              carton: packaging.carton ? {
+                type: packaging.carton.type || "Printed", quality: packaging.carton.quality || "",
+                size_cm: packaging.carton.size_cm || "",
+                pieces_per_carton: packaging.carton.pieces_per_carton || null,
+                cbm_per_carton: packaging.carton.cbm_per_carton || null,
+              } : undefined,
+              stickers: (packaging.stickers || []).map(s => ({ sticker_type: s.sticker_type || "", description: s.description || "" })),
+            };
+            const existingAp = apMap[artCodeKey];
+            if (existingAp) {
+              ops.push(base44.entities.ArticlePackaging.update(existingAp.id, apData));
+            } else {
+              ops.push(base44.entities.ArticlePackaging.create(apData));
+            }
+          }
+
+          // 6. AccessoryItems — create for all (PO link optional)
+          const accCreateList = [];
+          accessories.filter(a => a.item_description).forEach(a => {
+            accCreateList.push({
+              po_id: localPoId || null, po_number: poNum,
               article_name: artName, article_code: artCode,
               category: a.category || "Accessory",
               item_description: a.item_description || "",
-              color: a.color || "",
-              size_spec: a.size_spec || "",
+              color: a.color || "", size_spec: a.size_spec || "",
               multiplier: a.quantity_per_piece || 1,
               consumption_per_unit: a.quantity_per_piece || null,
-              unit: a.unit || "Pcs",
-              wastage_percent: a.wastage_percent || 5,
+              unit: a.unit || "Pcs", wastage_percent: a.wastage_percent || 5,
               status: "Planned",
               notes: [a.placement, a.variant].filter(Boolean).join(" | ") || "",
-            })
-          );
-          // Add packaging items
+            });
+          });
           (packaging.labels || []).filter(l => l.label_type).forEach(l => {
-            accOps.push(base44.entities.AccessoryItem.create({
-              po_id: localPoId, po_number: poNum, article_name: artName, article_code: artCode,
+            accCreateList.push({
+              po_id: localPoId || null, po_number: poNum, article_name: artName, article_code: artCode,
               category: "Label", item_description: l.label_type, size_spec: l.size_spec || "",
               notes: [l.placement, l.variant].filter(Boolean).join(" | ") || "",
               unit: "Pcs", wastage_percent: 5, multiplier: 1, status: "Planned",
-            }));
+            });
           });
           if (packaging.polybag?.type) {
-            accOps.push(base44.entities.AccessoryItem.create({
-              po_id: localPoId, po_number: poNum, article_name: artName, article_code: artCode,
+            accCreateList.push({
+              po_id: localPoId || null, po_number: poNum, article_name: artName, article_code: artCode,
               category: "Polybag", item_description: `${packaging.polybag.type} Polybag`,
               size_spec: packaging.polybag.size_cm || "", unit: "Pcs", wastage_percent: 3, multiplier: 1, status: "Planned",
-            }));
+            });
           }
           if (packaging.stiffener?.used) {
-            accOps.push(base44.entities.AccessoryItem.create({
-              po_id: localPoId, po_number: poNum, article_name: artName, article_code: artCode,
+            accCreateList.push({
+              po_id: localPoId || null, po_number: poNum, article_name: artName, article_code: artCode,
               category: "Stiffener", item_description: packaging.stiffener.material || "Stiffener",
               size_spec: packaging.stiffener.size_cm || "", unit: "Pcs", wastage_percent: 3, multiplier: 1, status: "Planned",
-            }));
+            });
           }
           if (packaging.carton?.size_cm || packaging.carton?.type) {
-            accOps.push(base44.entities.AccessoryItem.create({
-              po_id: localPoId, po_number: poNum, article_name: artName, article_code: artCode,
+            accCreateList.push({
+              po_id: localPoId || null, po_number: poNum, article_name: artName, article_code: artCode,
               category: "Carton", item_description: packaging.carton.type || "Carton",
               size_spec: packaging.carton.size_cm || "", notes: packaging.carton.quality || "",
               multiplier: packaging.carton.pieces_per_carton || 1, unit: "Pcs", wastage_percent: 2, status: "Planned",
-            }));
+            });
           }
           (packaging.stickers || []).filter(s => s.sticker_type).forEach(s => {
-            accOps.push(base44.entities.AccessoryItem.create({
-              po_id: localPoId, po_number: poNum, article_name: artName, article_code: artCode,
+            accCreateList.push({
+              po_id: localPoId || null, po_number: poNum, article_name: artName, article_code: artCode,
               category: "Sticker", item_description: s.sticker_type, size_spec: s.description || "",
               unit: "Pcs", wastage_percent: 5, multiplier: 1, status: "Planned",
-            }));
+            });
           });
-          await Promise.all(accOps);
-        }
-
-        // 6. ArticlePackaging upsert (always, regardless of PO link)
-        if (artCode && (packaging.labels?.length || packaging.polybag || packaging.carton)) {
-          const apData = {
-            article_name: artName, article_code: artCode, customer_name: custName,
-            labels: (packaging.labels || []).map(l => ({
-              label_type: l.label_type || "", description: l.description || "",
-              notes: [l.placement, l.variant].filter(Boolean).join(" | ") || "",
-            })),
-            polybag: packaging.polybag ? {
-              type: packaging.polybag.type || "PE",
-              size_cm: packaging.polybag.size_cm || "",
-              thickness_microns: packaging.polybag.thickness_microns || null,
-              printed: !!packaging.polybag.printed,
-            } : undefined,
-            stiffener: packaging.stiffener?.used ? {
-              used: true, material: packaging.stiffener.material || "", size_cm: packaging.stiffener.size_cm || "",
-            } : undefined,
-            carton: packaging.carton ? {
-              type: packaging.carton.type || "Printed", quality: packaging.carton.quality || "",
-              size_cm: packaging.carton.size_cm || "",
-              pieces_per_carton: packaging.carton.pieces_per_carton || null,
-              cbm_per_carton: packaging.carton.cbm_per_carton || null,
-            } : undefined,
-            stickers: (packaging.stickers || []).map(s => ({ sticker_type: s.sticker_type || "", description: s.description || "" })),
-          };
-          const existingAp = await base44.entities.ArticlePackaging.filter({ article_code: artCode });
-          if (existingAp.length > 0) {
-            await base44.entities.ArticlePackaging.update(existingAp[0].id, apData);
-          } else {
-            await base44.entities.ArticlePackaging.create(apData);
+          // Bulk create accessories in batches of 10
+          for (let i = 0; i < accCreateList.length; i += 10) {
+            ops.push(base44.entities.AccessoryItem.bulkCreate(accCreateList.slice(i, i + 10)));
           }
-        }
 
-      } catch (err) {
-        errorList.push(`${rec.article_code}: ${err.message}`);
+          await Promise.all(ops);
+        } catch (err) {
+          errorList.push(`${rec.article_code}: ${err.message}`);
+        }
       }
+    } catch (err) {
+      errorList.push(`Fatal: ${err.message}`);
     }
 
     setSaved(savedList);
