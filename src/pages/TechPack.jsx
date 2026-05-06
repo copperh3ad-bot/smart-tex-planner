@@ -10,12 +10,13 @@ import ExtractionDebugView from "../components/techpack/ExtractionDebugView";
 import ExtractionSummaryTable from "../components/techpack/ExtractionSummaryTable";
 import BulkEditTable from "../components/techpack/BulkEditTable";
 import SmartExcelImport from "../components/techpack/SmartExcelImport";
+import SyncDiagnosticDashboard from "../components/techpack/SyncDiagnosticDashboard";
 import * as XLSX from "xlsx";
 
 const STEPS = ["Upload", "Extracting", "Review & Edit", "Saved"];
 
 export default function TechPack() {
-  const [mainTab, setMainTab] = useState("list"); // "list" | "process" | "import"
+  const [mainTab, setMainTab] = useState("list"); // "list" | "process" | "import" | "diagnostics"
   const [step, setStep] = useState(0); // 0=upload, 1=extracting, 2=review, 3=saved
   const [file, setFile] = useState(null);
   const [fileUrl, setFileUrl] = useState(null);
@@ -377,6 +378,14 @@ Return ONLY this exact JSON structure (no markdown, no explanation):
         >
           <Plus className="h-4 w-4" /> Structured Excel Import
         </button>
+        <button
+          onClick={() => setMainTab("diagnostics")}
+          className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+            mainTab === "diagnostics" ? "border-primary text-primary" : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <CheckCircle className="h-4 w-4" /> Sync Diagnostics
+        </button>
       </div>
 
       {/* ── Tab: Saved Tech Packs ────────────────────────────────────────────── */}
@@ -397,6 +406,11 @@ Return ONLY this exact JSON structure (no markdown, no explanation):
             setMainTab("list");
           }}
         />
+      )}
+
+      {/* ── Tab: Sync Diagnostics ───────────────────────────────────────────── */}
+      {mainTab === "diagnostics" && (
+        <SyncDiagnosticDashboard />
       )}
 
       {/* ── Tab: Process New ────────────────────────────────────────────────── */}
