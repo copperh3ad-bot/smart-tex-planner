@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Layers, Trash2 } from "lucide-react";
+import { Plus, Layers, Trash2, CheckSquare, Square } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import EmptyState from "../components/shared/EmptyState";
 import ArticleFormDialog from "../components/articles/ArticleFormDialog";
@@ -12,6 +12,7 @@ import ArticleFormDialog from "../components/articles/ArticleFormDialog";
 export default function Articles() {
   const [showForm, setShowForm] = useState(false);
   const [editingArticle, setEditingArticle] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
   const queryClient = useQueryClient();
 
   const { data: articles = [], isLoading } = useQuery({
@@ -42,6 +43,21 @@ export default function Articles() {
     }
   };
 
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedIds(selectedIds.length === articles.length ? [] : articles.map((a) => a.id));
+  };
+
+  const handleDeleteSelected = async () => {
+    if (!window.confirm(`Delete ${selectedIds.length} selected article(s)?`)) return;
+    await Promise.all(selectedIds.map((id) => base44.entities.Article.delete(id)));
+    setSelectedIds([]);
+    queryClient.invalidateQueries({ queryKey: ["articles"] });
+  };
+
   if (isLoading) {
     return <div className="space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-32 rounded-xl" />)}</div>;
   }
@@ -49,7 +65,20 @@ export default function Articles() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{articles.length} article{articles.length !== 1 ? "s" : ""}</p>
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-muted-foreground">{articles.length} article{articles.length !== 1 ? "s" : ""}</p>
+          {articles.length > 0 && (
+            <button onClick={toggleSelectAll} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+              {selectedIds.length === articles.length ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+              {selectedIds.length === articles.length ? "Deselect All" : "Select All"}
+            </button>
+          )}
+          {selectedIds.length > 0 && (
+            <Button variant="destructive" size="sm" onClick={handleDeleteSelected}>
+              <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete ({selectedIds.length})
+            </Button>
+          )}
+        </div>
         <Button onClick={() => { setEditingArticle(null); setShowForm(true); }} className="bg-primary hover:bg-primary/90">
           <Plus className="h-4 w-4 mr-2" /> New Article
         </Button>
@@ -68,7 +97,7 @@ export default function Articles() {
           {articles.map((article) => {
             const po = purchaseOrders.find((p) => p.id === article.po_id);
             return (
-              <Card key={article.id} className="hover:shadow-md transition-shadow">
+              <Card key={article.id} className={`hover:shadow-md transition-shadow cursor-pointer ${selectedIds.includes(article.id) ? "ring-2 ring-primary" : ""}`} onClick={() => toggleSelect(article.id)}>
                 <CardHeader className="pb-2 flex flex-row items-start justify-between">
                   <div>
                     <CardTitle className="text-sm font-semibold">{article.article_name}</CardTitle>
@@ -77,7 +106,8 @@ export default function Articles() {
                       {po && ` • PO: ${po.po_number}`}
                     </p>
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                    {selectedIds.includes(article.id) && <CheckSquare className="h-4 w-4 text-primary mt-1.5 mr-1" />}
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingArticle(article); setShowForm(true); }}>
                       <Layers className="h-3.5 w-3.5" />
                     </Button>
