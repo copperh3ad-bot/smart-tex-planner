@@ -91,11 +91,7 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
   const [fabrics, setFabrics] = useState(extractedData.fabric_components || []);
   const [stitching, setStitching] = useState(extractedData.stitching || []);
   const [accessories, setAccessories] = useState(extractedData.accessories || []);
-  const [packaging, setPackaging] = useState(initPackaging);
-  const [packingType, setPackingType] = useState(initialPackingType || extractedData.article?.packaging_type || "Sheet Pack");
-
-  // Auto-backfill stiffener/insert_card size from article-level fields if not already in packaging
-  const initPackaging = () => {
+  const [packaging, setPackaging] = useState(() => {
     const pkg = extractedData.packaging || {};
     const art = extractedData.article || {};
     const p = { ...pkg };
@@ -106,7 +102,8 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
       p.insert_card = { ...(p.insert_card || {}), used: true, size_cm: art.insert_card_size };
     }
     return p;
-  };
+  });
+  const [packingType, setPackingType] = useState(initialPackingType || extractedData.article?.packaging_type || "Sheet Pack");
   const [saving, setSaving] = useState(false);
   const [saveLog, setSaveLog] = useState(null);
   const [poId, setPoId] = useState(selectedPoId || "");
