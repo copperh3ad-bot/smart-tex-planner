@@ -346,6 +346,7 @@ export default function UnifiedPackagingPlanning() {
   const { data: allTemplates = [] } = useQuery({ queryKey: ["accessoryTemplates"], queryFn: () => base44.entities.AccessoryTemplate.list("-created_date", 500) });
   const [selectedPoId, setSelectedPoId] = useState("");
   const [packingType, setPackingType] = useState("Sheet Pack");
+  const [autoDetectedType, setAutoDetectedType] = useState(null);
   const [subTab, setSubTab] = useState("Labels");
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef(null);
@@ -358,9 +359,31 @@ export default function UnifiedPackagingPlanning() {
   const { data: articles = [] } = useQuery({ queryKey: ["articles"], queryFn: () => base44.entities.Article.list() });
   const { data: existingItems = [] } = useQuery({ queryKey: ["accessoryItems"], queryFn: () => base44.entities.AccessoryItem.list("-created_date", 500) });
   const { data: poItems = [] } = useQuery({ queryKey: ["poItems"], queryFn: () => base44.entities.POItem.list("-created_date", 500) });
+  const { data: techPackRecords = [] } = useQuery({ queryKey: ["techPackRecords"], queryFn: () => base44.entities.TechPackRecord.list("-created_date", 500) });
 
   const activePo = selectedPoId ? pos.find(p => p.id === selectedPoId) : pos[0];
   const poArticles = activePo ? articles.filter(a => a.po_id === activePo.id) : [];
+
+  // Auto-detect packing type from TechPackRecord when PO changes
+  useEffect(() => {
+    if (!activePo) return;
+    const poTechPacks = techPackRecords.filter(r => r.po_id === activePo.id);
+    if (poTechPacks.length > 0) {
+      // Use the most common packaging_type among tech packs for this PO
+      const typeCounts = {};
+      poTechPacks.forEach(r => {
+        if (r.packaging_type) typeCounts[r.packaging_type] = (typeCounts[r.packaging_type] || 0) + 1;
+      });
+      const dominant = Object.entries(typeCounts).sort((a, b) => b[1] - a[1])[0];
+      if (dominant && PACK_TABS[dominant[0]]) {
+        setPackingType(dominant[0]);
+        setAutoDetectedType(dominant[0]);
+        return;
+      }
+    }
+    setAutoDetectedType(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePo?.id, techPackRecords.length]);
 
   const cartonSizeMap = {};
   if (activePo) {
@@ -562,11 +585,16 @@ export default function UnifiedPackagingPlanning() {
 
         {/* PO Selector + Actions */}
         <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center gap-2 flex-wrap">
-          <Select value={selectedPoId || activePo?.id || ""} onValueChange={setSelectedPoId}>
+          <Select value={selectedPoId || activePo?.id || ""} onValueChange={v => { setSelectedPoId(v); setAutoDetectedType(null); }}>
             <SelectTrigger className="w-72 h-8 text-xs"><SelectValue placeholder="Select Purchase Order" /></SelectTrigger>
             <SelectContent>{pos.map(p => <SelectItem key={p.id} value={p.id}>{p.po_number} – {p.customer_name}</SelectItem>)}</SelectContent>
           </Select>
-          <Button size="sm" onClick={handleSaveAll} disabled={saving || !activePo} className="gap-1.5" style={{ backgroundColor: packColor.bg }}>
+          {autoDetectedType && (
+            <span className="text-xs px-2 py-0.5 rounded-full font-semibold border" style={{ backgroundColor: packColor.light, color: packColor.bg, borderColor: packColor.bg }}>
+              ✓ Auto-detected: {autoDetectedType}
+            </span>
+          )}
+          <Button size="sm" onClick={handleSaveAll} disabled={saving || !activePo} className="gap-1.5 ml-auto" style={{ backgroundColor: packColor.bg }}>
             <Save className="h-3.5 w-3.5" /> {saving ? "Saving..." : `Save All ${packingType}`}
           </Button>
         </div>
