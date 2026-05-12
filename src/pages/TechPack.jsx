@@ -66,150 +66,174 @@ export default function TechPack() {
     if (f) { setFile(f); setError(null); }
   };
 
-  const LLM_PROMPT = (extraContext = "") => `You are a textile/garment tech pack data extraction expert. Your job is to extract ALL data accurately from this tech pack document.
+  const LLM_PROMPT = (extraContext = "") => `You are a textile/garment manufacturing tech pack data extraction specialist. Extract ALL structured data from this document and return it as a single JSON object.
 
-${extraContext ? `=== EXCEL FILE TEXT CONTENT (ALL SHEETS) ===\n${extraContext}\n=== END OF EXCEL CONTENT ===\n\nThis text is your primary data source — parse EVERY table row and column carefully.` : ""}
+${extraContext ? `=== RAW EXCEL CONTENT (ALL SHEETS) ===
+${extraContext}
+=== END OF EXCEL CONTENT ===
 
-## MULTI-SHEET EXTRACTION STRATEGY
+IMPORTANT: The above text is pipe-delimited (column1 | column2 | column3). Each line is one row. Sheet names appear as "=== SHEET: <name> ===". Parse every sheet carefully.` : ""}
 
-For Excel files with multiple sheets, extract data as follows:
+## EXTRACTION RULES
 
-**Sheet 1 (Articles / SKUs / General Info):**
-- Look for columns: item_code, sku, article_code, product_code → map to article.article_code
-- Look for: brand, product_type, product_category, product_name, description → concatenate or use best match for article.article_name
-- Look for: size, size_label, size_range → article.size_label
-- Look for: color, colour, colorway → article.color
-- Look for: units_per_carton, pcs_per_carton, qty_per_set → article.order_quantity
+### ARTICLE INFO (from any sheet — usually Sheet 1 or header rows)
+Search every sheet for these fields:
+- article_name: Look for "product name", "article", "description", "product type", or any prominent product title
+- article_code: The SKU/item code — look for "item code", "sku", "article code", "style", "ref no", "product code" — must be alphanumeric with dashes like "FT2-TW-WH"
+- size_label: "size", "size label", "size range" — e.g. Twin, Queen, King, S, M, L, XL
+- color: "color", "colour", "colorway", "shade"
+- order_quantity: "order qty", "quantity", "pcs", "units"
+- If article_name is missing, concatenate product_type + size_label as the name
 
-**Sheet 2 (Fabric / BOM / Fabric Consumption):**
-- Each row = one fabric component. Extract ALL rows.
-- Columns to find: component, component_type, panel, part → fabric_components[].component_type
-- fabric_type, fabric_construction, knit_type, weave → fabric_components[].fabric_type
-- gsm, grams → fabric_components[].gsm (number only)
-- width, fabric_width, width_cm → fabric_components[].width (cm as number)
-- composition, fiber_content, content → fabric_components[].composition
-- consumption, consumption_per_unit, mtrs_per_pc → fabric_components[].consumption_per_unit (number)
-- wastage, wastage_percent, waste_% → fabric_components[].wastage_percent (number)
-- dimensions, product_size, cut_size → fabric_components[].product_size
-- direction, knitting_direction → fabric_components[].direction
+### FABRIC COMPONENTS (usually a "Fabric" or "BOM" or "Consumption" sheet)
+Extract EVERY data row (skip header rows). For each row:
+- component_type: "component", "panel", "part", "description" — e.g. "Body", "Flat Sheet", "Fitted Sheet", "Pillow Case", "Top", "Bottom"
+- fabric_type: "fabric type", "construction", "knit type", "weave" — e.g. "Jersey", "Terry", "Flannel", "Woven"
+- gsm: any column containing "gsm" or "gram" — extract number only
+- width: "width", "fabric width" — number in cm or inches
+- composition: "composition", "content", "fiber" — e.g. "100% Cotton"
+- consumption_per_unit: "consumption", "mtrs/pc", "meters per piece", "consumption per unit" — decimal number
+- wastage_percent: "wastage", "waste %", "wastage %" — number (if value is like 0.1 or 0.15, convert to percentage: 0.1 → 10, 0.15 → 15)
+- product_size: "size", "dimensions", "cut size", "product size"
+- direction: "direction", "knitting direction" — e.g. "WXL", "LXL"
 
-**Sheet 3 (Accessories / Trims / Accessory Consumption):**
-- Each row = one accessory/trim item. Extract ALL rows including packaging rows.
-- For rows where category/type is NOT "Packaging" or "Label" or "Carton" or "Polybag":
-  → Add to accessories[] array
-  → Map category/type column to accessories[].category using these rules:
-    * zipper/zip → "Zipper"
-    * slider → "Slider"
-    * elastic/elastic tape → "Elastic"
-    * button/snap → "Button"
-    * dori/cord/drawstring → "Dori"
-    * eyelet/grommet → "Eyelet"
-    * thread/sewing thread → "Stitching Thread"
-    * insert card/hang tag/swing tag that is not a fabric label → "Insert Card"
-    * label (woven, printed, care, brand) → "Label"
-    * polybag/poly bag → "Polybag"
-    * stiffener/board → "Stiffener"
-    * carton/box → "Carton"
-    * sticker/barcode sticker → "Sticker"
-    * otherwise → "Accessory" or "Other"
-  → item_name/description → accessories[].item_description
-  → size_spec/size/dimension → accessories[].size_spec
-  → color/colour → accessories[].color
-  → qty_per_piece/consumption/multiplier → accessories[].quantity_per_piece
-  → unit (pcs/meters/kgs) → accessories[].unit
+### ACCESSORIES (usually an "Accessories" or "Trims" sheet)
+Extract EVERY data row. Classify each item:
+- Zipper/zip → category: "Zipper"
+- Slider → "Slider"  
+- Elastic/tape → "Elastic"
+- Button/snap → "Button"
+- Cord/dori/drawstring → "Dori"
+- Thread/sewing thread → "Stitching Thread"
+- Label (care/brand/woven/wash/size) → "Label"
+- Polybag/poly bag → "Polybag"
+- Stiffener/board/insert board → "Stiffener"
+- Carton/box → "Carton"
+- Sticker/barcode/UPC → "Sticker"
+- Hang tag/swing tag/insert card → "Insert Card"
+- Anything else → "Accessory"
 
-- For packaging-related rows, map to packaging object:
-  * If item_name contains "Satin Label" or "Woven Label" or "Care Label" or "Brand Label" or "Size Label" or "Law Tag" or "Wash Label" or "Content Label" or "Country of Origin" or "Barcode Label" or "Price Ticket" or "Hang Tag":
-    → Add to packaging.labels[] with label_type = item_name, description = material, size_spec = size
-  * If item_name contains "Polybag" or "Poly Bag":
-    → packaging.polybag: type = material (PVC/PP/PE/LDPE/OPP), size_cm = size, thickness_microns = thickness
-  * If item_name contains "Stiffener" or "Board":
-    → packaging.stiffener: used=true, material = material column, size_cm = size
-  * If item_name contains "Box" or "Carton" or "Printed Box" or "Master Carton":
-    → packaging.carton: type = "Printed" or "Plain" or "Brown" based on description, quality = material (e.g. 5-ply), size_cm = size, pieces_per_carton = qty_per_piece or units_per_carton
-  * If item_name contains "Sticker" or "Barcode Sticker" or "UPC":
-    → Add to packaging.stickers[] with sticker_type = item_name, description = material
+For each accessory row extract:
+- item_description: the item name/description column
+- color: color column
+- size_spec: size or dimension
+- quantity_per_piece: qty per piece, consumption, multiplier
+- unit: "Pcs", "Meters", or "Kgs"
 
-**Sheet 4+ (Carton Master / Packing):**
-- Extract carton dimensions: length × width × height → packaging.carton.size_cm (format "LxWxH")
-- gross_weight, net_weight → packaging.carton notes
-- pieces_per_carton / units_per_carton → packaging.carton.pieces_per_carton
+### PACKAGING (from accessories sheet packaging rows OR a separate packing sheet)
+- Labels: rows mentioning "brand label", "care label", "wash label", "size label", "hang tag", "barcode label", "price ticket" → packaging.labels[]
+- Polybag: rows with "polybag" or "poly bag" → packaging.polybag {type, size_cm, thickness_microns, printed}
+- Stiffener: rows with "stiffener" or "board" → packaging.stiffener {used:true, material, size_cm}
+- Carton/Box: rows with "carton" or "box" → packaging.carton {type, quality, size_cm, pieces_per_carton}
+- Stickers: rows with "sticker", "barcode sticker", "UPC" → packaging.stickers[]
 
-## STITCHING
-- Look for a stitching/sewing sheet or rows with stitch_type, SPI, stitches_per_inch, thread_type
-- Map to stitching[]: stitch_type, thread_type, thread_count, color, location
+### CRITICAL INSTRUCTIONS
+1. Do NOT return empty article fields — search every sheet for article name and code
+2. Do NOT return empty fabric_components if there are rows with GSM or consumption data
+3. Do NOT return empty accessories if there are rows with item descriptions
+4. If article_code cannot be found, use the first alphanumeric code-like value from the document
+5. If article_name cannot be found, derive it from product type + size (e.g. "Mattress Protector Twin")
+6. wastage values between 0 and 1 (like 0.1) are decimals — multiply by 100 to get percent
 
-## CRITICAL RULES
-1. NEVER return empty arrays unless you've exhausted all possible column name variants
-2. Use null for numeric fields that cannot be found — do NOT use 0 or ""
-3. Do NOT skip rows — if a table has 8 fabric rows, extract all 8
-4. Cross-reference item_code/sku across sheets to link related data
-5. For merged cell headers in Excel text: the header will appear on first row, sub-rows inherit it
-6. article_code MUST be the SKU/item code (e.g. FT2-TW, MP-QU-GY), NOT the product name
-
-Return ONLY this exact JSON structure (no markdown, no explanation):
+Return ONLY valid JSON (no markdown, no extra text):
 {
   "article": {
-    "article_name": "full product name string",
-    "article_code": "SKU/item code — alphanumeric with dashes e.g. FT2-TW-WH",
-    "size_label": "e.g. Twin, Queen, King, S, M, L",
+    "article_name": "string — required, never empty",
+    "article_code": "string — SKU code",
+    "size_label": "string",
     "color": "string",
     "description": "string",
-    "order_quantity": number or null
+    "order_quantity": null
   },
   "fabric_components": [
     {
-      "component_type": "e.g. Flat Sheet, Fitted Sheet, Pillow Case, Body, Front Panel",
-      "product_size": "e.g. 70x96+4",
-      "direction": "e.g. WXL, LXL, WXW",
-      "fabric_type": "e.g. Jersey, Terry, Woven, Flannel",
-      "gsm": number or null,
-      "width": number or null,
-      "composition": "e.g. 100% Cotton",
-      "consumption_per_unit": number or null,
-      "wastage_percent": number or null
+      "component_type": "string",
+      "product_size": "string or null",
+      "direction": "string or null",
+      "fabric_type": "string",
+      "gsm": 0,
+      "width": 0,
+      "composition": "string",
+      "consumption_per_unit": 0,
+      "wastage_percent": 0
     }
   ],
-  "stitching": [
-    {
-      "stitch_type": "e.g. Overlock 3-thread, Flatlock",
-      "thread_type": "e.g. Polyester, Cotton",
-      "thread_count": "e.g. 40/2",
-      "color": "string",
-      "location": "e.g. Side seam, All seams"
-    }
-  ],
+  "stitching": [],
   "accessories": [
     {
-      "category": "Zipper|Slider|Elastic|Button|Dori|Eyelet|Stitching Thread|Insert Card|Label|Accessory|Polybag|Stiffener|Carton|Sticker|Other",
-      "item_description": "full description",
-      "color": "string",
-      "size_spec": "e.g. 20mm, 4 inch",
-      "quantity_per_piece": number or null,
-      "unit": "Pcs or Meters or Kgs"
+      "category": "string",
+      "item_description": "string",
+      "color": "string or null",
+      "size_spec": "string or null",
+      "quantity_per_piece": null,
+      "unit": "Pcs"
     }
   ],
   "packaging": {
-    "labels": [
-      { "label_type": "e.g. Brand Label, Care Label, Hang Tag", "description": "string", "size_spec": "string" }
-    ],
-    "polybag": { "type": "PVC|PP|PE|LDPE|OPP", "size_cm": "LxW", "thickness_microns": number or null, "printed": true or false },
-    "stiffener": { "used": true or false, "material": "string", "size_cm": "string" },
-    "carton": { "type": "Printed|Plain|Brown|White", "quality": "e.g. 5-ply B-flute", "size_cm": "LxWxH", "pieces_per_carton": number or null },
-    "stickers": [
-      { "sticker_type": "e.g. UPC Sticker, Barcode Sticker", "description": "string" }
-    ]
+    "labels": [],
+    "polybag": null,
+    "stiffener": null,
+    "carton": null,
+    "stickers": []
   }
 }`;
 
   const RESPONSE_SCHEMA = {
     type: "object",
     properties: {
-      article: { type: "object" },
-      fabric_components: { type: "array" },
+      article: {
+        type: "object",
+        properties: {
+          article_name: { type: "string" },
+          article_code: { type: "string" },
+          size_label: { type: "string" },
+          color: { type: "string" },
+          description: { type: "string" },
+          order_quantity: { type: "number" },
+        },
+      },
+      fabric_components: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            component_type: { type: "string" },
+            product_size: { type: "string" },
+            direction: { type: "string" },
+            fabric_type: { type: "string" },
+            gsm: { type: "number" },
+            width: { type: "number" },
+            composition: { type: "string" },
+            consumption_per_unit: { type: "number" },
+            wastage_percent: { type: "number" },
+          },
+        },
+      },
       stitching: { type: "array" },
-      accessories: { type: "array" },
-      packaging: { type: "object" },
+      accessories: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            category: { type: "string" },
+            item_description: { type: "string" },
+            color: { type: "string" },
+            size_spec: { type: "string" },
+            quantity_per_piece: { type: "number" },
+            unit: { type: "string" },
+          },
+        },
+      },
+      packaging: {
+        type: "object",
+        properties: {
+          labels: { type: "array" },
+          polybag: { type: "object" },
+          stiffener: { type: "object" },
+          carton: { type: "object" },
+          stickers: { type: "array" },
+        },
+      },
     },
   };
 
@@ -265,7 +289,23 @@ Return ONLY this exact JSON structure (no markdown, no explanation):
         });
       }
 
-      // Validate extraction quality — warn about empty sections
+      // Normalize wastage_percent — convert decimals (0.1 → 10) if needed
+      if (result?.fabric_components?.length) {
+        result.fabric_components = result.fabric_components.map(fc => ({
+          ...fc,
+          wastage_percent: (fc.wastage_percent != null && fc.wastage_percent > 0 && fc.wastage_percent < 1)
+            ? +(fc.wastage_percent * 100).toFixed(1)
+            : fc.wastage_percent,
+        }));
+      }
+
+      // Fallback: derive article_name from description + size if missing
+      if (result?.article && !result.article.article_name) {
+        const parts = [result.article.description, result.article.size_label].filter(Boolean);
+        if (parts.length) result.article.article_name = parts.join(" ");
+      }
+
+      // Validate extraction quality — warn about truly empty sections
       const warnings = [];
       if (!result?.article?.article_name) warnings.push("Article name not found");
       if (!result?.fabric_components?.length) warnings.push("No fabric components found");
