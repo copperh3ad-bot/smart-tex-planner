@@ -54,7 +54,11 @@ export default function Articles() {
   const handleDeleteSelected = async () => {
     if (!window.confirm(`Delete ${selectedIds.length} selected article(s)?`)) return;
     for (const id of selectedIds) {
-      await base44.entities.Article.delete(id);
+      try {
+        await base44.entities.Article.delete(id);
+      } catch (e) {
+        // skip if already deleted
+      }
     }
     setSelectedIds([]);
     queryClient.invalidateQueries({ queryKey: ["articles"] });
