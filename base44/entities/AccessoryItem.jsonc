@@ -15,6 +15,16 @@
     "article_code": {
       "type": "string"
     },
+    "packing_type": {
+      "type": "string",
+      "enum": [
+        "Sheet Pack",
+        "Roll Pack",
+        "Box Pack"
+      ],
+      "description": "Packaging type this item belongs to",
+      "default": "Sheet Pack"
+    },
     "category": {
       "type": "string",
       "enum": [

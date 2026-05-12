@@ -6,18 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Save, Plus, Trash2, Upload, Download, Printer } from "lucide-react";
 import { jsPDF } from "jspdf";
 
-// splitDescSize tabs show two columns: Description + Size (instead of one quality column)
-// Category map: tab name → AccessoryTemplate category value
-const TAB_CATEGORY_MAP = {
-  Labels: "Label",
-  "Insert Card": "Insert Card",
-  Polybag: "Polybag",
-  Stiffener: "Stiffener",
-  Carton: "Carton",
-  Sticker: "Sticker",
-  "Bellyband (BB)": "Polybag",
-};
-
+// ─── Tab configuration ─────────────────────────────────────────────────────
 const TAB_CONFIG = {
   Labels: {
     category: "Label",
@@ -73,7 +62,7 @@ const TAB_CONFIG = {
     descPlaceholder: "e.g. 5-ply B-flute",
     sizeLabel: "Size (LxWxH cm)",
     sizePlaceholder: "e.g. 56x28x27",
-    autoFillSize: true, // auto-filled from PO carton dimensions
+    autoFillSize: true,
     defaultWastage: 2,
   },
   Sticker: {
@@ -99,13 +88,35 @@ const TAB_CONFIG = {
   },
 };
 
-const SUB_TABS = Object.keys(TAB_CONFIG);
-// Sheet Pack shows all tabs; Roll Pack shows only Polybag + Bellyband (BB)
-const ROLL_PACK_ALLOWED_TABS = ["Labels", "Polybag", "Carton", "Sticker", "Bellyband (BB)"];
+// ─── Pack type → allowed tabs ──────────────────────────────────────────────
+// Sheet Pack: everything (has Stiffener + Insert Card)
+// Roll Pack: no Insert Card, no Stiffener (has Bellyband)
+// Box Pack: no Insert Card, no Stiffener, no Bellyband (box = its own carton)
+const PACK_TABS = {
+  "Sheet Pack": ["Labels", "Insert Card", "Polybag", "Stiffener", "Carton", "Sticker", "Bellyband (BB)"],
+  "Roll Pack":  ["Labels", "Polybag", "Carton", "Sticker", "Bellyband (BB)"],
+  "Box Pack":   ["Labels", "Polybag", "Carton", "Sticker"],
+};
+
+const PACK_COLORS = {
+  "Sheet Pack": { bg: "#1F3864", light: "#EBF0FA", badge: "bg-blue-700 text-white", border: "border-blue-700" },
+  "Roll Pack":  { bg: "#166534", light: "#DCFCE7", badge: "bg-green-700 text-white", border: "border-green-700" },
+  "Box Pack":   { bg: "#7C2D12", light: "#FEF3C7", badge: "bg-orange-700 text-white", border: "border-orange-700" },
+};
+
+const PACK_DESCRIPTIONS = {
+  "Sheet Pack": "With Stiffener & Inlay Card",
+  "Roll Pack":  "Without Inlay Card & Stiffener",
+  "Box Pack":   "Individual Box → Master Carton",
+};
 
 const inputCls = "w-full text-xs border border-gray-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400";
 const numInputCls = "w-16 text-center text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400";
+
 const calcInclWastage = (qty, wastage) => Math.ceil((qty || 0) * (1 + (parseFloat(wastage) || 0) / 100));
+const calcInclWastageWithMultiplier = (qty, wastage, multiplier) =>
+  Math.ceil((qty || 0) * (parseFloat(multiplier) || 1) * (1 + (parseFloat(wastage) || 0) / 100));
+
 const defaultRow = (cfg) => ({
   type: cfg.typeOptions[0],
   quality: "",
@@ -118,11 +129,9 @@ const defaultRow = (cfg) => ({
   multiplier: 1,
   bbOption: "With",
 });
-const calcInclWastageWithMultiplier = (qty, wastage, multiplier) =>
-  Math.ceil((qty || 0) * (parseFloat(multiplier) || 1) * (1 + (parseFloat(wastage) || 0) / 100));
 
-// ─── Article block ────────────────────────────────────────────────────────────
-function ArticleBlock({ art, cfg, rows, onChange, cartonSize, templates = [], subTab, bbOption }) {
+// ─── Article Block ─────────────────────────────────────────────────────────
+function ArticleBlock({ art, cfg, rows, onChange, cartonSize, templates = [], packColor }) {
   const qty = art.order_quantity || 0;
   const artRows = rows[art.id] || [defaultRow(cfg)];
   const isBBTab = cfg.isBellyband;
@@ -137,52 +146,33 @@ function ArticleBlock({ art, cfg, rows, onChange, cartonSize, templates = [], su
     if (!tplId) return;
     const tpl = templates.find(t => t.id === tplId);
     if (!tpl) return;
-    const newRow = {
-      ...defaultRow(cfg),
-      type: tpl.type || cfg.typeOptions[0],
-      quality: tpl.description || "",
-      description: tpl.description || "",
-      size: tpl.size_spec || "",
-      wastage_percent: tpl.default_wastage ?? cfg.defaultWastage,
-      multiplier: tpl.default_multiplier ?? 1,
-      existing_id: null,
-    };
+    const newRow = { ...defaultRow(cfg), type: tpl.type || cfg.typeOptions[0], quality: tpl.description || "", description: tpl.description || "", size: tpl.size_spec || "", wastage_percent: tpl.default_wastage ?? cfg.defaultWastage, multiplier: tpl.default_multiplier ?? 1, existing_id: null };
     if (cfg.autoFillSize && cartonSize) newRow.size = cartonSize;
     const emptyIdx = artRows.findIndex(r => !r.quality && !r.description && (!r.type || cfg.typeOptions.indexOf(r.type) === 0));
-    if (emptyIdx >= 0) {
-      const updated = [...artRows];
-      updated[emptyIdx] = newRow;
-      onChange(art.id, updated);
-    } else {
-      onChange(art.id, [...artRows, newRow]);
-    }
+    if (emptyIdx >= 0) { const u = [...artRows]; u[emptyIdx] = newRow; onChange(art.id, u); }
+    else onChange(art.id, [...artRows, newRow]);
   };
 
   const remove = (idx) => onChange(art.id, artRows.filter((_, i) => i !== idx));
   const update = (idx, field, val) => onChange(art.id, artRows.map((r, i) => i === idx ? { ...r, [field]: val } : r));
 
-  const getEffectiveQty = (row) =>
-    calcInclWastageWithMultiplier(qty, row.wastage_percent, row.multiplier || 1);
-
   return (
     <div className="rounded border border-gray-300 shadow-sm overflow-hidden">
-      {/* Header */}
-      <div className="px-3 py-2 text-xs font-bold text-white flex justify-between items-center flex-wrap gap-2" style={{ backgroundColor: "#1F3864" }}>
+      <div className="px-3 py-2 text-xs font-bold text-white flex justify-between items-center flex-wrap gap-2" style={{ backgroundColor: packColor.bg }}>
         <span>{art.article_name}{art.article_code ? ` (${art.article_code})` : ""}</span>
         <span className="font-normal opacity-80">Order Qty: {qty.toLocaleString()}</span>
       </div>
 
-      {/* Bellyband tab: show BB option toggle + computed qty per article */}
       {isBBTab ? (
-        <div className="overflow-hidden">
+        <div>
           <table className="w-full text-xs border-collapse">
             <thead>
-              <tr style={{ backgroundColor: "#EBF0FA" }}>
+              <tr style={{ backgroundColor: packColor.light }}>
                 <th className="border border-gray-300 px-2 py-1.5 text-left w-44">{cfg.typeLabel}</th>
                 <th className="border border-gray-300 px-2 py-1.5 text-left">{cfg.descLabel}</th>
                 <th className="border border-gray-300 px-2 py-1.5 text-left w-36" style={{ backgroundColor: "#E8F5E9" }}>{cfg.sizeLabel}</th>
                 <th className="border border-gray-300 px-2 py-1.5 text-center w-20">Order Qty</th>
-                <th className="border border-gray-300 px-2 py-1.5 text-center w-24">With / Without BB</th>
+                <th className="border border-gray-300 px-2 py-1.5 text-center w-24">With / Without</th>
                 <th className="border border-gray-300 px-2 py-1.5 text-center w-24">Wastage %</th>
                 <th className="border border-gray-300 px-2 py-1.5 text-center w-28" style={{ backgroundColor: "#FFF2CC" }}>BB Qty</th>
                 <th className="border border-gray-300 px-2 py-1.5 w-8"></th>
@@ -194,64 +184,36 @@ function ArticleBlock({ art, cfg, rows, onChange, cartonSize, templates = [], su
                 const bbQty = withBB ? calcInclWastage(qty, row.wastage_percent) : 0;
                 return (
                   <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#F9FAFB" }}>
-                    <td className="border border-gray-300 px-1.5 py-1">
-                      <select className={inputCls} value={row.type} onChange={e => update(idx, "type", e.target.value)}>
-                        {cfg.typeOptions.map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                    </td>
-                    <td className="border border-gray-300 px-1.5 py-1">
-                      <input className={inputCls} placeholder={cfg.descPlaceholder} value={row.description || ""}
-                        onChange={e => update(idx, "description", e.target.value)} />
-                    </td>
-                    <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#F1F8E9" }}>
-                      <input className={inputCls} placeholder={cfg.sizePlaceholder} value={row.size || ""}
-                        onChange={e => update(idx, "size", e.target.value)} />
-                    </td>
+                    <td className="border border-gray-300 px-1.5 py-1"><select className={inputCls} value={row.type} onChange={e => update(idx, "type", e.target.value)}>{cfg.typeOptions.map(t => <option key={t} value={t}>{t}</option>)}</select></td>
+                    <td className="border border-gray-300 px-1.5 py-1"><input className={inputCls} placeholder={cfg.descPlaceholder} value={row.description || ""} onChange={e => update(idx, "description", e.target.value)} /></td>
+                    <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#F1F8E9" }}><input className={inputCls} placeholder={cfg.sizePlaceholder} value={row.size || ""} onChange={e => update(idx, "size", e.target.value)} /></td>
                     <td className="border border-gray-300 px-2 py-1 text-center font-medium">{qty.toLocaleString()}</td>
                     <td className="border border-gray-300 px-1.5 py-1 text-center">
                       <div className="flex justify-center">
                         <div className="flex border border-gray-300 rounded overflow-hidden text-xs font-medium">
                           {["With", "Without"].map(opt => (
-                            <button key={opt} onClick={() => update(idx, "bbOption", opt)}
-                              className={`px-2 py-0.5 transition-colors ${
-                                (row.bbOption || "With") === opt
-                                  ? "bg-amber-500 text-white"
-                                  : "bg-white text-gray-600 hover:bg-gray-50"
-                              }`}>{opt}</button>
+                            <button key={opt} onClick={() => update(idx, "bbOption", opt)} className={`px-2 py-0.5 transition-colors ${(row.bbOption || "With") === opt ? "bg-amber-500 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}>{opt}</button>
                           ))}
                         </div>
                       </div>
                     </td>
-                    <td className="border border-gray-300 px-1.5 py-1 text-center">
-                      <input type="number" min="0" max="100" step="0.5" className={numInputCls}
-                        value={row.wastage_percent} onChange={e => update(idx, "wastage_percent", e.target.value)} />
-                    </td>
-                    <td className="border border-gray-300 px-2 py-1 text-center font-bold" style={{ backgroundColor: "#FFF2CC" }}>
-                      <span className={withBB ? "text-green-700" : "text-gray-400"}>{bbQty.toLocaleString()}</span>
-                    </td>
-                    <td className="border border-gray-300 px-1.5 py-1 text-center">
-                      {artRows.length > 1 && (
-                        <button onClick={() => remove(idx)} className="text-red-400 hover:text-red-600">
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      )}
-                    </td>
+                    <td className="border border-gray-300 px-1.5 py-1 text-center"><input type="number" min="0" max="100" step="0.5" className={numInputCls} value={row.wastage_percent} onChange={e => update(idx, "wastage_percent", e.target.value)} /></td>
+                    <td className="border border-gray-300 px-2 py-1 text-center font-bold" style={{ backgroundColor: "#FFF2CC" }}><span className={withBB ? "text-green-700" : "text-gray-400"}>{bbQty.toLocaleString()}</span></td>
+                    <td className="border border-gray-300 px-1.5 py-1 text-center">{artRows.length > 1 && <button onClick={() => remove(idx)} className="text-red-400 hover:text-red-600"><Trash2 className="h-3 w-3" /></button>}</td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
           <div className="px-3 py-1.5 bg-gray-50 border-t border-gray-200 flex items-center gap-3">
-            <button onClick={add} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs font-medium">
-              <Plus className="h-3 w-3" /> Add Row
-            </button>
+            <button onClick={add} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs font-medium"><Plus className="h-3 w-3" /> Add Row</button>
           </div>
         </div>
       ) : (
         <>
           <table className="w-full text-xs border-collapse">
             <thead>
-              <tr style={{ backgroundColor: "#EBF0FA" }}>
+              <tr style={{ backgroundColor: packColor.light }}>
                 <th className="border border-gray-300 px-2 py-1.5 text-left w-44">{cfg.typeLabel}</th>
                 {cfg.splitDescSize ? (
                   <>
@@ -265,94 +227,46 @@ function ArticleBlock({ art, cfg, rows, onChange, cartonSize, templates = [], su
                 {cfg.showMultiplier && <th className="border border-gray-300 px-2 py-1.5 text-center w-24" style={{ backgroundColor: "#F3E5F5" }}>Multiplier</th>}
                 <th className="border border-gray-300 px-2 py-1.5 text-center w-24">Wastage %</th>
                 <th className="border border-gray-300 px-2 py-1.5 text-center w-28" style={{ backgroundColor: "#FFF2CC" }}>Incl. Wastage Qty</th>
-                {cfg.showEAN && <th className="border border-gray-300 px-2 py-1.5 text-left w-36" style={{ backgroundColor: "#E8F5E9" }}>PC EAN Code</th>}
-                {cfg.showEAN && <th className="border border-gray-300 px-2 py-1.5 text-left w-36" style={{ backgroundColor: "#E3F2FD" }}>Carton EAN Code</th>}
+                {cfg.showEAN && <th className="border border-gray-300 px-2 py-1.5 text-left w-36" style={{ backgroundColor: "#E8F5E9" }}>PC EAN</th>}
+                {cfg.showEAN && <th className="border border-gray-300 px-2 py-1.5 text-left w-36" style={{ backgroundColor: "#E3F2FD" }}>Carton EAN</th>}
                 <th className="border border-gray-300 px-2 py-1.5 w-8"></th>
               </tr>
             </thead>
             <tbody>
               {artRows.map((row, idx) => (
                 <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#F9FAFB" }}>
-                  <td className="border border-gray-300 px-1.5 py-1">
-                    <select className={inputCls} value={row.type} onChange={e => update(idx, "type", e.target.value)}>
-                      {cfg.typeOptions.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </td>
+                  <td className="border border-gray-300 px-1.5 py-1"><select className={inputCls} value={row.type} onChange={e => update(idx, "type", e.target.value)}>{cfg.typeOptions.map(t => <option key={t} value={t}>{t}</option>)}</select></td>
                   {cfg.splitDescSize ? (
                     <>
-                      <td className="border border-gray-300 px-1.5 py-1">
-                        <input className={inputCls} placeholder={cfg.descPlaceholder} value={row.description || ""}
-                          onChange={e => update(idx, "description", e.target.value)} />
-                      </td>
-                      <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#F1F8E9" }}>
-                        <input className={inputCls} placeholder={cfg.sizePlaceholder} value={row.size || ""}
-                          onChange={e => update(idx, "size", e.target.value)}
-                          readOnly={cfg.autoFillSize && !!cartonSize}
-                          style={cfg.autoFillSize && cartonSize ? { backgroundColor: "#E8F5E9", cursor: "default" } : {}}
-                        />
-                      </td>
+                      <td className="border border-gray-300 px-1.5 py-1"><input className={inputCls} placeholder={cfg.descPlaceholder} value={row.description || ""} onChange={e => update(idx, "description", e.target.value)} /></td>
+                      <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#F1F8E9" }}><input className={inputCls} placeholder={cfg.sizePlaceholder} value={row.size || ""} onChange={e => update(idx, "size", e.target.value)} readOnly={cfg.autoFillSize && !!cartonSize} style={cfg.autoFillSize && cartonSize ? { backgroundColor: "#E8F5E9", cursor: "default" } : {}} /></td>
                     </>
                   ) : (
-                    <td className="border border-gray-300 px-1.5 py-1">
-                      <input className={inputCls} placeholder={cfg.qualityPlaceholder} value={row.quality || ""}
-                        onChange={e => update(idx, "quality", e.target.value)} />
-                    </td>
+                    <td className="border border-gray-300 px-1.5 py-1"><input className={inputCls} placeholder={cfg.qualityPlaceholder} value={row.quality || ""} onChange={e => update(idx, "quality", e.target.value)} /></td>
                   )}
                   <td className="border border-gray-300 px-2 py-1 text-center font-medium">{qty.toLocaleString()}</td>
                   {cfg.showMultiplier && (
                     <td className="border border-gray-300 px-1.5 py-1 text-center" style={{ backgroundColor: "#FDF6FF" }}>
-                      <select
-                        className="w-14 text-center text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-purple-400"
-                        value={row.multiplier || 1}
-                        onChange={e => update(idx, "multiplier", parseFloat(e.target.value))}>
+                      <select className="w-14 text-center text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none" value={row.multiplier || 1} onChange={e => update(idx, "multiplier", parseFloat(e.target.value))}>
                         {Array.from({ length: 20 }, (_, i) => i + 1).map(m => <option key={m} value={m}>x{m}</option>)}
                       </select>
                     </td>
                   )}
-                  <td className="border border-gray-300 px-1.5 py-1 text-center">
-                    <input type="number" min="0" max="100" step="0.5" className={numInputCls}
-                      value={row.wastage_percent} onChange={e => update(idx, "wastage_percent", e.target.value)} />
-                  </td>
-                  <td className="border border-gray-300 px-2 py-1 text-center font-bold" style={{ backgroundColor: "#FFF2CC" }}>
-                    {getEffectiveQty(row).toLocaleString()}
-                  </td>
-                  {cfg.showEAN && (
-                    <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#F1F8E9" }}>
-                      <input className={inputCls} placeholder="e.g. 1234567890123" value={row.pc_ean_code || ""}
-                        onChange={e => update(idx, "pc_ean_code", e.target.value)} />
-                    </td>
-                  )}
-                  {cfg.showEAN && (
-                    <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#E3F2FD" }}>
-                      <input className={inputCls} placeholder="e.g. 9876543210123" value={row.carton_ean_code || ""}
-                        onChange={e => update(idx, "carton_ean_code", e.target.value)} />
-                    </td>
-                  )}
-                  <td className="border border-gray-300 px-1.5 py-1 text-center">
-                    {artRows.length > 1 && (
-                      <button onClick={() => remove(idx)} className="text-red-400 hover:text-red-600">
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    )}
-                  </td>
+                  <td className="border border-gray-300 px-1.5 py-1 text-center"><input type="number" min="0" max="100" step="0.5" className={numInputCls} value={row.wastage_percent} onChange={e => update(idx, "wastage_percent", e.target.value)} /></td>
+                  <td className="border border-gray-300 px-2 py-1 text-center font-bold" style={{ backgroundColor: "#FFF2CC" }}>{calcInclWastageWithMultiplier(qty, row.wastage_percent, row.multiplier || 1).toLocaleString()}</td>
+                  {cfg.showEAN && <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#F1F8E9" }}><input className={inputCls} placeholder="e.g. 1234567890123" value={row.pc_ean_code || ""} onChange={e => update(idx, "pc_ean_code", e.target.value)} /></td>}
+                  {cfg.showEAN && <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#E3F2FD" }}><input className={inputCls} placeholder="e.g. 9876543210123" value={row.carton_ean_code || ""} onChange={e => update(idx, "carton_ean_code", e.target.value)} /></td>}
+                  <td className="border border-gray-300 px-1.5 py-1 text-center">{artRows.length > 1 && <button onClick={() => remove(idx)} className="text-red-400 hover:text-red-600"><Trash2 className="h-3 w-3" /></button>}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           <div className="px-3 py-1.5 bg-gray-50 border-t border-gray-200 flex items-center gap-3">
-            <button onClick={add} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs font-medium">
-              <Plus className="h-3 w-3" /> Add Row
-            </button>
+            <button onClick={add} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs font-medium"><Plus className="h-3 w-3" /> Add Row</button>
             {templates.length > 0 && (
-              <select
-                className="h-6 text-xs border border-gray-300 rounded px-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 text-gray-600"
-                defaultValue=""
-                onChange={e => { applyTemplate(e.target.value); e.target.value = ""; }}
-              >
+              <select className="h-6 text-xs border border-gray-300 rounded px-1.5 bg-white focus:outline-none text-gray-600" defaultValue="" onChange={e => { applyTemplate(e.target.value); e.target.value = ""; }}>
                 <option value="" disabled>+ Apply template…</option>
-                {templates.map(t => (
-                  <option key={t.id} value={t.id}>{t.template_name} — {t.type}</option>
-                ))}
+                {templates.map(t => <option key={t.id} value={t.id}>{t.template_name} — {t.type}</option>)}
               </select>
             )}
           </div>
@@ -362,32 +276,92 @@ function ArticleBlock({ art, cfg, rows, onChange, cartonSize, templates = [], su
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Totals Summary ────────────────────────────────────────────────────────
+function TotalsSummary({ subTab, allRows, poArticles, packColor }) {
+  const cfg = TAB_CONFIG[subTab];
+  const typeTotals = {};
+  poArticles.forEach(art => {
+    const qty = art.order_quantity || 0;
+    const artRows = allRows[subTab]?.[art.id] || [];
+    artRows.forEach(row => {
+      if (cfg.isBellyband) {
+        const withBB = (row.bbOption || "With") !== "Without";
+        const bbQty = withBB ? calcInclWastage(qty, row.wastage_percent) : 0;
+        const key = `${row.type}||${row.description || ""}`;
+        if (!typeTotals[key]) typeTotals[key] = { type: row.type || "BB", description: row.description || "", size: row.size || "", orderQty: 0, inclWastage: 0 };
+        typeTotals[key].orderQty += qty;
+        typeTotals[key].inclWastage += bbQty;
+      } else {
+        if (!row.type) return;
+        const inclWastageQty = calcInclWastageWithMultiplier(qty, row.wastage_percent, row.multiplier || 1);
+        const descKey = cfg.splitDescSize ? `${row.description || ""}|${row.size || ""}` : (row.quality || "");
+        const key = `${row.type}||${descKey}`;
+        if (!typeTotals[key]) typeTotals[key] = { type: row.type, description: cfg.splitDescSize ? (row.description || "") : (row.quality || ""), size: cfg.splitDescSize ? (row.size || "") : "", orderQty: 0, inclWastage: 0 };
+        typeTotals[key].orderQty += qty;
+        typeTotals[key].inclWastage += inclWastageQty;
+      }
+    });
+  });
+  const entries = Object.entries(typeTotals);
+  if (entries.length === 0) return null;
+  return (
+    <div className="rounded border border-gray-300 overflow-hidden shadow-sm">
+      <div className="px-3 py-2 text-xs font-bold text-white" style={{ backgroundColor: packColor.bg }}>
+        {subTab.toUpperCase()} — TOTALS SUMMARY
+      </div>
+      <table className="w-full text-xs border-collapse">
+        <thead>
+          <tr style={{ backgroundColor: packColor.light }}>
+            <th className="border border-gray-300 px-3 py-1.5 text-left">{cfg.typeLabel}</th>
+            {cfg.splitDescSize ? (<><th className="border border-gray-300 px-3 py-1.5 text-left">{cfg.descLabel}</th><th className="border border-gray-300 px-3 py-1.5 text-left" style={{ backgroundColor: "#E8F5E9" }}>{cfg.sizeLabel}</th></>) : (cfg.qualityLabel && <th className="border border-gray-300 px-3 py-1.5 text-left">{cfg.qualityLabel}</th>)}
+            <th className="border border-gray-300 px-3 py-1.5 text-center w-32">Total Order Qty</th>
+            <th className="border border-gray-300 px-3 py-1.5 text-center w-40" style={{ backgroundColor: "#FFF2CC" }}>Total Incl. Wastage</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map(([key, totals], idx) => (
+            <tr key={key} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#F9FAFB" }}>
+              <td className="border border-gray-300 px-3 py-1.5 font-medium">{totals.type}</td>
+              {cfg.splitDescSize ? (<><td className="border border-gray-300 px-3 py-1.5">{totals.description}</td><td className="border border-gray-300 px-3 py-1.5" style={{ backgroundColor: "#F1F8E9" }}>{totals.size}</td></>) : (cfg.qualityLabel && <td className="border border-gray-300 px-3 py-1.5">{totals.description}</td>)}
+              <td className="border border-gray-300 px-3 py-1.5 text-center">{totals.orderQty.toLocaleString()}</td>
+              <td className="border border-gray-300 px-3 py-1.5 text-center font-bold" style={{ backgroundColor: "#FFF9E6" }}>{totals.inclWastage.toLocaleString()}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr style={{ backgroundColor: packColor.bg, color: "white", fontWeight: "bold" }}>
+            <td className="border border-gray-400 px-3 py-1.5" colSpan={cfg.splitDescSize ? 3 : (cfg.qualityLabel ? 2 : 1)}>GRAND TOTAL</td>
+            <td className="border border-gray-400 px-3 py-1.5 text-center">{entries.reduce((s, [, t]) => s + t.orderQty, 0).toLocaleString()}</td>
+            <td className="border border-gray-400 px-3 py-1.5 text-center" style={{ backgroundColor: "#E6B800", color: "#1a1a1a" }}>{entries.reduce((s, [, t]) => s + t.inclWastage, 0).toLocaleString()}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
+// ─── Main Component ────────────────────────────────────────────────────────
 export default function UnifiedPackagingPlanning() {
   const queryClient = useQueryClient();
-  const { data: allTemplates = [] } = useQuery({
-    queryKey: ["accessoryTemplates"],
-    queryFn: () => base44.entities.AccessoryTemplate.list("-created_date", 500),
-  });
+  const { data: allTemplates = [] } = useQuery({ queryKey: ["accessoryTemplates"], queryFn: () => base44.entities.AccessoryTemplate.list("-created_date", 500) });
   const [selectedPoId, setSelectedPoId] = useState("");
+  const [packingType, setPackingType] = useState("Sheet Pack");
   const [subTab, setSubTab] = useState("Labels");
   const [saving, setSaving] = useState(false);
-  const [csvUploadType, setCsvUploadType] = useState("Labels");
   const fileInputRef = useRef(null);
   const initKeyRef = useRef(null);
-  const [allRows, setAllRows] = useState({});
-  // PO-level packing type and bellyband option
-  const [packingType, setPackingType] = useState("Sheet Pack"); // "Sheet Pack" | "Roll Pack"
+
+  // allRows: { [packType]: { [tab]: { [artId]: rows[] } } }
+  const [allRows, setAllRows] = useState({ "Sheet Pack": {}, "Roll Pack": {}, "Box Pack": {} });
 
   const { data: pos = [] } = useQuery({ queryKey: ["purchaseOrders"], queryFn: () => base44.entities.PurchaseOrder.list() });
   const { data: articles = [] } = useQuery({ queryKey: ["articles"], queryFn: () => base44.entities.Article.list() });
-  const { data: existingItems = [] } = useQuery({ queryKey: ["accessoryItems"], queryFn: () => base44.entities.AccessoryItem.list("-created_date", 300) });
+  const { data: existingItems = [] } = useQuery({ queryKey: ["accessoryItems"], queryFn: () => base44.entities.AccessoryItem.list("-created_date", 500) });
   const { data: poItems = [] } = useQuery({ queryKey: ["poItems"], queryFn: () => base44.entities.POItem.list("-created_date", 500) });
 
   const activePo = selectedPoId ? pos.find(p => p.id === selectedPoId) : pos[0];
   const poArticles = activePo ? articles.filter(a => a.po_id === activePo.id) : [];
 
-  // Build carton size map: article_code → "LxWxH" from POItems of this PO
   const cartonSizeMap = {};
   if (activePo) {
     poItems.filter(i => i.po_id === activePo.id).forEach(item => {
@@ -397,10 +371,7 @@ export default function UnifiedPackagingPlanning() {
     });
   }
 
-  const getCartonSize = (art) => {
-    if (!art.article_code) return "";
-    return cartonSizeMap[art.article_code.trim().toUpperCase()] || "";
-  };
+  const getCartonSize = (art) => art.article_code ? (cartonSizeMap[art.article_code.trim().toUpperCase()] || "") : "";
 
   const poArticleIds = poArticles.map(a => a.id).sort().join(',');
   const itemIds = existingItems.map(i => i.id).sort().join(',');
@@ -411,803 +382,262 @@ export default function UnifiedPackagingPlanning() {
     if (initKeyRef.current === key) return;
     initKeyRef.current = key;
 
-    const init = {};
-    SUB_TABS.forEach(tab => {
-      const cfg = TAB_CONFIG[tab];
-      init[tab] = {};
-      poArticles.forEach(art => {
-        // BB tab: load existing BB records (item_description = "Bellyband")
-        if (cfg.isBellyband) {
-          const existingBB = existingItems.filter(
-            i => i.po_id === activePo.id && i.article_code === art.article_code
-              && i.category === "Polybag" && i.item_description === "Bellyband"
+    const init = { "Sheet Pack": {}, "Roll Pack": {}, "Box Pack": {} };
+
+    Object.keys(PACK_TABS).forEach(pt => {
+      PACK_TABS[pt].forEach(tab => {
+        const cfg = TAB_CONFIG[tab];
+        init[pt][tab] = {};
+        poArticles.forEach(art => {
+          // Filter existing items for this pack type + article + tab
+          const poExisting = existingItems.filter(i =>
+            i.po_id === activePo.id &&
+            i.article_code === art.article_code &&
+            (i.packing_type === pt || (!i.packing_type && pt === "Sheet Pack")) &&
+            i.category === cfg.category &&
+            (cfg.isBellyband ? i.item_description === "Bellyband" : i.item_description !== "Bellyband")
           );
-          if (existingBB.length > 0) {
-            init[tab][art.id] = existingBB.map(e => ({
-              type: cfg.typeOptions[0],
-              description: e.size_spec || "",
-              size: e.color || "",
+
+          if (poExisting.length > 0) {
+            init[pt][tab][art.id] = poExisting.map(e => ({
+              type: cfg.isBellyband ? cfg.typeOptions[0] : (cfg.category === "Insert Card" ? (e.size_spec || "") : e.item_description),
+              quality: cfg.category === "Insert Card" ? (e.item_description || "") : (cfg.splitDescSize ? "" : (e.size_spec || "")),
+              description: cfg.splitDescSize ? (e.size_spec || "") : "",
+              size: cfg.splitDescSize ? (e.color || "") : "",
               wastage_percent: e.wastage_percent ?? cfg.defaultWastage,
-              multiplier: 1,
-              bbOption: (e.quantity_required === 0) ? "Without" : "With",
-              pc_ean_code: "",
-              carton_ean_code: "",
+              multiplier: e.multiplier ?? 1,
+              pc_ean_code: e.pc_ean_code || "",
+              carton_ean_code: e.carton_ean_code || "",
               existing_id: e.id,
+              bbOption: cfg.isBellyband ? ((e.quantity_required === 0) ? "Without" : "With") : "With",
             }));
           } else {
-            init[tab][art.id] = [defaultRow(cfg)];
+            const row = defaultRow(cfg);
+            if (cfg.autoFillSize) row.size = getCartonSize(art);
+            init[pt][tab][art.id] = [row];
           }
-          return;
-        }
-
-        const existing = existingItems.filter(
-          i => i.po_id === activePo.id && i.article_code === art.article_code && i.category === cfg.category
-            && i.item_description !== "Bellyband"
-        );
-        if (existing.length > 0) {
-          init[tab][art.id] = existing.map(e => ({
-            type: cfg.category === "Insert Card" ? (e.size_spec || "") : e.item_description,
-            quality: cfg.category === "Insert Card"
-              ? (e.item_description || "")
-              : (cfg.splitDescSize ? "" : (e.size_spec || "")),
-            description: cfg.splitDescSize ? (e.size_spec || "") : "",
-            size: cfg.splitDescSize ? (e.color || "") : "",
-            wastage_percent: e.wastage_percent ?? cfg.defaultWastage,
-            multiplier: e.multiplier ?? 1,
-            pc_ean_code: e.pc_ean_code || "",
-            carton_ean_code: e.carton_ean_code || "",
-            existing_id: e.id,
-            bbOption: "With",
-          }));
-        } else {
-          const row = defaultRow(cfg);
-          if (cfg.autoFillSize) row.size = getCartonSize(art);
-          init[tab][art.id] = [row];
-        }
+        });
       });
     });
+
     setAllRows(init);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePo?.id, poArticleIds, itemIds]);
 
-  // Auto-switch to Polybag when switching to Roll Pack and current tab isn't allowed
+  // Keep subTab valid when packingType changes
   useEffect(() => {
-    if (packingType === "Roll Pack" && !ROLL_PACK_ALLOWED_TABS.includes(subTab)) {
-      setSubTab("Polybag");
+    if (!PACK_TABS[packingType].includes(subTab)) {
+      setSubTab(PACK_TABS[packingType][0]);
     }
   }, [packingType, subTab]);
 
-  const handleChange = (tab, artId, newRows) => {
-    setAllRows(prev => ({ ...prev, [tab]: { ...prev[tab], [artId]: newRows } }));
+  const handleChange = (artId, newRows) => {
+    setAllRows(prev => ({
+      ...prev,
+      [packingType]: {
+        ...prev[packingType],
+        [subTab]: { ...prev[packingType][subTab], [artId]: newRows }
+      }
+    }));
   };
 
-  const buildOpsForTab = (tab) => {
-    const cfg = TAB_CONFIG[tab];
+  const buildOpsForPackType = (pt) => {
     const ops = [];
-    const isRollPack = packingType === "Roll Pack";
+    PACK_TABS[pt].forEach(tab => {
+      const cfg = TAB_CONFIG[tab];
+      for (const art of poArticles) {
+        const qty = art.order_quantity || 0;
+        const rows = allRows[pt]?.[tab]?.[art.id] || [];
 
-    // Skip tabs not visible in current packing mode
-    if (isRollPack && !ROLL_PACK_ALLOWED_TABS.includes(tab)) return ops;
-    if (!isRollPack && tab === "Bellyband (BB)") return ops;
+        if (cfg.isBellyband) {
+          for (const row of rows) {
+            if (!row.type && !row.description) continue;
+            const withBB = (row.bbOption || "With") !== "Without";
+            const bbQty = withBB ? calcInclWastage(qty, row.wastage_percent) : 0;
+            const data = { po_id: activePo.id, po_number: activePo.po_number, article_name: art.article_name, article_code: art.article_code, packing_type: pt, category: "Polybag", item_description: "Bellyband", size_spec: row.description || "", color: row.size || "", quantity_required: bbQty, wastage_percent: parseFloat(row.wastage_percent) || 0, multiplier: 1, unit: "Pcs", status: "Planned", notes: `BB: ${withBB ? "With" : "Without"}` };
+            if (row.existing_id) ops.push(base44.entities.AccessoryItem.update(row.existing_id, data));
+            else ops.push(base44.entities.AccessoryItem.create(data));
+          }
+          continue;
+        }
 
-    for (const art of poArticles) {
-      const qty = art.order_quantity || 0;
-      const rows = allRows[tab]?.[art.id] || [];
-
-      // Bellyband (BB) tab: save each BB row
-      if (cfg.isBellyband) {
         for (const row of rows) {
-          if (!row.type && !row.description) continue;
-          const withBB = (row.bbOption || "With") !== "Without";
-          const bbQty = withBB ? calcInclWastage(qty, row.wastage_percent) : 0;
+          const hasContent = cfg.splitDescSize ? (row.description || row.size) : (row.type || row.quality);
+          if (!hasContent) continue;
           const data = {
             po_id: activePo.id, po_number: activePo.po_number,
             article_name: art.article_name, article_code: art.article_code,
-            category: "Polybag",
-            item_description: "Bellyband",
-            size_spec: row.description || "",
-            color: row.size || "",
-            quantity_required: bbQty,
-            wastage_percent: parseFloat(row.wastage_percent) || 0,
-            multiplier: 1,
-            unit: "Pcs",
-            status: "Planned",
-            notes: `BB Type: ${row.type} — ${withBB ? "With BB" : "Without BB"}`,
-          };
-          if (row.existing_id) ops.push(base44.entities.AccessoryItem.update(row.existing_id, data));
-          else ops.push(base44.entities.AccessoryItem.create(data));
-        }
-        continue;
-      }
-
-      // Normal save
-      for (const row of rows) {
-        const hasContent = cfg.splitDescSize ? (row.description || row.size) : (row.type || row.quality);
-        if (!hasContent) continue;
-        const data = {
-          po_id: activePo.id, po_number: activePo.po_number,
-          article_name: art.article_name, article_code: art.article_code,
-          category: cfg.category,
-          item_description: cfg.category === "Insert Card" ? (row.quality || "") : row.type,
-          size_spec: cfg.category === "Insert Card"
-            ? (row.type || "")
-            : (cfg.splitDescSize ? (row.description || "") : (row.quality || "")),
-          color: cfg.splitDescSize ? (row.size || "") : "",
-          quantity_required: calcInclWastageWithMultiplier(qty, row.wastage_percent, row.multiplier || 1),
-          wastage_percent: parseFloat(row.wastage_percent) || 0,
-          multiplier: parseFloat(row.multiplier) || 1,
-          pc_ean_code: row.pc_ean_code || "",
-          carton_ean_code: row.carton_ean_code || "",
-          unit: row.unit || "Pcs",
-          status: "Planned",
-        };
-        if (row.existing_id) ops.push(base44.entities.AccessoryItem.update(row.existing_id, data));
-        else ops.push(base44.entities.AccessoryItem.create(data));
-      }
-    }
-    return ops;
-  };
-
-  const runOps = async (ops) => {
-    const BATCH = 2;
-    for (let i = 0; i < ops.length; i += BATCH) {
-      await Promise.all(ops.slice(i, i + BATCH));
-      // Small delay between batches to avoid rate limiting
-      if (i + BATCH < ops.length) await new Promise(r => setTimeout(r, 150));
-    }
-    queryClient.invalidateQueries({ queryKey: ["accessoryItems"] });
-  };
-
-  const handleSaveTab = async (tabToSave) => {
-    if (!activePo) return;
-    setSaving(true);
-    await runOps(buildOpsForTab(tabToSave));
-
-    // ── Auto-propagate to identical articles in other POs ──────────────────
-    const cfg = TAB_CONFIG[tabToSave];
-    const [allArticles, allAccessoryItems] = await Promise.all([
-      base44.entities.Article.list("-created_date", 500),
-      base44.entities.AccessoryItem.list("-created_date", 500),
-    ]);
-
-    const propagateOps = [];
-    for (const art of poArticles) {
-      if (!art.article_code) continue;
-      const savedRows = allRows[tabToSave]?.[art.id] || [];
-      if (savedRows.every(r => !r.type && !r.quality && !r.description)) continue;
-
-      const siblings = allArticles.filter(
-        a => a.article_code === art.article_code && a.po_id !== activePo.id
-      );
-
-      for (const sibArt of siblings) {
-        const alreadyHas = allAccessoryItems.some(
-          i => i.po_id === sibArt.po_id && i.article_code === sibArt.article_code && i.category === cfg.category
-        );
-        if (alreadyHas) continue;
-
-        const sibPo = pos.find(p => p.id === sibArt.po_id);
-        const sibQty = sibArt.order_quantity || 0;
-        // Get carton size for sibling article
-        const sibCartonSize = cfg.autoFillSize
-          ? (poItems.filter(i => i.po_id === sibArt.po_id && i.item_code?.toUpperCase() === sibArt.article_code?.toUpperCase())
-              .map(i => i.carton_length && i.carton_width && i.carton_height ? `${i.carton_length}x${i.carton_width}x${i.carton_height}` : "")[0] || "")
-          : "";
-
-        for (const row of savedRows) {
-          const hasContent = cfg.splitDescSize ? (row.description || row.size) : (row.type || row.quality);
-          if (!hasContent) continue;
-          propagateOps.push(base44.entities.AccessoryItem.create({
-            po_id: sibArt.po_id,
-            po_number: sibPo?.po_number || "",
-            article_name: sibArt.article_name,
-            article_code: sibArt.article_code,
+            packing_type: pt,
             category: cfg.category,
-            item_description: cfg.category === "Insert Card"
-              ? (row.quality || "")
-              : row.type,
-            size_spec: cfg.category === "Insert Card"
-              ? (row.type || "")
-              : (cfg.splitDescSize ? (row.description || "") : (row.quality || "")),
-            color: cfg.splitDescSize ? (sibCartonSize || row.size || "") : "",
-            quantity_required: calcInclWastageWithMultiplier(sibQty, row.wastage_percent, row.multiplier || 1),
+            item_description: cfg.category === "Insert Card" ? (row.quality || "") : row.type,
+            size_spec: cfg.category === "Insert Card" ? (row.type || "") : (cfg.splitDescSize ? (row.description || "") : (row.quality || "")),
+            color: cfg.splitDescSize ? (row.size || "") : "",
+            quantity_required: calcInclWastageWithMultiplier(qty, row.wastage_percent, row.multiplier || 1),
             wastage_percent: parseFloat(row.wastage_percent) || 0,
             multiplier: parseFloat(row.multiplier) || 1,
             pc_ean_code: row.pc_ean_code || "",
             carton_ean_code: row.carton_ean_code || "",
             unit: "Pcs", status: "Planned",
-          }));
+          };
+          if (row.existing_id) ops.push(base44.entities.AccessoryItem.update(row.existing_id, data));
+          else ops.push(base44.entities.AccessoryItem.create(data));
         }
       }
-    }
-
-    if (propagateOps.length > 0) {
-      const BATCH = 2;
-      for (let i = 0; i < propagateOps.length; i += BATCH) {
-        await Promise.all(propagateOps.slice(i, i + BATCH));
-        if (i + BATCH < propagateOps.length) await new Promise(r => setTimeout(r, 150));
-      }
-      queryClient.invalidateQueries({ queryKey: ["accessoryItems"] });
-    }
-
-    setSaving(false);
+    });
+    return ops;
   };
 
-  const handleSave = async () => {
+  const runOps = async (ops) => {
+    const BATCH = 3;
+    for (let i = 0; i < ops.length; i += BATCH) {
+      await Promise.all(ops.slice(i, i + BATCH));
+      if (i + BATCH < ops.length) await new Promise(r => setTimeout(r, 100));
+    }
+    queryClient.invalidateQueries({ queryKey: ["accessoryItems"] });
+  };
+
+  const handleSaveAll = async () => {
     if (!activePo) return;
     setSaving(true);
-    const tabsToSave = packingType === "Roll Pack"
-      ? SUB_TABS.filter(t => ROLL_PACK_ALLOWED_TABS.includes(t))
-      : SUB_TABS.filter(t => t !== "Bellyband (BB)");
-    for (const tab of tabsToSave) {
-      const ops = buildOpsForTab(tab);
-      if (ops.length > 0) await runOps(ops);
-    }
+    const ops = buildOpsForPackType(packingType);
+    if (ops.length > 0) await runOps(ops);
     setSaving(false);
   };
 
-  const handleUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      let imported = 0;
-      let skipped = 0;
-      const errorLog = [];
-
-      try {
-        const text = evt.target.result;
-        const rawLines = text.split(/\r?\n/);
-        // Parse each line respecting quoted commas
-        const parseLine = (line) => {
-          const result = [];
-          let cur = "", inQuote = false;
-          for (let i = 0; i < line.length; i++) {
-            const ch = line[i];
-            if (ch === '"') { inQuote = !inQuote; }
-            else if (ch === ',' && !inQuote) { result.push(cur.trim()); cur = ""; }
-            else { cur += ch; }
-          }
-          result.push(cur.trim());
-          return result;
-        };
-
-        if (rawLines.length < 2) { alert("CSV file is empty or has no data rows."); return; }
-
-        // Normalize headers: lowercase + underscores
-        const rawHeaders = parseLine(rawLines[0]);
-        const headers = rawHeaders.map(h => h.trim().toLowerCase().replace(/[\s]+/g, "_"));
-
-        if (headers.length === 0 || headers.every(h => h === "")) {
-          alert("CSV header row is empty."); return;
+  const handleSaveTab = async () => {
+    if (!activePo) return;
+    setSaving(true);
+    const cfg = TAB_CONFIG[subTab];
+    const ops = [];
+    for (const art of poArticles) {
+      const qty = art.order_quantity || 0;
+      const rows = allRows[packingType]?.[subTab]?.[art.id] || [];
+      if (cfg.isBellyband) {
+        for (const row of rows) {
+          if (!row.type && !row.description) continue;
+          const withBB = (row.bbOption || "With") !== "Without";
+          const bbQty = withBB ? calcInclWastage(qty, row.wastage_percent) : 0;
+          const data = { po_id: activePo.id, po_number: activePo.po_number, article_name: art.article_name, article_code: art.article_code, packing_type: packingType, category: "Polybag", item_description: "Bellyband", size_spec: row.description || "", color: row.size || "", quantity_required: bbQty, wastage_percent: parseFloat(row.wastage_percent) || 0, multiplier: 1, unit: "Pcs", status: "Planned" };
+          if (row.existing_id) ops.push(base44.entities.AccessoryItem.update(row.existing_id, data));
+          else ops.push(base44.entities.AccessoryItem.create(data));
         }
-
-        // Helper: get value by one or more possible header names
-        const get = (row, ...names) => {
-          for (const name of names) {
-            const norm = name.toLowerCase().replace(/[\s]+/g, "_");
-            const idx = headers.indexOf(norm);
-            if (idx >= 0 && row[idx] !== undefined) {
-              return row[idx].trim();
-            }
-          }
-          return "";
-        };
-
-        const toNum = (v) => {
-          if (v === undefined || v === null || String(v).trim() === "") return null;
-          const n = Number(String(v).trim());
-          return isNaN(n) ? null : n;
-        };
-
-        // Validate required headers per upload type
-        const REQUIRED_HEADERS = {
-          Labels: ["article_code", "label_type"],
-          "Insert Card": ["article_code", "type"],
-          Packaging: ["article_code", "type"],
-        };
-        const requiredHeaders = REQUIRED_HEADERS[csvUploadType] || [];
-        const missingHeaders = requiredHeaders.filter(r => !headers.includes(r));
-        if (missingHeaders.length > 0) {
-          alert(
-            "CSV missing required column(s) for " + csvUploadType + ": " + missingHeaders.join(", ") +
-            "\n\nFound columns: " + headers.join(", ")
-          );
-          return;
+      } else {
+        for (const row of rows) {
+          const hasContent = cfg.splitDescSize ? (row.description || row.size) : (row.type || row.quality);
+          if (!hasContent) continue;
+          const data = { po_id: activePo.id, po_number: activePo.po_number, article_name: art.article_name, article_code: art.article_code, packing_type: packingType, category: cfg.category, item_description: cfg.category === "Insert Card" ? (row.quality || "") : row.type, size_spec: cfg.category === "Insert Card" ? (row.type || "") : (cfg.splitDescSize ? (row.description || "") : (row.quality || "")), color: cfg.splitDescSize ? (row.size || "") : "", quantity_required: calcInclWastageWithMultiplier(qty, row.wastage_percent, row.multiplier || 1), wastage_percent: parseFloat(row.wastage_percent) || 0, multiplier: parseFloat(row.multiplier) || 1, pc_ean_code: row.pc_ean_code || "", carton_ean_code: row.carton_ean_code || "", unit: "Pcs", status: "Planned" };
+          if (row.existing_id) ops.push(base44.entities.AccessoryItem.update(row.existing_id, data));
+          else ops.push(base44.entities.AccessoryItem.create(data));
         }
-
-        // Determine target tabs from upload type
-        const targetTabs =
-          csvUploadType === "Labels" ? ["Labels"] :
-          csvUploadType === "Insert Card" ? ["Insert Card"] :
-          ["Polybag", "Stiffener", "Carton"];
-
-        // Build new rows map, pre-seeded with existing rows
-        const newRows = {};
-        targetTabs.forEach(tab => {
-          newRows[tab] = {};
-          poArticles.forEach(art => {
-            newRows[tab][art.id] = allRows[tab]?.[art.id]
-              ? [...allRows[tab][art.id]]
-              : [defaultRow(TAB_CONFIG[tab])];
-          });
-        });
-
-        const dataLines = rawLines.slice(1).filter(l => l.trim() !== "");
-
-        for (let lineIdx = 0; lineIdx < dataLines.length; lineIdx++) {
-          const lineNum = lineIdx + 2;
-          const row = parseLine(dataLines[lineIdx]);
-          if (row.every(c => c === "")) { skipped++; continue; }
-
-          try {
-            // --- Resolve article ---
-            const artCode = get(row, "article_code", "articlecode", "article");
-            if (!artCode) {
-              errorLog.push("Row " + lineNum + ": missing article_code — skipped");
-              skipped++; continue;
-            }
-            const art = poArticles.find(a =>
-              (a.article_code || "").trim().toUpperCase() === artCode.toUpperCase() ||
-              (a.article_name || "").trim().toUpperCase() === artCode.toUpperCase()
-            );
-            if (!art) {
-              errorLog.push("Row " + lineNum + ": no article found for \"" + artCode + "\" — skipped");
-              skipped++; continue;
-            }
-
-            let tab = null;
-            let newRow = null;
-
-            // ── LABELS ───────────────────────────────────────────────────────
-            if (csvUploadType === "Labels") {
-              tab = "Labels";
-              const cfg = TAB_CONFIG[tab];
-              const labelType = get(row, "label_type", "labeltype", "type");
-              if (!labelType) {
-                errorLog.push("Row " + lineNum + ": missing label_type — skipped");
-                skipped++; continue;
-              }
-              const multiplierRaw = get(row, "multiplier");
-              const multiplier = toNum(multiplierRaw);
-              if (multiplierRaw !== "" && (multiplier === null || multiplier <= 0)) {
-                errorLog.push("Row " + lineNum + ": invalid multiplier \"" + multiplierRaw + "\" — skipped");
-                skipped++; continue;
-              }
-              const wastageRaw = get(row, "wastage_percent", "wastage");
-              newRow = {
-                type: labelType,
-                quality: get(row, "quality", "description", "name"),
-                description: "",
-                size: "",
-                wastage_percent: toNum(wastageRaw) ?? cfg.defaultWastage,
-                multiplier: multiplier ?? 1,
-                pc_ean_code: get(row, "pc_ean_code", "ean", "pc_ean"),
-                carton_ean_code: get(row, "carton_ean_code", "carton_ean"),
-                existing_id: null,
-              };
-            }
-
-            // ── INSERT CARD ──────────────────────────────────────────────────
-            else if (csvUploadType === "Insert Card") {
-              // Filter: skip rows whose category column is present but not "insert card"
-              const rowCategory = get(row, "category");
-              if (rowCategory !== "" && rowCategory.trim().toLowerCase() !== "insert card") {
-                console.log("Row " + lineNum + ": category=\"" + rowCategory + "\" is not Insert Card — skipped");
-                skipped++; continue;
-              }
-              tab = "Insert Card";
-              const cfg = TAB_CONFIG[tab];
-              const cardType = get(row, "type", "insert_card_type", "insert_type", "card_type");
-              if (!cardType) {
-                errorLog.push("Row " + lineNum + ": missing type — skipped");
-                skipped++; continue;
-              }
-              const cardDesc = get(row, "description", "quality_/_size", "quality/size", "quality", "size", "name").trim();
-              if (!cardDesc) {
-                errorLog.push("Row " + lineNum + ": missing description — skipped");
-                skipped++; continue;
-              }
-              const wastageRaw = get(row, "wastage_percent", "wastage_%", "wastage");
-              newRow = {
-                type: cardType,
-                quality: cardDesc,
-                description: "",
-                size: "",
-                wastage_percent: toNum(wastageRaw) ?? cfg.defaultWastage,
-                multiplier: 1,
-                pc_ean_code: get(row, "pc_ean_code", "ean", "pc_ean"),
-                carton_ean_code: get(row, "carton_ean_code", "carton_ean"),
-                existing_id: null,
-              };
-            }
-
-            // ── PACKAGING ────────────────────────────────────────────────────
-            else if (csvUploadType === "Packaging") {
-              const packTypeRaw = get(row, "pack_type", "packtype", "tab", "category").toLowerCase();
-              if (packTypeRaw.includes("polybag") || packTypeRaw.includes("poly")) tab = "Polybag";
-              else if (packTypeRaw.includes("stiffener") || packTypeRaw.includes("stiff")) tab = "Stiffener";
-              else if (packTypeRaw.includes("carton")) tab = "Carton";
-              else tab = "Polybag"; // default
-
-              const cfg = TAB_CONFIG[tab];
-              const pType = get(row, "type", "pack_material", "material");
-              if (!pType) {
-                errorLog.push("Row " + lineNum + ": missing type — skipped");
-                skipped++; continue;
-              }
-              const desc = get(row, "description", "name", "quality");
-              const size = get(row, "size", "dimension", "dimensions");
-              if (!desc && !size) {
-                errorLog.push("Row " + lineNum + ": both description and size are empty — skipped");
-                skipped++; continue;
-              }
-              const wastageRaw = get(row, "wastage_percent", "wastage");
-              newRow = {
-                type: pType,
-                quality: "",
-                description: desc,
-                size: size,
-                wastage_percent: toNum(wastageRaw) ?? cfg.defaultWastage,
-                multiplier: 1,
-                pc_ean_code: "",
-                carton_ean_code: "",
-                existing_id: null,
-              };
-            }
-
-            if (!tab || !newRow || !newRows[tab]) {
-              errorLog.push("Row " + lineNum + ": could not determine tab — skipped");
-              skipped++; continue;
-            }
-
-            // ── Duplicate check ──────────────────────────────────────────────
-            const cfg = TAB_CONFIG[tab];
-            const existingForArt = newRows[tab][art.id] || [];
-            const isDuplicate = existingForArt.some(r => {
-              if (cfg.splitDescSize) return r.type === newRow.type && r.description === newRow.description;
-              return r.type === newRow.type && r.quality === newRow.quality;
-            });
-            if (isDuplicate) {
-              console.warn("Row " + lineNum + ": duplicate entry for article " + artCode + ", type=" + newRow.type + " — skipped");
-              skipped++; continue;
-            }
-
-            // ── Merge: replace first empty row or append ─────────────────────
-            const existing = newRows[tab][art.id];
-            const emptyIdx = existing.findIndex(r =>
-              !r.quality && !r.description && (!r.type || cfg.typeOptions.indexOf(r.type) === 0)
-            );
-            if (emptyIdx >= 0) existing[emptyIdx] = newRow;
-            else existing.push(newRow);
-            imported++;
-
-          } catch (rowErr) {
-            errorLog.push("Row " + lineNum + ": unexpected error — " + rowErr.message);
-            skipped++;
-          }
-        }
-
-        // Apply merged rows to state
-        setAllRows(prev => {
-          const merged = { ...prev };
-          targetTabs.forEach(tab => { merged[tab] = { ...(prev[tab] || {}), ...newRows[tab] }; });
-          return merged;
-        });
-
-        // Switch to first relevant tab
-        if (targetTabs.length > 0) setSubTab(targetTabs[0]);
-
-        // Log errors to console
-        if (errorLog.length > 0) console.warn("CSV Upload Issues:\n" + errorLog.join("\n"));
-
-        const summary = [
-          "Uploaded " + imported + " row(s) into " + csvUploadType + " tab(s).",
-          skipped > 0 ? skipped + " row(s) skipped (see browser console for details)." : ""
-        ].filter(Boolean).join("\n");
-        alert(summary);
-
-      } catch (err) {
-        alert("CSV upload failed: " + err.message);
-        console.error("CSV upload error:", err);
       }
-    };
-    reader.readAsText(file, "UTF-8");
-    e.target.value = "";
+    }
+    if (ops.length > 0) await runOps(ops);
+    setSaving(false);
   };
 
-  const handleDownloadCSV = () => {
-    const rows = [["PO Number", "Article Name", "Article Code", "Category", "Type", "Description", "Size", "Order Qty", "Wastage %", "Incl. Wastage Qty"]];
-    SUB_TABS.forEach(tab => {
-      const cfg = TAB_CONFIG[tab];
-      poArticles.forEach(art => {
-        const artRows = allRows[tab]?.[art.id] || [];
-        artRows.forEach(row => {
-          rows.push([
-            activePo?.po_number || "", art.article_name, art.article_code || "",
-            cfg.category, row.type,
-            cfg.splitDescSize ? (row.description || "") : (row.quality || ""),
-            cfg.splitDescSize ? (row.size || "") : "",
-            art.order_quantity || 0, row.wastage_percent,
-            calcInclWastage(art.order_quantity || 0, row.wastage_percent)
-          ]);
-        });
-      });
-    });
-    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url;
-    a.download = `Accessories_${activePo?.po_number || "Planning"}.csv`;
-    a.click(); URL.revokeObjectURL(url);
-  };
-
-  const handleDownloadPDF = () => {
-    const doc = new jsPDF({ orientation: "landscape", format: "a4" });
-    doc.setFillColor(31, 56, 100); doc.rect(0, 0, 297, 22, "F");
-    doc.setTextColor(255, 255, 255); doc.setFontSize(13); doc.setFont("helvetica", "bold");
-    doc.text("Accessories & Packaging Planning", 14, 10);
-    doc.setFontSize(9); doc.setFont("helvetica", "normal");
-    doc.text(`PO: ${activePo?.po_number || ""} — ${activePo?.customer_name || ""}  |  Date: ${new Date().toLocaleDateString()}`, 14, 18);
-    let y = 30; doc.setTextColor(0, 0, 0);
-    SUB_TABS.forEach(tab => {
-      const cfg = TAB_CONFIG[tab];
-      const tabHasData = poArticles.some(art => (allRows[tab]?.[art.id] || []).some(r => r.quality || r.type || r.description));
-      if (!tabHasData) return;
-      if (y > 170) { doc.addPage(); y = 20; }
-      doc.setFillColor(61, 90, 153); doc.rect(14, y - 4, 269, 7, "F");
-      doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(9);
-      doc.text(tab.toUpperCase(), 16, y); y += 7; doc.setTextColor(0, 0, 0);
-      const colW = cfg.splitDescSize ? [55, 40, 30, 22, 22, 35] : [60, 50, 35, 22, 22, 35];
-      const colX = [14];
-      colW.forEach((w, i) => colX.push(colX[i] + colW[i]));
-      const headers = cfg.splitDescSize
-        ? ["Article", cfg.typeLabel, cfg.descLabel, cfg.sizeLabel, "Qty", "Wastage %", "Incl. Wastage"]
-        : ["Article", cfg.typeLabel, cfg.qualityLabel || "Description", "Qty", "Wastage %", "Incl. Wastage"];
-      doc.setFillColor(235, 240, 250); doc.rect(14, y - 3.5, 269, 6, "F");
-      doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);
-      headers.forEach((h, i) => colX[i] !== undefined && doc.text(h, colX[i] + 1, y));
-      y += 6; doc.setFont("helvetica", "normal");
-      poArticles.forEach(art => {
-        const artRows = allRows[tab]?.[art.id] || [];
-        artRows.forEach((row, idx) => {
-          if (y > 185) { doc.addPage(); y = 20; }
-          if (idx % 2 === 0) { doc.setFillColor(249, 250, 251); doc.rect(14, y - 3.5, 269, 6, "F"); }
-          const vals = cfg.splitDescSize
-            ? [
-                idx === 0 ? `${art.article_name}${art.article_code ? ` (${art.article_code})` : ""}` : "",
-                row.type || "", row.description || "", row.size || "",
-                String(art.order_quantity || 0), String(row.wastage_percent || 0),
-                String(calcInclWastage(art.order_quantity || 0, row.wastage_percent))
-              ]
-            : [
-                idx === 0 ? `${art.article_name}${art.article_code ? ` (${art.article_code})` : ""}` : "",
-                row.type || "", row.quality || "",
-                String(art.order_quantity || 0), String(row.wastage_percent || 0),
-                String(calcInclWastage(art.order_quantity || 0, row.wastage_percent))
-              ];
-          vals.forEach((v, i) => colX[i] !== undefined && doc.text(v.substring(0, 25), colX[i] + 1, y));
-          y += 6;
-        });
-      });
-      y += 5;
-    });
-    doc.save(`Accessories_${activePo?.po_number || "Planning"}.pdf`);
-  };
-
-  const handlePrint = () => {
-    const rows = [];
-    SUB_TABS.forEach(tab => {
-      const cfg = TAB_CONFIG[tab];
-      const tabRows = poArticles.flatMap(art =>
-        (allRows[tab]?.[art.id] || []).map(row => ({ art, row, cfg, tab }))
-      ).filter(({ row }) => row.quality || row.type || row.description);
-      if (tabRows.length === 0) return;
-      const colCount = cfg.splitDescSize ? 8 : 7;
-      rows.push(`<tr style="background:#1F3864"><td colspan="${colCount}" style="color:white;font-weight:bold;padding:6px 8px">${tab.toUpperCase()}</td></tr>`);
-      const hdr = cfg.splitDescSize
-        ? `<tr style="background:#EBF0FA;font-weight:bold"><td>Article</td><td>${cfg.typeLabel}</td><td>${cfg.descLabel}</td><td>${cfg.sizeLabel}</td><td>Order Qty</td><td>Wastage %</td><td style="background:#FFF2CC">Incl. Wastage</td></tr>`
-        : `<tr style="background:#EBF0FA;font-weight:bold"><td>Article</td><td>${cfg.typeLabel}</td><td>${cfg.qualityLabel}</td><td>Order Qty</td><td>Wastage %</td><td style="background:#FFF2CC">Incl. Wastage</td></tr>`;
-      rows.push(hdr);
-      tabRows.forEach(({ art, row }, i) => {
-        const bg = i % 2 === 0 ? "#fff" : "#F9FAFB";
-        const cells = cfg.splitDescSize
-          ? `<td>${art.article_name}</td><td>${row.type}</td><td>${row.description || ""}</td><td>${row.size || ""}</td><td>${art.order_quantity || 0}</td><td>${row.wastage_percent}%</td><td style="background:#FFF2CC;font-weight:bold">${calcInclWastage(art.order_quantity || 0, row.wastage_percent)}</td>`
-          : `<td>${art.article_name}</td><td>${row.type}</td><td>${row.quality || ""}</td><td>${art.order_quantity || 0}</td><td>${row.wastage_percent}%</td><td style="background:#FFF2CC;font-weight:bold">${calcInclWastage(art.order_quantity || 0, row.wastage_percent)}</td>`;
-        rows.push(`<tr style="background:${bg}">${cells}</tr>`);
-      });
-    });
-    const html = `<html><head><title>Accessories & Packaging — ${activePo?.po_number || ""}</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px}h2{color:#1F3864}table{width:100%;border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 6px}</style></head><body><h2>Accessories & Packaging Planning</h2><p><b>PO:</b> ${activePo?.po_number || ""} &nbsp; <b>Customer:</b> ${activePo?.customer_name || ""} &nbsp; <b>Date:</b> ${new Date().toLocaleDateString()}</p><table>${rows.join("")}</table></body></html>`;
-    const w = window.open("", "_blank"); w.document.write(html); w.document.close(); w.print();
-  };
+  const packColor = PACK_COLORS[packingType];
+  const visibleTabs = PACK_TABS[packingType];
 
   return (
     <div className="space-y-4">
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <Select value={selectedPoId || activePo?.id || ""} onValueChange={setSelectedPoId}>
-          <SelectTrigger className="w-72 h-8 text-xs"><SelectValue placeholder="Select Purchase Order" /></SelectTrigger>
-          <SelectContent>{pos.map(p => <SelectItem key={p.id} value={p.id}>{p.po_number} – {p.customer_name}</SelectItem>)}</SelectContent>
-        </Select>
-
-        {/* Packing Type — PO level */}
-        <div className="flex items-center gap-1 border border-gray-300 rounded overflow-hidden text-xs font-medium">
-          {["Sheet Pack", "Roll Pack"].map(opt => (
-            <button key={opt} onClick={() => setPackingType(opt)}
-              className={`px-3 py-1.5 transition-colors ${
-                packingType === opt
-                  ? "bg-blue-700 text-white"
-                  : "bg-white text-gray-600 hover:bg-gray-50"
-              }`}>{opt}</button>
-          ))}
+      {/* Header */}
+      <div className="rounded-lg border-2 overflow-hidden" style={{ borderColor: packColor.bg }}>
+        <div className="px-4 py-3 text-white" style={{ backgroundColor: packColor.bg }}>
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h2 className="font-bold text-base">Accessories & Packaging</h2>
+              <p className="text-xs opacity-75 mt-0.5">{PACK_DESCRIPTIONS[packingType]}</p>
+            </div>
+            {/* Pack Type Selector */}
+            <div className="flex rounded overflow-hidden border border-white/30">
+              {Object.keys(PACK_TABS).map(pt => (
+                <button key={pt} onClick={() => setPackingType(pt)}
+                  className={`px-3 py-1.5 text-xs font-semibold transition-all ${packingType === pt ? "bg-white text-gray-900" : "bg-transparent text-white hover:bg-white/20"}`}>
+                  {pt}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
-        <Button size="sm" onClick={handleSave} disabled={saving || !activePo} className="gap-1.5">
-          <Save className="h-3.5 w-3.5" /> {saving ? "Saving..." : "Save All"}
-        </Button>
-        <div className="flex gap-1.5 ml-auto">
-          <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleUpload} />
-          <select
-            className="h-8 text-xs border border-gray-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
-            value={csvUploadType}
-            onChange={e => setCsvUploadType(e.target.value)}
-          >
-            <option value="Labels">Labels</option>
-            <option value="Insert Card">Insert Card</option>
-            <option value="Packaging">Packaging</option>
-          </select>
-          <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={!activePo} className="gap-1.5">
-            <Upload className="h-3.5 w-3.5" /> Upload CSV
+        {/* PO Selector + Actions */}
+        <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center gap-2 flex-wrap">
+          <Select value={selectedPoId || activePo?.id || ""} onValueChange={setSelectedPoId}>
+            <SelectTrigger className="w-72 h-8 text-xs"><SelectValue placeholder="Select Purchase Order" /></SelectTrigger>
+            <SelectContent>{pos.map(p => <SelectItem key={p.id} value={p.id}>{p.po_number} – {p.customer_name}</SelectItem>)}</SelectContent>
+          </Select>
+          <Button size="sm" onClick={handleSaveAll} disabled={saving || !activePo} className="gap-1.5" style={{ backgroundColor: packColor.bg }}>
+            <Save className="h-3.5 w-3.5" /> {saving ? "Saving..." : `Save All ${packingType}`}
           </Button>
-          <Button size="sm" variant="outline" onClick={handleDownloadCSV} disabled={!activePo || poArticles.length === 0} className="gap-1.5">
-            <Download className="h-3.5 w-3.5" /> CSV
-          </Button>
-          <Button size="sm" variant="outline" onClick={handleDownloadPDF} disabled={!activePo || poArticles.length === 0} className="gap-1.5">
-            <Download className="h-3.5 w-3.5" /> PDF
-          </Button>
-          <Button size="sm" variant="outline" onClick={handlePrint} disabled={!activePo || poArticles.length === 0} className="gap-1.5">
-            <Printer className="h-3.5 w-3.5" /> Print
-          </Button>
+        </div>
+
+        {/* Pack Type Info Badges */}
+        <div className="px-4 py-2 bg-white border-b border-gray-200 flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-gray-500 font-medium">Includes:</span>
+          {visibleTabs.map(t => (
+            <span key={t} className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: packColor.light, color: packColor.bg }}>
+              {t}
+            </span>
+          ))}
+          {packingType === "Sheet Pack" && (
+            <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-semibold border border-blue-200">
+              ✓ Stiffener + Inlay Card
+            </span>
+          )}
+          {packingType === "Roll Pack" && (
+            <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-800 font-semibold border border-green-200">
+              ✗ No Stiffener / Inlay Card
+            </span>
+          )}
+          {packingType === "Box Pack" && (
+            <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 font-semibold border border-orange-200">
+              ✗ No Stiffener / Inlay Card / Bellyband
+            </span>
+          )}
         </div>
       </div>
 
       {/* Sub-tabs */}
-      {(() => {
-        const visibleTabs = packingType === "Roll Pack"
-          ? SUB_TABS.filter(t => ROLL_PACK_ALLOWED_TABS.includes(t))
-          : SUB_TABS.filter(t => t !== "Bellyband (BB)");
-        return (
-          <div className="flex items-center gap-0 border-b border-gray-200 overflow-x-auto">
-            {visibleTabs.map(t => (
-              <button key={t} onClick={() => setSubTab(t)}
-                className={`px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
-                  subTab === t ? "border-blue-600 text-blue-700" : "border-transparent text-gray-500 hover:text-gray-700"
-                }`}>
-                {t}
-              </button>
-            ))}
-            <div className="ml-auto pr-1 flex-shrink-0">
-              <Button size="sm" onClick={() => handleSaveTab(subTab)} disabled={saving || !activePo}
-                className="gap-1.5 h-7 text-xs bg-green-600 hover:bg-green-700 text-white">
-                <Save className="h-3 w-3" /> {saving ? "Saving..." : `Save ${subTab}`}
-              </Button>
-            </div>
-          </div>
-        );
-      })()}
+      <div className="flex items-center gap-0 border-b-2 overflow-x-auto" style={{ borderColor: packColor.bg + "40" }}>
+        {visibleTabs.map(t => (
+          <button key={t} onClick={() => setSubTab(t)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors -mb-0.5 ${subTab === t ? "border-current" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+            style={subTab === t ? { borderColor: packColor.bg, color: packColor.bg } : {}}>
+            {t}
+          </button>
+        ))}
+        <div className="ml-auto pr-1 flex-shrink-0">
+          <Button size="sm" onClick={handleSaveTab} disabled={saving || !activePo}
+            className="gap-1.5 h-7 text-xs text-white" style={{ backgroundColor: packColor.bg }}>
+            <Save className="h-3 w-3" /> {saving ? "Saving..." : `Save ${subTab}`}
+          </Button>
+        </div>
+      </div>
 
       {/* Content */}
       {poArticles.length === 0 ? (
         <div className="py-12 text-center text-muted-foreground text-sm">No articles found for this PO.</div>
       ) : (
-        <>
-          <div className="space-y-3">
-            {poArticles.map(art => (
-              <ArticleBlock
-                key={art.id}
-                art={art}
-                cfg={TAB_CONFIG[subTab]}
-                rows={allRows[subTab] || {}}
-                onChange={(artId, rows) => handleChange(subTab, artId, rows)}
-                cartonSize={getCartonSize(art)}
-                templates={allTemplates.filter(t => t.category === TAB_CATEGORY_MAP[subTab])}
-                subTab={subTab}
-              />
-            ))}
-          </div>
-
-          {/* Totals footer */}
-          {(() => {
-            const cfg = TAB_CONFIG[subTab];
-            const typeTotals = {};
-            poArticles.forEach(art => {
-              const qty = art.order_quantity || 0;
-
-              // BB tab totals
-              if (cfg.isBellyband) {
-                const artRows = allRows[subTab]?.[art.id] || [];
-                artRows.forEach(row => {
-                  const withBB = (row.bbOption || "With") !== "Without";
-                  const bbQty = withBB ? calcInclWastage(qty, row.wastage_percent) : 0;
-                  const key = `${row.type}||${row.description || ""}`;
-                  if (!typeTotals[key]) typeTotals[key] = { type: row.type || "BB", description: row.description || "", size: row.size || "", orderQty: 0, inclWastage: 0 };
-                  typeTotals[key].orderQty += qty;
-                  typeTotals[key].inclWastage += bbQty;
-                });
-                return;
-              }
-
-              // Normal articles
-              const artRows = allRows[subTab]?.[art.id] || [];
-              artRows.forEach(row => {
-                if (!row.type) return;
-                const inclWastageQty = calcInclWastageWithMultiplier(qty, row.wastage_percent, row.multiplier || 1);
-                const descKey = cfg.splitDescSize
-                  ? `${row.description || ""}|${row.size || ""}`
-                  : (row.quality || "");
-                const key = `${row.type}||${descKey}`;
-                if (!typeTotals[key]) typeTotals[key] = {
-                  type: row.type,
-                  description: cfg.splitDescSize ? (row.description || "") : (row.quality || ""),
-                  size: cfg.splitDescSize ? (row.size || "") : "",
-                  orderQty: 0, inclWastage: 0,
-                };
-                typeTotals[key].orderQty += qty;
-                typeTotals[key].inclWastage += inclWastageQty;
-              });
-            });
-            const entries = Object.entries(typeTotals);
-            if (entries.length === 0) return null;
-            return (
-              <div className="rounded border border-gray-300 overflow-hidden shadow-sm">
-                <div className="px-3 py-2 text-xs font-bold text-white" style={{ backgroundColor: "#1F3864" }}>
-                  {subTab.toUpperCase()} — TOTALS SUMMARY
-                </div>
-                <table className="w-full text-xs border-collapse">
-                  <thead>
-                    <tr style={{ backgroundColor: "#EBF0FA" }}>
-                      <th className="border border-gray-300 px-3 py-1.5 text-left">{cfg.typeLabel}</th>
-                      {cfg.splitDescSize ? (
-                        <>
-                          <th className="border border-gray-300 px-3 py-1.5 text-left">{cfg.descLabel}</th>
-                          <th className="border border-gray-300 px-3 py-1.5 text-left" style={{ backgroundColor: "#E8F5E9" }}>{cfg.sizeLabel}</th>
-                        </>
-                      ) : (
-                        cfg.qualityLabel && <th className="border border-gray-300 px-3 py-1.5 text-left">{cfg.qualityLabel}</th>
-                      )}
-                      <th className="border border-gray-300 px-3 py-1.5 text-center w-32">Total Order Qty</th>
-                      <th className="border border-gray-300 px-3 py-1.5 text-center w-40" style={{ backgroundColor: "#FFF2CC" }}>{cfg.isBellyband ? "Total BB Qty" : "Total Incl. Wastage Qty"}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {entries.map(([key, totals], idx) => (
-                      <tr key={key} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#F9FAFB" }}>
-                        <td className="border border-gray-300 px-3 py-1.5 font-medium">{totals.type}</td>
-                        {cfg.splitDescSize ? (
-                          <>
-                            <td className="border border-gray-300 px-3 py-1.5">{totals.description}</td>
-                            <td className="border border-gray-300 px-3 py-1.5" style={{ backgroundColor: "#F1F8E9" }}>{totals.size}</td>
-                          </>
-                        ) : (
-                          cfg.qualityLabel && <td className="border border-gray-300 px-3 py-1.5">{totals.description}</td>
-                        )}
-                        <td className="border border-gray-300 px-3 py-1.5 text-center">{totals.orderQty.toLocaleString()}</td>
-                        <td className="border border-gray-300 px-3 py-1.5 text-center font-bold" style={{ backgroundColor: "#FFF9E6" }}>{totals.inclWastage.toLocaleString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ backgroundColor: "#1F3864", color: "white", fontWeight: "bold" }}>
-                      <td className="border border-gray-400 px-3 py-1.5" colSpan={cfg.splitDescSize ? 3 : (cfg.qualityLabel ? 2 : 1)}>GRAND TOTAL</td>
-                      <td className="border border-gray-400 px-3 py-1.5 text-center">{entries.reduce((s, [, t]) => s + t.orderQty, 0).toLocaleString()}</td>
-                      <td className="border border-gray-400 px-3 py-1.5 text-center" style={{ backgroundColor: "#E6B800", color: "#1a1a1a" }}>{entries.reduce((s, [, t]) => s + t.inclWastage, 0).toLocaleString()}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            );
-          })()}
-        </>
+        <div className="space-y-3">
+          {poArticles.map(art => (
+            <ArticleBlock
+              key={`${packingType}|${subTab}|${art.id}`}
+              art={art}
+              cfg={TAB_CONFIG[subTab]}
+              rows={allRows[packingType]?.[subTab] || {}}
+              onChange={handleChange}
+              cartonSize={getCartonSize(art)}
+              templates={allTemplates.filter(t => t.category === TAB_CONFIG[subTab].category)}
+              packColor={packColor}
+            />
+          ))}
+          <TotalsSummary
+            subTab={subTab}
+            allRows={allRows[packingType] || {}}
+            poArticles={poArticles}
+            packColor={packColor}
+          />
+        </div>
       )}
     </div>
   );
