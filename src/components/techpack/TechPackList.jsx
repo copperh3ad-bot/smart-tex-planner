@@ -167,8 +167,11 @@ export default function TechPackList({ onEdit, onNew }) {
     { field: "article_code",  label: "Article Code" },
     { field: "customer_name", label: "Customer" },
     { field: "size_label",    label: "Size" },
+    { field: "tech_pack_code",label: "TP Code" },
+    { field: "price_usd",     label: "Price (USD)" },
+    { field: "cbm",           label: "CBM/Ctn" },
+    { field: "qty_per_carton",label: "Pcs/Ctn" },
     { field: "created_date",  label: "Upload Date" },
-    { field: "file_name",     label: "File" },
     { field: "version",       label: "Ver." },
     { field: "status",        label: "Status" },
   ];
@@ -282,17 +285,25 @@ export default function TechPackList({ onEdit, onNew }) {
             </thead>
             <tbody>
               {isLoading && (
-                <tr><td colSpan={10} className="text-center py-10 text-gray-400 text-xs">Loading…</td></tr>
+                <tr><td colSpan={13} className="text-center py-10 text-gray-400 text-xs">Loading…</td></tr>
               )}
               {!isLoading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="text-center py-14 text-gray-400">
+                  <td colSpan={13} className="text-center py-14 text-gray-400">
                     <p className="text-sm font-medium">No tech packs found</p>
                     <p className="text-xs mt-1">Upload a tech pack to get started.</p>
                   </td>
                 </tr>
               )}
-              {filtered.map((r, idx) => (
+              {filtered.map((r, idx) => {
+                const art = r.extracted_data?.article || {};
+                const pl  = r.extracted_data?.price_list || {};
+                const carton = r.extracted_data?.packaging?.carton || {};
+                const priceUsd = pl.price_usd ?? art.price_usd ?? null;
+                const cbm      = pl.cbm_per_carton ?? carton.cbm_per_carton ?? null;
+                const pcsPerCtn= pl.qty_per_carton ?? carton.pieces_per_carton ?? null;
+                const tpCode   = r.tech_pack_code || art.tech_pack_code || "";
+                return (
                 <tr key={r.id}
                   style={{ backgroundColor: selected.has(r.id) ? "#EFF6FF" : idx % 2 === 0 ? "#fff" : "#F9FAFB" }}
                   className="hover:bg-blue-50/30 transition-colors">
@@ -312,15 +323,32 @@ export default function TechPackList({ onEdit, onNew }) {
                       ? <span className="font-mono bg-gray-100 rounded px-1.5 py-0.5">{r.article_code}</span>
                       : <span className="text-gray-400">—</span>}
                   </td>
-                  <td className={td + " max-w-[140px] truncate"} title={r.customer_name}>
+                  <td className={td + " max-w-[120px] truncate"} title={r.customer_name}>
                     {r.customer_name || <span className="text-gray-400">—</span>}
                   </td>
                   <td className={td}>{r.size_label || <span className="text-gray-400">—</span>}</td>
                   <td className={td}>
-                    {r.created_date ? format(new Date(r.created_date), "dd MMM yyyy") : "—"}
+                    {tpCode
+                      ? <span className="font-mono bg-blue-50 text-blue-700 rounded px-1.5 py-0.5 text-[10px] font-semibold">{tpCode}</span>
+                      : <span className="text-gray-300">—</span>}
                   </td>
-                  <td className={td + " max-w-[160px] truncate"} title={r.file_name}>
-                    <span className="text-gray-500">{r.file_name || "—"}</span>
+                  <td className={td + " text-right"}>
+                    {priceUsd != null
+                      ? <span className="text-green-700 font-semibold">${Number(priceUsd).toFixed(2)}</span>
+                      : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className={td + " text-right"}>
+                    {cbm != null
+                      ? <span className="text-purple-700">{Number(cbm).toFixed(4)}</span>
+                      : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className={td + " text-center"}>
+                    {pcsPerCtn != null
+                      ? <span className="text-gray-700">{pcsPerCtn}</span>
+                      : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className={td}>
+                    {r.created_date ? format(new Date(r.created_date), "dd MMM yyyy") : "—"}
                   </td>
                   <td className={td + " text-center"}>
                     <span className="font-bold text-gray-700">v{r.version || 1}</span>
@@ -406,7 +434,8 @@ export default function TechPackList({ onEdit, onNew }) {
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
