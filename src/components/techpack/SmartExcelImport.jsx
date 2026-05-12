@@ -70,18 +70,28 @@ function get(row, ...keys) {
 function mapAccessoryCategory(cat, itemName) {
   const c = String(cat ?? "").toLowerCase().trim();
   const n = String(itemName ?? "").toLowerCase().trim();
-  if (c === "label" || n.includes("label") || n.includes("law tag") || n.includes("hang tag") || n.includes("care")) return "Label";
+  if (c === "label" || n.includes("label") || n.includes("law tag") || n.includes("care") || n.includes("wash")) return "Label";
+  if (n.includes("hang tag") || n.includes("swing tag") || n.includes("hangtag")) return "Label";
   if (c === "sticker" || n.includes("sticker") || n.includes("upc") || n.includes("barcode")) return "Sticker";
-  if (c === "polybag" || n.includes("polybag") || n.includes("poly bag") || n.includes("bag material")) return "Polybag";
-  if (c === "packaging" || n.includes("packaging type") || n.includes("stiffener") || n.includes("board insert") || n.includes("insert card")) return "Stiffener";
+  if (c === "polybag" || n.includes("polybag") || n.includes("poly bag") || n.includes("bag material") || n.includes("drawcord bag") || n.includes("fabric bag")) return "Polybag";
+  if (n.includes("stiffener") || n.includes("board insert") || n.includes("insert card") || n.includes("inlay")) return "Stiffener";
+  if (c === "packaging" && (n.includes("stiffener") || n.includes("board") || n.includes("insert"))) return "Stiffener";
   if (c === "carton" || n.includes("carton") || n.includes("master box") || n.includes("printed box")) return "Carton";
   if (n.includes("zipper") || n.includes("zip")) return "Zipper";
-  if (n.includes("elastic")) return "Elastic";
-  if (n.includes("dori") || n.includes("drawstring") || n.includes("cord")) return "Dori";
+  if (n.includes("elastic") || n.includes("elastic band")) return "Elastic";
+  if (n.includes("dori") || n.includes("drawstring") || n.includes("cord stopper") || n.includes("cord lock")) return "Dori";
   if (n.includes("button") || n.includes("snap")) return "Button";
   if (n.includes("eyelet") || n.includes("grommet")) return "Eyelet";
   if (n.includes("thread") || n.includes("sewing")) return "Stitching Thread";
+  if (c === "trim") return "Accessory"; // generic trim → Accessory
   return "Accessory";
+}
+
+// Normalize wastage: if value is decimal fraction (<=1), convert to percent
+function normalizeWastage(v) {
+  const n = parseNumber(v);
+  if (n === null) return 5; // default 5%
+  return n <= 1 ? Math.round(n * 100) : n;
 }
 
 // Map polybag type from material string
@@ -117,6 +127,21 @@ function lookupRows(map, code) {
 
 function lookupRow(map, code) {
   return lookupRows(map, code)[0] || null;
+}
+
+// For fabric sheet: item_code may be base code without color suffix.
+// Try full code first, then strip trailing -XX suffix (e.g. PCSJMO-T-WH → PCSJMO-T)
+function lookupRowsWithBaseFallback(map, fullCode) {
+  if (!fullCode) return [];
+  const full = fullCode.toUpperCase();
+  if (map[full]?.length) return map[full];
+  // Strip last dash-segment (color code)
+  const parts = full.split("-");
+  if (parts.length > 1) {
+    const base = parts.slice(0, -1).join("-");
+    if (map[base]?.length) return map[base];
+  }
+  return [];
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
@@ -196,16 +221,23 @@ export default function SmartExcelImport({ pos = [], selectedPoId, onSaved, onCl
           const size        = String(get(art, "size", "size_label") ?? "").trim();
           const color       = String(get(art, "color", "colour") ?? "White").trim();
           const techPackCode= get(art, "tech_pack_code", "techpackcode") ?? "";
+          const bobSku      = get(art, "bob_sku", "bobsku") ?? "";
           const unitsPerCarton = parseNumber(get(art, "units_per_carton", "pcs_per_carton", "qty_per_carton"));
           const cartonSizeRaw  = get(art, "carton_size_cm", "carton_size") ?? "";
           const pvcBagDimensions = get(art, "pvc_bag_dimensions") ?? "";
           const stiffenerSize    = get(art, "stiffener_size") ?? "";
-          const inlayCardDims    = get(art, "inlay_card_dimensions") ?? "";
+          const insertDimensions = get(art, "insert_dimensions", "inlay_card_dimensions") ?? "";
+          const finishDimensions = get(art, "finish_dimensions") ?? "";
+          const zipperLength     = parseNumber(get(art, "zipper_length_cm"));
+          const productLenIn     = parseNumber(get(art, "product_length_in"));
+          const productWidIn     = parseNumber(get(art, "product_width_in"));
+          const productDepIn     = parseNumber(get(art, "product_depth_in"));
 
           const articleName = `${brand} ${productType}`.trim();
 
-          // ── Fabric components ──────────────────────────────────────────────
-          const fabricRows = lookupRows(fabricMap, itemCode);
+          // ── Fabric components — use base code fallback for fabric sheet ──────
+          // e.g. PCSJMO-T-WH → try PCSJMO-T-WH first, then PCSJMO-T
+          const fabricRows = lookupRowsWithBaseFallback(fabricMap, itemCode);
           const fabric_components = fabricRows.map(f => ({
             component_type:      get(f, "component_type", "component", "panel") ?? "",
             product_size:        get(f, "product_size", "dimensions") ?? "",
@@ -215,7 +247,7 @@ export default function SmartExcelImport({ pos = [], selectedPoId, onSaved, onCl
             width:               parseNumber(get(f, "width_cm", "width_in", "width")),
             composition:         get(f, "composition", "fiber_content") ?? "",
             consumption_per_unit:parseNumber(get(f, "consumption_per_unit", "consumption")),
-            wastage_percent:     parseNumber(get(f, "wastage_percent", "wastage")),
+            wastage_percent:     normalizeWastage(get(f, "wastage_percent", "wastage")),
             construction:        get(f, "construction") ?? "",
             yarn_count:          get(f, "yarn_count") ?? "",
             finish:              get(f, "finish") ?? "",
@@ -247,15 +279,17 @@ export default function SmartExcelImport({ pos = [], selectedPoId, onSaved, onCl
             const catRaw  = get(a, "category") ?? "";
             const itemName= get(a, "item_name", "name", "description") ?? "";
             const material= get(a, "material") ?? "";
+            const variant = get(a, "variant") ?? "";
+            const descParts = [itemName, material, variant].filter(Boolean);
             return {
               category:         mapAccessoryCategory(catRaw, itemName),
-              item_description: [itemName, material].filter(Boolean).join(" — "),
+              item_description: descParts.join(" — "),
               color:            get(a, "color", "colour") ?? "",
               size_spec:        get(a, "size_spec", "size") ?? "",
               quantity_per_piece: parseNumber(get(a, "consumption_per_unit", "qty_per_piece")) ?? 1,
-              unit:             get(a, "unit") ?? "Pcs",
+              unit:             (get(a, "unit") ?? "Pcs").replace(/^pc$/i, "Pcs"),
               placement:        get(a, "placement") ?? "",
-              wastage_percent:  parseNumber(get(a, "wastage_percent")) ?? 2,
+              wastage_percent:  normalizeWastage(get(a, "wastage_percent")),
             };
           });
 
@@ -267,6 +301,7 @@ export default function SmartExcelImport({ pos = [], selectedPoId, onSaved, onCl
           const cbmPerCarton = parseNumber(get(cartonRow, "cbm_per_carton", "cbm"));
           const cartonUnits  = parseNumber(get(cartonRow, "units_per_carton", "qty_per_carton")) ?? unitsPerCarton;
           const cartonSizeFinal = get(cartonRow, "carton_size_cm") ?? cartonSizeRaw ?? "";
+          const cartonWeightKg  = parseNumber(get(cartonRow, "weight_per_carton_kg", "gross_weight_kg", "weight_kg"));
 
           // ── Price data ─────────────────────────────────────────────────────
           const priceRow       = lookupRow(priceMap, itemCode);
@@ -282,61 +317,86 @@ export default function SmartExcelImport({ pos = [], selectedPoId, onSaved, onCl
           const packaging = {
             labels: labelRows.map(l => ({
               label_type:  get(l, "item_name") ?? "Label",
-              description: get(l, "material") ?? "",
+              description: [get(l, "material"), get(l, "variant")].filter(Boolean).join(" — "),
               size_spec:   get(l, "size_spec") ?? "",
               placement:   get(l, "placement") ?? "",
+              notes:       get(l, "variant") ?? "",
             })),
+            // Polybag: prefer accessory row, fallback to pvc_bag_dimensions column in Articles sheet
             polybag: polyRow ? {
               type:               mapPolybagType(get(polyRow, "material")),
               size_cm:            get(polyRow, "size_spec") ?? pvcBagDimensions ?? "",
               thickness_microns:  null,
               printed:            String(get(polyRow, "material") ?? "").toLowerCase().includes("print"),
-            } : (pvcBagDimensions ? { type: "PE", size_cm: pvcBagDimensions, thickness_microns: null, printed: false } : null),
+              notes:              get(polyRow, "material") ?? "",
+            } : (pvcBagDimensions ? {
+              type: "PE",
+              size_cm: pvcBagDimensions,
+              thickness_microns: null,
+              printed: false,
+              notes: pvcBagDimensions,
+            } : null),
+            // Stiffener: prefer accessory row, fallback to stiffener_size in Articles
             stiffener: stiffRow ? {
               used:     true,
               material: get(stiffRow, "material") ?? "Cardboard",
               size_cm:  get(stiffRow, "size_spec") ?? stiffenerSize ?? "",
+              notes:    get(stiffRow, "placement") ?? "",
             } : (stiffenerSize ? { used: true, material: "Cardboard", size_cm: stiffenerSize } : null),
+            // Insert card from Articles sheet if no accessory row found
+            insert_card: insertDimensions ? { description: insertDimensions } : null,
             carton: {
-              type:             "Printed",
-              quality:          "",
-              size_cm:          cartonSizeFinal,
+              type:              "Printed",
+              quality:           "",
+              size_cm:           cartonSizeFinal,
               pieces_per_carton: cartonUnits ?? null,
-              length_cm:        cartonLength,
-              width_cm:         cartonWidth,
-              height_cm:        cartonHeight,
-              cbm_per_carton:   cbmPerCarton,
+              length_cm:         cartonLength,
+              width_cm:          cartonWidth,
+              height_cm:         cartonHeight,
+              cbm_per_carton:    cbmPerCarton,
+              gross_weight_kg:   cartonWeightKg,
             },
             stickers: stickerRows.map(s => ({
               sticker_type: get(s, "item_name") ?? "Sticker",
-              description:  get(s, "material") ?? "",
+              description:  [get(s, "material"), get(s, "variant")].filter(Boolean).join(" — "),
             })),
           };
 
           return {
-            article_name:  articleName,
-            article_code:  itemCode,
-            customer_name: brand,
-            size_label:    size,
+            article_name:   articleName,
+            article_code:   itemCode,
+            customer_name:  brand,
+            size_label:     size,
             color,
             tech_pack_code: techPackCode,
-            file_name:     file.name,
-            file_url:      null,
-            version:       1,
-            status:        "Draft",
-            po_id:         localPoId || null,
-            po_number:     pos.find(p => p.id === localPoId)?.po_number ?? null,
+            file_name:      file.name,
+            file_url:       null,
+            version:        1,
+            status:         "Draft",
+            po_id:          localPoId || null,
+            po_number:      pos.find(p => p.id === localPoId)?.po_number ?? null,
             extracted_data: {
               article: {
-                article_name:     articleName,
-                article_code:     itemCode,
-                size_label:       size,
+                article_name:       articleName,
+                article_code:       itemCode,
+                bob_sku:            bobSku,
+                size_label:         size,
                 color,
-                description:      productType,
-                order_quantity:   parseNumber(get(art, "order_quantity")) ?? null,
-                price_usd:        priceUsd,
-                tech_pack_code:   techPackCode,
-                item_description: itemDescription,
+                description:        productType,
+                product_category:   get(art, "product_category") ?? "",
+                order_quantity:     parseNumber(get(art, "order_quantity")) ?? null,
+                units_per_carton:   unitsPerCarton,
+                price_usd:          priceUsd,
+                tech_pack_code:     techPackCode,
+                item_description:   itemDescription,
+                finish_dimensions:  finishDimensions,
+                insert_dimensions:  insertDimensions,
+                pvc_bag_dimensions: pvcBagDimensions,
+                stiffener_size:     stiffenerSize,
+                zipper_length_cm:   zipperLength,
+                product_length_in:  productLenIn,
+                product_width_in:   productWidIn,
+                product_depth_in:   productDepIn,
               },
               fabric_components,
               stitching: [],
@@ -511,30 +571,34 @@ export default function SmartExcelImport({ pos = [], selectedPoId, onSaved, onCl
               labels: (packaging.labels || []).map(l => ({
                 label_type:  l.label_type || "",
                 description: l.description || "",
-                notes:       l.placement || "",
+                notes:       [l.placement, l.notes].filter(Boolean).join(" | ") || "",
               })),
               polybag: packaging.polybag ? {
                 type:              packaging.polybag.type || "PE",
                 size_cm:           packaging.polybag.size_cm || "",
                 thickness_microns: packaging.polybag.thickness_microns ?? null,
                 printed:           !!packaging.polybag.printed,
+                notes:             packaging.polybag.notes || "",
               } : undefined,
               stiffener: packaging.stiffener?.used ? {
                 used:     true,
                 material: packaging.stiffener.material || "",
                 size_cm:  packaging.stiffener.size_cm  || "",
+                notes:    packaging.stiffener.notes    || "",
               } : undefined,
               carton: packaging.carton ? {
                 type:              packaging.carton.type || "Printed",
                 quality:           packaging.carton.quality || "",
                 size_cm:           packaging.carton.size_cm || "",
                 pieces_per_carton: packaging.carton.pieces_per_carton ?? null,
-                cbm_per_carton:    packaging.carton.cbm_per_carton ?? null,
+                cbm_per_carton:    packaging.carton.cbm_per_carton    ?? null,
+                gross_weight_kg:   packaging.carton.gross_weight_kg   ?? null,
               } : undefined,
               stickers: (packaging.stickers || []).map(s => ({
                 sticker_type: s.sticker_type || "",
                 description:  s.description  || "",
               })),
+              notes: packaging.insert_card?.description || "",
             };
             const existingAp = apMap[artCodeKey];
             ops.push(
@@ -544,23 +608,25 @@ export default function SmartExcelImport({ pos = [], selectedPoId, onSaved, onCl
             );
           }
 
-          // ── 6. POItem (when PO is selected) ───────────────────────────────
-          if (localPoId && (pl.price_usd != null || pl.cbm_per_carton != null)) {
+          // ── 6. POItem (when PO is selected) — always upsert ──────────────
+          if (localPoId) {
+            const orderQty   = parseNumber(ed.article?.order_quantity) ?? null;
+            const totalPrice = (pl.price_usd != null && orderQty) ? +(pl.price_usd * orderQty).toFixed(2) : null;
             const poItemData = {
-              po_id:       localPoId,
-              po_number:   poNum,
-              item_code:   artCode,
+              po_id:        localPoId,
+              po_number:    poNum,
+              item_code:    artCode,
               item_description: pl.item_description || artName,
-              quantity:    parseNumber(get(rec, "order_quantity")) ?? 0,
-              unit:        "Pieces",
-              unit_price:  pl.price_usd ?? null,
-              total_price: null, // calculated elsewhere
-              cbm:         pl.cbm_per_carton ?? null,
+              quantity:     orderQty ?? 0,
+              unit:         "Pieces",
+              unit_price:   pl.price_usd ?? null,
+              total_price:  totalPrice,
+              cbm:          pl.cbm_per_carton ?? null,
               pieces_per_carton: pl.qty_per_carton ?? null,
-              carton_length: pl.carton_length_cm ?? null,
-              carton_width:  pl.carton_width_cm  ?? null,
-              carton_height: pl.carton_height_cm ?? null,
-              price_status: "Matched",
+              carton_length:  pl.carton_length_cm ?? null,
+              carton_width:   pl.carton_width_cm  ?? null,
+              carton_height:  pl.carton_height_cm ?? null,
+              price_status:   pl.price_usd != null ? "Matched" : "Pending",
               expected_price: pl.price_usd ?? null,
             };
             const existingPoItem = poItemMap[artCodeKey];

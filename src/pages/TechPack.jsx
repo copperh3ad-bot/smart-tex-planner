@@ -399,10 +399,16 @@ Return ONLY this exact JSON structure (no markdown, no explanation):
           pos={pos}
           selectedPoId={selectedPoId}
           onSaved={() => {
-            queryClient.invalidateQueries({ queryKey: ["techPackRecords"] });
+            ["techPackRecords","articles","fabricTemplates","priceLists","articlePackaging",
+             "accessoryItems","poItems","purchaseOrders"].forEach(k =>
+              queryClient.invalidateQueries({ queryKey: [k] })
+            );
           }}
           onClose={() => {
-            queryClient.invalidateQueries({ queryKey: ["techPackRecords"] });
+            ["techPackRecords","articles","fabricTemplates","priceLists","articlePackaging",
+             "accessoryItems","poItems","purchaseOrders"].forEach(k =>
+              queryClient.invalidateQueries({ queryKey: [k] })
+            );
             setMainTab("list");
           }}
         />
