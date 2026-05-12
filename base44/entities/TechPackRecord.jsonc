@@ -21,6 +21,16 @@
     "color": {
       "type": "string"
     },
+    "packaging_type": {
+      "type": "string",
+      "enum": [
+        "Sheet Pack",
+        "Roll Pack",
+        "Box Pack"
+      ],
+      "description": "Packaging type for this article \u2014 determines which module accessories are routed to",
+      "default": "Sheet Pack"
+    },
     "file_name": {
       "type": "string",
       "description": "Original uploaded file name"
