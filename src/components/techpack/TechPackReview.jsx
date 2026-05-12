@@ -86,13 +86,13 @@ function countMissing(obj, keys) {
 
 const ACC_CATEGORIES = ["Zipper", "Slider", "Elastic", "Button", "Dori", "Eyelet", "Stitching Thread", "Insert Card", "Label", "Accessory", "Polybag", "Stiffener", "Carton", "Sticker", "Other"];
 
-export default function TechPackReview({ extractedData, selectedPoId, pos, onSaved, onBack, warning, fileName, fileUrl, existingRecordId, existingVersion }) {
+export default function TechPackReview({ extractedData, selectedPoId, pos, onSaved, onBack, warning, fileName, fileUrl, existingRecordId, existingVersion, initialPackingType }) {
   const [article, setArticle] = useState(extractedData.article || {});
   const [fabrics, setFabrics] = useState(extractedData.fabric_components || []);
   const [stitching, setStitching] = useState(extractedData.stitching || []);
   const [accessories, setAccessories] = useState(extractedData.accessories || []);
   const [packaging, setPackaging] = useState(extractedData.packaging || {});
-  const [packingType, setPackingType] = useState(extractedData.article?.packaging_type || "Sheet Pack");
+  const [packingType, setPackingType] = useState(initialPackingType || extractedData.article?.packaging_type || "Sheet Pack");
   const [saving, setSaving] = useState(false);
   const [saveLog, setSaveLog] = useState(null);
   const [poId, setPoId] = useState(selectedPoId || "");
@@ -484,19 +484,6 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
             <FieldInput label="Article Name" value={article.article_name} onChange={v => setArticle(p => ({...p, article_name: v}))} required />
           </div>
           <FieldInput label="Article Code / SKU" value={article.article_code} onChange={v => setArticle(p => ({...p, article_code: v}))} required />
-          <div>
-            <label className="block text-[10px] font-semibold uppercase mb-0.5" style={{ color: "#6b7280" }}>PACKAGING TYPE *</label>
-            <select
-              className={inputCls + " border-gray-300 font-semibold"}
-              value={packingType}
-              onChange={e => setPackingType(e.target.value)}
-              style={{ color: packingType === "Sheet Pack" ? "#1d4ed8" : packingType === "Roll Pack" ? "#15803d" : "#c2410c" }}
-            >
-              <option value="Sheet Pack">Sheet Pack — Stiffener + Inlay Card</option>
-              <option value="Roll Pack">Roll Pack — No Stiffener / Inlay Card</option>
-              <option value="Box Pack">Box Pack — Individual Box → Master Carton</option>
-            </select>
-          </div>
           <FieldInput label="Color" value={article.color} onChange={v => setArticle(p => ({...p, color: v}))} />
           <FieldInput label="Size Label" value={article.size_label} onChange={v => setArticle(p => ({...p, size_label: v}))} />
           <FieldInput label="Order Quantity" value={article.order_quantity} onChange={v => setArticle(p => ({...p, order_quantity: v}))} type="number" />

@@ -27,6 +27,7 @@ export default function TechPack() {
   const [editingRecord, setEditingRecord] = useState(null); // TechPackRecord being edited
   const [isNewVersion, setIsNewVersion] = useState(false);
   const [rawExcelText, setRawExcelText] = useState(null);
+  const [packingType, setPackingType] = useState("Sheet Pack");
   const [reviewTab, setReviewTab] = useState("bulk"); // "bulk" | "summary" | "review"
   const queryClient = useQueryClient();
 
@@ -514,6 +515,29 @@ Return ONLY valid JSON (no markdown, no extra text):
                 )}
 
                 <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">Packaging Type *</label>
+                  <div className="flex rounded-lg overflow-hidden border border-gray-300">
+                    {["Sheet Pack", "Roll Pack", "Box Pack"].map(pt => (
+                      <button key={pt} type="button" onClick={() => setPackingType(pt)}
+                        className={`flex-1 py-2 text-xs font-semibold transition-colors ${
+                          packingType === pt
+                            ? pt === "Sheet Pack" ? "bg-blue-700 text-white"
+                              : pt === "Roll Pack" ? "bg-green-700 text-white"
+                              : "bg-orange-700 text-white"
+                            : "bg-white text-gray-500 hover:bg-gray-50"
+                        }`}>
+                        {pt}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    {packingType === "Sheet Pack" && "Includes Stiffener + Inlay Card"}
+                    {packingType === "Roll Pack" && "No Stiffener / Inlay Card — includes Bellyband"}
+                    {packingType === "Box Pack" && "Individual box → Master carton — no Stiffener/Inlay/Bellyband"}
+                  </p>
+                </div>
+
+                <div>
                   <label className="text-xs font-medium text-gray-600 block mb-1">Link to Purchase Order (optional)</label>
                   <select
                     className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -617,6 +641,7 @@ Return ONLY valid JSON (no markdown, no extra text):
                   fileUrl={fileUrl || editingRecord?.file_url || ""}
                   existingRecordId={editingRecord?.id || null}
                   existingVersion={editingRecord?.version || 1}
+                  initialPackingType={packingType}
                 />
               )}
 
