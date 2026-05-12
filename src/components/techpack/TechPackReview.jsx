@@ -91,8 +91,22 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
   const [fabrics, setFabrics] = useState(extractedData.fabric_components || []);
   const [stitching, setStitching] = useState(extractedData.stitching || []);
   const [accessories, setAccessories] = useState(extractedData.accessories || []);
-  const [packaging, setPackaging] = useState(extractedData.packaging || {});
+  const [packaging, setPackaging] = useState(initPackaging);
   const [packingType, setPackingType] = useState(initialPackingType || extractedData.article?.packaging_type || "Sheet Pack");
+
+  // Auto-backfill stiffener/insert_card size from article-level fields if not already in packaging
+  const initPackaging = () => {
+    const pkg = extractedData.packaging || {};
+    const art = extractedData.article || {};
+    const p = { ...pkg };
+    if (art.stiffener_size && !p.stiffener?.size_cm) {
+      p.stiffener = { ...(p.stiffener || {}), used: true, size_cm: art.stiffener_size };
+    }
+    if (art.insert_card_size && !p.insert_card?.size_cm) {
+      p.insert_card = { ...(p.insert_card || {}), used: true, size_cm: art.insert_card_size };
+    }
+    return p;
+  };
   const [saving, setSaving] = useState(false);
   const [saveLog, setSaveLog] = useState(null);
   const [poId, setPoId] = useState(selectedPoId || "");
@@ -281,6 +295,18 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
         }));
       }
 
+      if (packaging.insert_card?.used) {
+        pkgOps.push(base44.entities.AccessoryItem.create({
+          po_id: poId || null, po_number: poNum,
+          article_name: artName, article_code: artCode,
+          packing_type: packingType,
+          category: "Insert Card",
+          item_description: packaging.insert_card.description || "Insert / Inlay Card",
+          size_spec: packaging.insert_card.size_cm || "",
+          unit: "Pcs", wastage_percent: 3, multiplier: 1, status: "Planned",
+        }));
+      }
+
       if (packaging.carton?.type || packaging.carton?.size_cm) {
         pkgOps.push(base44.entities.AccessoryItem.create({
           po_id: poId || null, po_number: poNum,
@@ -446,6 +472,19 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
           <h2 className="text-base font-semibold text-gray-800">Review & Edit Extracted Data</h2>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Packing Type badge */}
+          <div className="flex rounded-lg overflow-hidden border border-gray-300">
+            {["Sheet Pack", "Roll Pack", "Box Pack"].map(pt => (
+              <button key={pt} type="button" onClick={() => setPackingType(pt)}
+                className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  packingType === pt
+                    ? pt === "Sheet Pack" ? "bg-blue-700 text-white"
+                      : pt === "Roll Pack" ? "bg-green-700 text-white"
+                      : "bg-orange-700 text-white"
+                    : "bg-white text-gray-500 hover:bg-gray-50"
+                }`}>{pt}</button>
+            ))}
+          </div>
           <select
             className="text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
             value={poId}
@@ -681,6 +720,23 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
               </div>
               <FieldInput label="Material" value={packaging.stiffener?.material} onChange={v => setPackaging(p => ({...p, stiffener:{...p.stiffener, material:v}}))} />
               <FieldInput label="Size (cm)" value={packaging.stiffener?.size_cm} onChange={v => setPackaging(p => ({...p, stiffener:{...p.stiffener, size_cm:v}}))} />
+            </div>
+          </div>
+
+          {/* Insert / Inlay Card */}
+          <div>
+            <p className="text-xs font-bold text-gray-600 mb-2 uppercase tracking-wide">Insert / Inlay Card</p>
+            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 grid grid-cols-3 gap-2">
+              <div>
+                <label className="block text-[10px] font-semibold text-gray-500 uppercase mb-0.5">Used?</label>
+                <select className={inputCls + " border-gray-300"} value={packaging.insert_card?.used ? "yes" : "no"}
+                  onChange={e => setPackaging(p => ({...p, insert_card:{...p.insert_card, used:e.target.value==="yes"}}))}>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              </div>
+              <FieldInput label="Description" value={packaging.insert_card?.description} onChange={v => setPackaging(p => ({...p, insert_card:{...p.insert_card, description:v}}))} />
+              <FieldInput label="Size (cm)" value={packaging.insert_card?.size_cm} onChange={v => setPackaging(p => ({...p, insert_card:{...p.insert_card, size_cm:v}}))} />
             </div>
           </div>
 

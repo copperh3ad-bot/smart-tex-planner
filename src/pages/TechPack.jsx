@@ -84,6 +84,8 @@ Search every sheet for these fields:
 - size_label: "size", "size label", "size range" — e.g. Twin, Queen, King, S, M, L, XL
 - color: "color", "colour", "colorway", "shade"
 - order_quantity: "order qty", "quantity", "pcs", "units"
+- stiffener_size: In Sheet 1 / Article sheet, look for "stiffener size", "board size", "insert board size" — capture as string e.g. "28x38 cm"
+- insert_card_size: In Sheet 1 / Article sheet, look for "insert card", "inlay card", "inlay size", "insert size" — capture as string e.g. "28x38 cm"
 - If article_name is missing, concatenate product_type + size_label as the name
 
 ### FABRIC COMPONENTS (usually a "Fabric" or "BOM" or "Consumption" sheet)
@@ -121,10 +123,11 @@ For each accessory row extract:
 - quantity_per_piece: qty per piece, consumption, multiplier
 - unit: "Pcs", "Meters", or "Kgs"
 
-### PACKAGING (from accessories sheet packaging rows OR a separate packing sheet)
+### PACKAGING (from accessories sheet packaging rows OR a separate packing sheet OR Sheet 1 article header)
 - Labels: rows mentioning "brand label", "care label", "wash label", "size label", "hang tag", "barcode label", "price ticket" → packaging.labels[]
 - Polybag: rows with "polybag" or "poly bag" → packaging.polybag {type, size_cm, thickness_microns, printed}
-- Stiffener: rows with "stiffener" or "board" → packaging.stiffener {used:true, material, size_cm}
+- Stiffener: rows with "stiffener" or "board" → packaging.stiffener {used:true, material, size_cm}. ALSO check Sheet 1 article header for stiffener_size — use it as size_cm.
+- Insert Card / Inlay Card: rows with "insert card", "inlay card", "inlay" → packaging.insert_card {used:true, description, size_cm}. ALSO check Sheet 1 article header for insert_card_size — use it as size_cm.
 - Carton/Box: rows with "carton" or "box" → packaging.carton {type, quality, size_cm, pieces_per_carton}
 - Stickers: rows with "sticker", "barcode sticker", "UPC" → packaging.stickers[]
 
@@ -174,6 +177,7 @@ Return ONLY valid JSON (no markdown, no extra text):
     "labels": [],
     "polybag": null,
     "stiffener": null,
+    "insert_card": null,
     "carton": null,
     "stickers": []
   }
@@ -231,6 +235,7 @@ Return ONLY valid JSON (no markdown, no extra text):
           labels: { type: "array" },
           polybag: { type: "object" },
           stiffener: { type: "object" },
+          insert_card: { type: "object" },
           carton: { type: "object" },
           stickers: { type: "array" },
         },
