@@ -43,11 +43,11 @@ function FabricEditor({ rows, onChange }) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-[10px] border-collapse min-w-[780px]">
+      <table className="w-full text-[10px] border-collapse min-w-[1100px]">
         <thead className="bg-gray-100">
           <tr>
-            {["Component Type*","Fabric Type*","GSM","Width(cm)","Composition","Consump./Unit","Wastage%","Product Size","Direction",""].map((h,i) => (
-              <th key={i} className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-500 border-r border-gray-200">{h}</th>
+            {["Component Type*","Fabric Type / Description*","GSM","Color","Construction","Composition","Finish / Coating","Consump./Unit","Wastage%",""].map((h,i) => (
+              <th key={i} className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-500 border-r border-gray-200 whitespace-nowrap">{h}</th>
             ))}
           </tr>
         </thead>
@@ -60,12 +60,12 @@ function FabricEditor({ rows, onChange }) {
               <EditCell value={r.component_type} onChange={v => update(i,"component_type",v)} invalid={!r.component_type} />
               <EditCell value={r.fabric_type}    onChange={v => update(i,"fabric_type",v)}    invalid={!r.fabric_type} />
               <EditCell value={r.gsm}            onChange={v => update(i,"gsm",v)}            type="number" />
-              <EditCell value={r.width}          onChange={v => update(i,"width",v)}          type="number" />
+              <EditCell value={r.color}          onChange={v => update(i,"color",v)} />
+              <EditCell value={r.construction}   onChange={v => update(i,"construction",v)} />
               <EditCell value={r.composition}    onChange={v => update(i,"composition",v)} />
+              <EditCell value={r.finish}         onChange={v => update(i,"finish",v)} />
               <EditCell value={r.consumption_per_unit} onChange={v => update(i,"consumption_per_unit",v)} type="number" />
               <EditCell value={r.wastage_percent} onChange={v => update(i,"wastage_percent",v)} type="number" />
-              <EditCell value={r.product_size}   onChange={v => update(i,"product_size",v)} />
-              <EditCell value={r.direction}      onChange={v => update(i,"direction",v)} />
               <td className={cellCls}>
                 <button onClick={() => remove(i)} className="text-red-400 hover:text-red-600 p-0.5">
                   <Trash2 className="h-3 w-3" />
@@ -93,24 +93,26 @@ function AccessoriesEditor({ rows, onChange }) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-[10px] border-collapse min-w-[620px]">
+      <table className="w-full text-[10px] border-collapse min-w-[900px]">
         <thead className="bg-gray-100">
           <tr>
-            {["Category*","Description*","Color","Size/Spec","Qty/Piece","Unit",""].map((h, i) => (
-              <th key={i} className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-500 border-r border-gray-200">{h}</th>
+            {["Category*","Description*","Material","Color","Size/Spec","Placement","Qty/Piece","Unit",""].map((h, i) => (
+              <th key={i} className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-500 border-r border-gray-200 whitespace-nowrap">{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 && (
-            <tr><td colSpan={7} className="text-center text-[10px] text-gray-400 py-3 italic">No accessories extracted</td></tr>
+            <tr><td colSpan={9} className="text-center text-[10px] text-gray-400 py-3 italic">No accessories extracted</td></tr>
           )}
           {rows.map((a, i) => (
             <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
               <EditCell value={a.category}         onChange={v => update(i,"category",v)}         options={ACC_CATEGORIES} invalid={!a.category} />
               <EditCell value={a.item_description} onChange={v => update(i,"item_description",v)} invalid={!a.item_description} />
+              <EditCell value={a.material}         onChange={v => update(i,"material",v)} />
               <EditCell value={a.color}            onChange={v => update(i,"color",v)} />
               <EditCell value={a.size_spec}        onChange={v => update(i,"size_spec",v)} />
+              <EditCell value={a.placement}        onChange={v => update(i,"placement",v)} />
               <EditCell value={a.quantity_per_piece} onChange={v => update(i,"quantity_per_piece",v)} type="number" />
               <EditCell value={a.unit}             onChange={v => update(i,"unit",v)} options={["Pcs","Meters","Kgs","Rolls","Sets"]} />
               <td className={cellCls}>

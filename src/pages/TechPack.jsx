@@ -30,39 +30,215 @@ IMPORTANT: The above text is pipe-delimited (column1 | column2 | column3). Each 
 ## EXTRACTION RULES
 
 ### ARTICLE INFO
-- article_name, article_code, size_label, color, order_quantity, stiffener_size, insert_card_size
+Search every section/sheet for:
+- article_name: product name, article name, product type, style name, or any prominent title
+- article_code: SKU / item code / style number / ref no — alphanumeric with dashes e.g. "FT2-TW-WH"
+- size_label: size, size label — e.g. Twin, Queen, King, S, M, L
+- color: color, colour, colorway
+- order_quantity: order qty, quantity, pcs, units
+- customer_name: brand, buyer, customer
+- If article_name is missing, derive from product type + size_label
 
-### FABRIC COMPONENTS
-Extract every data row: component_type, fabric_type, gsm, width, composition, consumption_per_unit, wastage_percent, product_size, direction
+### FABRIC SPECS / COMPONENTS
+Look for a "Fabric specs", "Fabric", "BOM", "Consumption", or "Materials" section/table.
+The columns may be: Component, Fabric, GSM, Color, Construction, Finish — OR — component_type, fabric_type, gsm, width, composition, etc.
+For EACH fabric row extract:
+- component_type: "Component" column value — e.g. "Platform only", "Skirt only", "Body", "Flat Sheet", "Fitted Sheet", "Pillow Case", "This is inside bound seam — all inside seams"
+- fabric_type: "Fabric" column — full description e.g. "100% Tencel jersey knitted fabric in white", "70gsm — 100% Polyester interlock knitted fabric in white"
+- composition: extract fiber content from fabric description e.g. "100% Tencel", "100% Polyester", "100% Cotton"
+- gsm: numeric GSM value from "GSM" column — e.g. 113, 70
+- color: "Color" column value — e.g. "White", "—" (use null if dash)
+- construction: "Construction" column value — e.g. "32S - A100", "75DFTY", "190T" — map to width field
+- finish: "Finish" column — full finish description e.g. "0.02mmTPU PU Coating(DingZing) in White Color B) SILVADUR (TM) 930 Antimicrobial - PRN 98-10" — store in notes field
+- consumption_per_unit: if present; default 0 if not found
+- wastage_percent: if present; default 0 if not found
+- product_size: product dimensions if present
+- direction: knitting direction if present
 
-### ACCESSORIES
-Extract every row. Classify: Zipper, Slider, Elastic, Button, Dori, Stitching Thread, Label, Polybag, Stiffener, Carton, Sticker, Insert Card, Accessory
+### LABELS SECTION
+Look for a "Labels" section/table with columns: Section, Type, Material, Size, Color, Placement.
+For EACH label row extract as an accessory with category "Label":
+- item_description: combine "Section" + "Type" — e.g. "SATIN PRINTED LABEL — Satin woven label with printed artwork"
+- size_spec: "Size" column — e.g. "60x133mm (6x13.3cm) (full length)", "4.0cmX6.0cm", "50x80mm (5x8cm)"
+- color: "Color" column — e.g. "Label white ground with printed color fonts"
+- notes: "Placement" column — full placement instructions
+- material: "Material" column — e.g. "100% polyester satin woven fabric", "3M non woven material with white ground"
+- quantity_per_piece: 1 (default for labels)
+- unit: "Pcs"
+ALSO add each label to packaging.labels[] array with type, description, size_cm, material, color, placement fields.
+
+### ACCESSORIES / TRIMS SECTION
+Look for "Accessories", "Trims", "BOM" sections. Extract every row and classify:
+- Zipper/zip → "Zipper"
+- Slider → "Slider"
+- Elastic/tape → "Elastic"
+- Button/snap → "Button"
+- Cord/dori/drawstring → "Dori"
+- Thread/sewing thread → "Stitching Thread"
+- Label (care/brand/woven/wash/size/law tag/hang tag) → "Label"
+- Polybag/poly bag → "Polybag"
+- Stiffener/board/insert board → "Stiffener"
+- Carton/box → "Carton"
+- Sticker/barcode/UPC → "Sticker"
+- Insert card/inlay card → "Insert Card"
+- Anything else → "Accessory"
 
 ### PACKAGING
-Labels, Polybag, Stiffener, Insert Card, Carton, Stickers
+- Labels array: all label rows with type, description, size_cm, material, color, placement
+- Polybag: type, size_cm, thickness_microns, printed
+- Stiffener: used, material, size_cm
+- Insert Card: used, description, size_cm
+- Carton: type, quality, size_cm, pieces_per_carton, cbm_per_carton
+- Stickers: array of sticker rows
 
-### CRITICAL
-1. Never return empty article fields — search every sheet
-2. wastage values between 0 and 1 multiply by 100
-3. If article_name missing, use product_type + size_label
+### CRITICAL RULES
+1. NEVER return empty article fields — search every section for article name and code
+2. wastage values between 0 and 1 (e.g. 0.1) → multiply by 100 to get percent
+3. Extract ALL rows from every table — do not skip rows
+4. For "—" or empty cells use null, not empty string
+5. The "Construction" column in fabric specs maps to the width/construction field
+6. Capture the full "Finish" text as a notes field on fabric components
+7. Extract label placement instructions fully into the notes/placement field
 
-Return ONLY valid JSON:
+Return ONLY valid JSON (no markdown, no extra text):
 {
-  "article": { "article_name": "", "article_code": "", "size_label": "", "color": "", "description": "", "order_quantity": null },
-  "fabric_components": [{ "component_type": "", "product_size": null, "direction": null, "fabric_type": "", "gsm": 0, "width": 0, "composition": "", "consumption_per_unit": 0, "wastage_percent": 0 }],
+  "article": {
+    "article_name": "string — required, never empty",
+    "article_code": "string",
+    "size_label": "string",
+    "color": "string",
+    "description": "string",
+    "order_quantity": null,
+    "customer_name": "string"
+  },
+  "fabric_components": [
+    {
+      "component_type": "string — e.g. Platform only, Skirt only",
+      "product_size": "string or null",
+      "direction": "string or null",
+      "fabric_type": "string — full fabric description",
+      "composition": "string — fiber content e.g. 100% Tencel",
+      "gsm": 0,
+      "width": 0,
+      "construction": "string — e.g. 32S-A100, 75DFTY",
+      "finish": "string — full finish/coating description or null",
+      "consumption_per_unit": 0,
+      "wastage_percent": 0,
+      "notes": "string or null"
+    }
+  ],
   "stitching": [],
-  "accessories": [{ "category": "", "item_description": "", "color": null, "size_spec": null, "quantity_per_piece": null, "unit": "Pcs" }],
-  "packaging": { "labels": [], "polybag": null, "stiffener": null, "insert_card": null, "carton": null, "stickers": [] }
+  "accessories": [
+    {
+      "category": "string",
+      "item_description": "string — full description",
+      "color": "string or null",
+      "size_spec": "string or null",
+      "material": "string or null",
+      "placement": "string or null",
+      "quantity_per_piece": null,
+      "unit": "Pcs"
+    }
+  ],
+  "packaging": {
+    "labels": [
+      {
+        "label_type": "string — e.g. Brand Label, Care Label, Law Tag",
+        "section": "string",
+        "type": "string",
+        "description": "string",
+        "material": "string",
+        "size_cm": "string",
+        "color": "string",
+        "placement": "string"
+      }
+    ],
+    "polybag": null,
+    "stiffener": null,
+    "insert_card": null,
+    "carton": null,
+    "stickers": []
+  }
 }`;
 
 const RESPONSE_SCHEMA = {
   type: "object",
   properties: {
-    article: { type: "object", properties: { article_name: { type: "string" }, article_code: { type: "string" }, size_label: { type: "string" }, color: { type: "string" }, description: { type: "string" }, order_quantity: { type: "number" } } },
-    fabric_components: { type: "array", items: { type: "object", properties: { component_type: { type: "string" }, product_size: { type: "string" }, direction: { type: "string" }, fabric_type: { type: "string" }, gsm: { type: "number" }, width: { type: "number" }, composition: { type: "string" }, consumption_per_unit: { type: "number" }, wastage_percent: { type: "number" } } } },
+    article: {
+      type: "object",
+      properties: {
+        article_name: { type: "string" },
+        article_code: { type: "string" },
+        size_label: { type: "string" },
+        color: { type: "string" },
+        description: { type: "string" },
+        order_quantity: { type: "number" },
+        customer_name: { type: "string" },
+      },
+    },
+    fabric_components: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          component_type: { type: "string" },
+          product_size: { type: "string" },
+          direction: { type: "string" },
+          fabric_type: { type: "string" },
+          composition: { type: "string" },
+          gsm: { type: "number" },
+          width: { type: "number" },
+          construction: { type: "string" },
+          finish: { type: "string" },
+          consumption_per_unit: { type: "number" },
+          wastage_percent: { type: "number" },
+          notes: { type: "string" },
+        },
+      },
+    },
     stitching: { type: "array" },
-    accessories: { type: "array", items: { type: "object", properties: { category: { type: "string" }, item_description: { type: "string" }, color: { type: "string" }, size_spec: { type: "string" }, quantity_per_piece: { type: "number" }, unit: { type: "string" } } } },
-    packaging: { type: "object", properties: { labels: { type: "array" }, polybag: { type: "object" }, stiffener: { type: "object" }, insert_card: { type: "object" }, carton: { type: "object" }, stickers: { type: "array" } } },
+    accessories: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          category: { type: "string" },
+          item_description: { type: "string" },
+          color: { type: "string" },
+          size_spec: { type: "string" },
+          material: { type: "string" },
+          placement: { type: "string" },
+          quantity_per_piece: { type: "number" },
+          unit: { type: "string" },
+        },
+      },
+    },
+    packaging: {
+      type: "object",
+      properties: {
+        labels: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              label_type: { type: "string" },
+              section: { type: "string" },
+              type: { type: "string" },
+              description: { type: "string" },
+              material: { type: "string" },
+              size_cm: { type: "string" },
+              color: { type: "string" },
+              placement: { type: "string" },
+            },
+          },
+        },
+        polybag: { type: "object" },
+        stiffener: { type: "object" },
+        insert_card: { type: "object" },
+        carton: { type: "object" },
+        stickers: { type: "array" },
+      },
+    },
   },
 };
 
