@@ -14,6 +14,13 @@ const STATUS_COLORS = {
   Updated:  "bg-blue-100 text-blue-800 border-blue-200",
 };
 
+const APPROVAL_COLORS = {
+  "Draft":            "bg-gray-100 text-gray-500",
+  "Pending Approval": "bg-amber-100 text-amber-700 font-bold",
+  "Approved":         "bg-green-100 text-green-700 font-bold",
+  "Rejected":         "bg-red-100 text-red-700 font-bold",
+};
+
 const th = "px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap select-none cursor-pointer hover:bg-gray-100 border-b border-gray-200";
 const td = "px-3 py-2 text-xs text-gray-700 whitespace-nowrap border-b border-gray-100";
 
@@ -163,17 +170,14 @@ export default function TechPackList({ onEdit, onNew }) {
   };
 
   const cols = [
-    { field: "article_name",  label: "Article Name" },
-    { field: "article_code",  label: "Article Code" },
-    { field: "customer_name", label: "Customer" },
-    { field: "size_label",    label: "Size" },
-    { field: "tech_pack_code",label: "TP Code" },
-    { field: "price_usd",     label: "Price (USD)" },
-    { field: "cbm",           label: "CBM/Ctn" },
-    { field: "qty_per_carton",label: "Pcs/Ctn" },
-    { field: "created_date",  label: "Upload Date" },
-    { field: "version",       label: "Ver." },
-    { field: "status",        label: "Status" },
+    { field: "article_name",   label: "Article Name" },
+    { field: "article_code",   label: "Article Code" },
+    { field: "customer_name",  label: "Customer" },
+    { field: "size_label",     label: "Size" },
+    { field: "created_date",   label: "Upload Date" },
+    { field: "version",        label: "Ver." },
+    { field: "approval_status",label: "Approval Status" },
+    { field: "status",         label: "Status" },
   ];
 
   return (
@@ -247,11 +251,12 @@ export default function TechPackList({ onEdit, onNew }) {
       )}
 
       {/* Stats row */}
-      <div className="flex gap-4 text-xs text-gray-500">
+      <div className="flex gap-4 text-xs text-gray-500 flex-wrap">
         <span><strong className="text-gray-800">{records.length}</strong> total</span>
-        <span><strong className="text-yellow-700">{records.filter(r=>r.status==="Draft").length}</strong> Draft</span>
-        <span><strong className="text-green-700">{records.filter(r=>r.status==="Approved").length}</strong> Approved</span>
-        <span><strong className="text-blue-700">{records.filter(r=>r.status==="Updated").length}</strong> Updated</span>
+        <span><strong className="text-amber-700">{records.filter(r=>r.approval_status==="Pending Approval").length}</strong> Pending Approval</span>
+        <span><strong className="text-green-700">{records.filter(r=>r.approval_status==="Approved").length}</strong> Approved</span>
+        <span><strong className="text-red-600">{records.filter(r=>r.approval_status==="Rejected").length}</strong> Rejected</span>
+        <span><strong className="text-blue-700">{records.filter(r=>r.production_pushed).length}</strong> In Production</span>
         {filtered.length !== records.length && (
           <span className="ml-auto text-primary">Showing {filtered.length} of {records.length}</span>
         )}
@@ -295,25 +300,12 @@ export default function TechPackList({ onEdit, onNew }) {
                   </td>
                 </tr>
               )}
-              {filtered.map((r, idx) => {
-                const art = r.extracted_data?.article || {};
-                const pl  = r.extracted_data?.price_list || {};
-                const carton = r.extracted_data?.packaging?.carton || {};
-                const priceUsd = pl.price_usd ?? art.price_usd ?? null;
-                const cbm      = pl.cbm_per_carton ?? carton.cbm_per_carton ?? null;
-                const pcsPerCtn= pl.qty_per_carton ?? carton.pieces_per_carton ?? null;
-                const tpCode   = r.tech_pack_code || art.tech_pack_code || "";
-                return (
+              {filtered.map((r, idx) => (
                 <tr key={r.id}
                   style={{ backgroundColor: selected.has(r.id) ? "#EFF6FF" : idx % 2 === 0 ? "#fff" : "#F9FAFB" }}
                   className="hover:bg-blue-50/30 transition-colors">
                   <td className="px-3 py-1.5 text-center border-b border-gray-100">
-                    <input
-                      type="checkbox"
-                      className="rounded"
-                      checked={selected.has(r.id)}
-                      onChange={() => toggleSelect(r.id)}
-                    />
+                    <input type="checkbox" className="rounded" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)} />
                   </td>
                   <td className={td + " font-medium text-gray-900 max-w-[180px] truncate"} title={r.article_name}>
                     {r.article_name || <span className="text-gray-400 italic">—</span>}
@@ -328,30 +320,18 @@ export default function TechPackList({ onEdit, onNew }) {
                   </td>
                   <td className={td}>{r.size_label || <span className="text-gray-400">—</span>}</td>
                   <td className={td}>
-                    {tpCode
-                      ? <span className="font-mono bg-blue-50 text-blue-700 rounded px-1.5 py-0.5 text-[10px] font-semibold">{tpCode}</span>
-                      : <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className={td + " text-right"}>
-                    {priceUsd != null
-                      ? <span className="text-green-700 font-semibold">${Number(priceUsd).toFixed(2)}</span>
-                      : <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className={td + " text-right"}>
-                    {cbm != null
-                      ? <span className="text-purple-700">{Number(cbm).toFixed(4)}</span>
-                      : <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className={td + " text-center"}>
-                    {pcsPerCtn != null
-                      ? <span className="text-gray-700">{pcsPerCtn}</span>
-                      : <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className={td}>
                     {r.created_date ? format(new Date(r.created_date), "dd MMM yyyy") : "—"}
                   </td>
                   <td className={td + " text-center"}>
                     <span className="font-bold text-gray-700">v{r.version || 1}</span>
+                  </td>
+                  <td className={td}>
+                    <span className={`text-[10px] px-2 py-0.5 rounded border ${APPROVAL_COLORS[r.approval_status || "Draft"] || "bg-gray-100 text-gray-500"}`}>
+                      {r.approval_status || "Draft"}
+                    </span>
+                    {r.production_pushed && (
+                      <span className="ml-1 text-[9px] bg-green-50 text-green-600 border border-green-200 rounded px-1 py-0.5">✓ In Production</span>
+                    )}
                   </td>
                   <td className={td}>
                     <select
@@ -434,8 +414,7 @@ export default function TechPackList({ onEdit, onNew }) {
                     </div>
                   </td>
                 </tr>
-                );
-              })}
+                ))}
             </tbody>
           </table>
         </div>
