@@ -259,12 +259,17 @@ export default function Trims() {
   const { data: fabricTemplates = [] } = useQuery({ queryKey: ["fabricTemplates"], queryFn: () => base44.entities.FabricTemplate.list() });
   const { data: techPackRecords = [] } = useQuery({ queryKey: ["techPackRecords"], queryFn: () => base44.entities.TechPackRecord.list("-created_date", 500) });
 
-  const activePo = selectedPoId ? pos.find(p => p.id === selectedPoId) : pos[0];
+  const activePo = selectedPoId ? pos.find(p => p.id === selectedPoId) : (pos.length > 0 ? pos[0] : null);
   const poArticles = activePo ? articles.filter(a => a.po_id === activePo.id) : [];
 
   const poArticleIds = poArticles.map(a => a.id).sort().join(",");
   const trimIds = existingTrims.map(t => t.id).sort().join(",");
   const tpIds = techPackRecords.map(t => t.id).sort().join(",");
+
+  // Reset initKeyRef when PO changes so data always reloads
+  useEffect(() => {
+    initKeyRef.current = null;
+  }, [selectedPoId]);
 
   useEffect(() => {
     if (!activePo || poArticles.length === 0) return;
