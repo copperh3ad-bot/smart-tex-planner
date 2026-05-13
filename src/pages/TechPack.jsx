@@ -527,6 +527,7 @@ export default function TechPack() {
     };
     setSingleExtracted(ed);
     setSingleFileUrl(record.file_url || null);
+    setPackingType(record.packaging_type || "Sheet Pack");
     if (isRepeat) setExtractionWarning("Repeat order — all fields pre-filled. Update quantities and link to new PO before saving.");
     else if (isVersion) setExtractionWarning("New version — upload a new file to re-extract, or edit directly and save.");
     setSelectedPoId(record.po_id || "");
@@ -869,7 +870,7 @@ export default function TechPack() {
                   fileUrl={currentFileUrl || editingRecord?.file_url || ""}
                   existingRecordId={editingRecord?.id || null}
                   existingVersion={editingRecord?.version || 1}
-                  initialPackingType={isEditMode ? packingType : (activeFile?.packingType || packingType)}
+                  initialPackingType={isEditMode ? (editingRecord?.packaging_type || packingType) : (activeFile?.packingType || packingType)}
                 />
               )}
               {reviewTab === "debug" && currentRawText && (
