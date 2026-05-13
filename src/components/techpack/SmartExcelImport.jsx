@@ -157,6 +157,7 @@ export default function SmartExcelImport({ pos = [], selectedPoId, onSaved, onCl
   const [expandedSku, setExpandedSku] = useState(null);
   const [localPoId, setLocalPoId] = useState(selectedPoId || "");
   const [sheetDebug, setSheetDebug] = useState(null);
+  const [packagingType, setPackagingType] = useState("Sheet Pack");
 
   const handleFileChange = (e) => {
     const f = e.target.files?.[0];
@@ -373,6 +374,7 @@ export default function SmartExcelImport({ pos = [], selectedPoId, onSaved, onCl
             file_url:       null,
             version:        1,
             status:         "Draft",
+            packaging_type: packagingType,
             po_id:          localPoId || null,
             po_number:      pos.find(p => p.id === localPoId)?.po_number ?? null,
             extracted_data: {
@@ -766,6 +768,30 @@ export default function SmartExcelImport({ pos = [], selectedPoId, onSaved, onCl
         </select>
       </div>
 
+      {/* Packaging Type slider */}
+      <div>
+        <label className="text-xs font-medium text-gray-600 block mb-1">Packaging Type</label>
+        <div className="flex rounded-lg overflow-hidden border border-gray-300">
+          {["Sheet Pack", "Roll Pack", "Box Pack"].map(pt => (
+            <button
+              key={pt}
+              type="button"
+              onClick={() => setPackagingType(pt)}
+              className={`flex-1 py-2 text-xs font-semibold transition-colors ${
+                packagingType === pt
+                  ? pt === "Sheet Pack" ? "bg-blue-700 text-white"
+                    : pt === "Roll Pack" ? "bg-green-700 text-white"
+                    : "bg-orange-700 text-white"
+                  : "bg-white text-gray-500 hover:bg-gray-50"
+              }`}
+            >
+              {pt}
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] text-gray-400 mt-0.5">Applied to all SKUs in this import</p>
+      </div>
+
       {/* Parse button */}
       {!preview && (
         <Button onClick={handleParse} disabled={!file || parsing} className="w-full gap-2">
@@ -845,6 +871,7 @@ export default function SmartExcelImport({ pos = [], selectedPoId, onSaved, onCl
                   <div className="flex-1 min-w-0">
                     <span className="text-xs font-semibold text-gray-800">{rec.article_code}</span>
                     <span className="text-xs text-gray-500 ml-2">{rec.size_label} · {rec.color}</span>
+                    <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-200">{rec.packaging_type || packagingType}</span>
                   </div>
                   <div className="flex items-center gap-3 text-[10px] text-gray-400 flex-shrink-0">
                     <span className={rec.extracted_data.fabric_components.length > 0 ? "text-green-600" : "text-red-400"}>
