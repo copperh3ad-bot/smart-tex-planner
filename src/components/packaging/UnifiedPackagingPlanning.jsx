@@ -3,8 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Save, Plus, Trash2, Upload, Download, Printer } from "lucide-react";
-import { jsPDF } from "jspdf";
+import { Save, Plus, Trash2, AlertTriangle, CheckCircle2, Lock } from "lucide-react";
 
 // ─── Tab configuration ─────────────────────────────────────────────────────
 const TAB_CONFIG = {
@@ -89,9 +88,6 @@ const TAB_CONFIG = {
 };
 
 // ─── Pack type → allowed tabs ──────────────────────────────────────────────
-// Sheet Pack: everything (has Stiffener + Insert Card)
-// Roll Pack: no Insert Card, no Stiffener (has Bellyband)
-// Box Pack: no Insert Card, no Stiffener, no Bellyband (box = its own carton)
 const PACK_TABS = {
   "Sheet Pack": ["Labels", "Insert Card", "Polybag", "Stiffener", "Carton", "Sticker", "Bellyband (BB)"],
   "Roll Pack":  ["Labels", "Polybag", "Carton", "Sticker", "Bellyband (BB)"],
@@ -99,9 +95,9 @@ const PACK_TABS = {
 };
 
 const PACK_COLORS = {
-  "Sheet Pack": { bg: "#1F3864", light: "#EBF0FA", badge: "bg-blue-700 text-white", border: "border-blue-700" },
-  "Roll Pack":  { bg: "#166534", light: "#DCFCE7", badge: "bg-green-700 text-white", border: "border-green-700" },
-  "Box Pack":   { bg: "#7C2D12", light: "#FEF3C7", badge: "bg-orange-700 text-white", border: "border-orange-700" },
+  "Sheet Pack": { bg: "#1F3864", light: "#EBF0FA" },
+  "Roll Pack":  { bg: "#166534", light: "#DCFCE7" },
+  "Box Pack":   { bg: "#7C2D12", light: "#FEF3C7" },
 };
 
 const PACK_DESCRIPTIONS = {
@@ -276,13 +272,13 @@ function ArticleBlock({ art, cfg, rows, onChange, cartonSize, templates = [], pa
   );
 }
 
-// ─── Totals Summary ────────────────────────────────────────────────────────
-function TotalsSummary({ subTab, allRows, poArticles, packColor }) {
+// ─── Totals Summary (only for ACTIVE pack type) ───────────────────────────
+function TotalsSummary({ subTab, tabRows, poArticles, packColor }) {
   const cfg = TAB_CONFIG[subTab];
   const typeTotals = {};
   poArticles.forEach(art => {
     const qty = art.order_quantity || 0;
-    const artRows = allRows[subTab]?.[art.id] || [];
+    const artRows = tabRows?.[art.id] || [];
     artRows.forEach(row => {
       if (cfg.isBellyband) {
         const withBB = (row.bbOption || "With") !== "Without";
@@ -345,45 +341,63 @@ export default function UnifiedPackagingPlanning() {
   const queryClient = useQueryClient();
   const { data: allTemplates = [] } = useQuery({ queryKey: ["accessoryTemplates"], queryFn: () => base44.entities.AccessoryTemplate.list("-created_date", 500) });
   const [selectedPoId, setSelectedPoId] = useState("");
-  const [packingType, setPackingType] = useState("Sheet Pack");
-  const [autoDetectedType, setAutoDetectedType] = useState(null);
   const [subTab, setSubTab] = useState("Labels");
   const [saving, setSaving] = useState(false);
-  const fileInputRef = useRef(null);
   const initKeyRef = useRef(null);
 
-  // allRows: { [packType]: { [tab]: { [artId]: rows[] } } }
-  const [allRows, setAllRows] = useState({ "Sheet Pack": {}, "Roll Pack": {}, "Box Pack": {} });
+  // activePackType is derived ONLY from Approved TechPackRecord for the selected PO.
+  // allRows: { [tab]: { [artId]: rows[] } } — ONLY for the active pack type
+  const [activePackType, setActivePackType] = useState("Sheet Pack");
+  const [activePackSource, setActivePackSource] = useState(null); // "techpack" | "manual" | null
+  const [allRows, setAllRows] = useState({});
 
   const { data: pos = [] } = useQuery({ queryKey: ["purchaseOrders"], queryFn: () => base44.entities.PurchaseOrder.list() });
   const { data: articles = [] } = useQuery({ queryKey: ["articles"], queryFn: () => base44.entities.Article.list() });
   const { data: existingItems = [] } = useQuery({ queryKey: ["accessoryItems"], queryFn: () => base44.entities.AccessoryItem.list("-created_date", 500) });
   const { data: poItems = [] } = useQuery({ queryKey: ["poItems"], queryFn: () => base44.entities.POItem.list("-created_date", 500) });
-  const { data: techPackRecords = [] } = useQuery({ queryKey: ["techPackRecords"], queryFn: () => base44.entities.TechPackRecord.list("-created_date", 500) });
+  const { data: techPackRecords = [] } = useQuery({
+    queryKey: ["techPackRecords"],
+    queryFn: () => base44.entities.TechPackRecord.list("-created_date", 500)
+  });
 
   const activePo = selectedPoId ? pos.find(p => p.id === selectedPoId) : pos[0];
   const poArticles = activePo ? articles.filter(a => a.po_id === activePo.id) : [];
 
-  // Auto-detect packing type from TechPackRecord when PO changes
+  // Determine active pack type: ONLY from Approved TechPackRecords for this PO
   useEffect(() => {
     if (!activePo) return;
-    const poTechPacks = techPackRecords.filter(r => r.po_id === activePo.id);
-    if (poTechPacks.length > 0) {
-      // Use the most common packaging_type among tech packs for this PO
+    // Only use APPROVED tech packs as data source
+    const approvedTPs = techPackRecords.filter(
+      r => r.po_id === activePo.id && r.approval_status === "Approved"
+    );
+    if (approvedTPs.length > 0) {
       const typeCounts = {};
-      poTechPacks.forEach(r => {
+      approvedTPs.forEach(r => {
         if (r.packaging_type) typeCounts[r.packaging_type] = (typeCounts[r.packaging_type] || 0) + 1;
       });
       const dominant = Object.entries(typeCounts).sort((a, b) => b[1] - a[1])[0];
       if (dominant && PACK_TABS[dominant[0]]) {
-        setPackingType(dominant[0]);
-        setAutoDetectedType(dominant[0]);
+        setActivePackType(dominant[0]);
+        setActivePackSource("techpack");
         return;
       }
     }
-    setAutoDetectedType(null);
+    // Fallback: check if any saved AccessoryItems exist and infer from them
+    const savedItems = existingItems.filter(i => i.po_id === activePo.id && i.packing_type);
+    if (savedItems.length > 0) {
+      const typeCounts = {};
+      savedItems.forEach(i => { if (i.packing_type) typeCounts[i.packing_type] = (typeCounts[i.packing_type] || 0) + 1; });
+      const dominant = Object.entries(typeCounts).sort((a, b) => b[1] - a[1])[0];
+      if (dominant && PACK_TABS[dominant[0]]) {
+        setActivePackType(dominant[0]);
+        setActivePackSource("manual");
+        return;
+      }
+    }
+    // No source found — default, allow manual selection
+    setActivePackSource(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePo?.id, techPackRecords.length]);
+  }, [activePo?.id, techPackRecords.length, existingItems.length]);
 
   const cartonSizeMap = {};
   if (activePo) {
@@ -393,91 +407,98 @@ export default function UnifiedPackagingPlanning() {
       }
     });
   }
-
   const getCartonSize = (art) => art.article_code ? (cartonSizeMap[art.article_code.trim().toUpperCase()] || "") : "";
 
   const poArticleIds = poArticles.map(a => a.id).sort().join(',');
   const itemIds = existingItems.map(i => i.id).sort().join(',');
 
+  // Load ONLY items matching the active pack type — no cross-contamination
   useEffect(() => {
     if (!activePo || poArticles.length === 0) return;
-    const key = `${activePo.id}|${poArticleIds}|${itemIds}`;
+    const key = `${activePo.id}|${activePackType}|${poArticleIds}|${itemIds}`;
     if (initKeyRef.current === key) return;
     initKeyRef.current = key;
 
-    const init = { "Sheet Pack": {}, "Roll Pack": {}, "Box Pack": {} };
+    const tabs = PACK_TABS[activePackType];
+    const init = {};
+    tabs.forEach(tab => {
+      const cfg = TAB_CONFIG[tab];
+      init[tab] = {};
+      poArticles.forEach(art => {
+        // Strictly filter: only items for this PO + article + ACTIVE pack type + category
+        const poExisting = existingItems.filter(i =>
+          i.po_id === activePo.id &&
+          i.article_code === art.article_code &&
+          i.packing_type === activePackType &&          // ← strict: exact pack type only
+          i.category === cfg.category &&
+          (cfg.isBellyband ? i.item_description === "Bellyband" : i.item_description !== "Bellyband")
+        );
 
-    Object.keys(PACK_TABS).forEach(pt => {
-      PACK_TABS[pt].forEach(tab => {
-        const cfg = TAB_CONFIG[tab];
-        init[pt][tab] = {};
-        poArticles.forEach(art => {
-          // Filter existing items for this pack type + article + tab
-          const poExisting = existingItems.filter(i =>
-            i.po_id === activePo.id &&
-            i.article_code === art.article_code &&
-            (i.packing_type === pt || (!i.packing_type && pt === "Sheet Pack")) &&
-            i.category === cfg.category &&
-            (cfg.isBellyband ? i.item_description === "Bellyband" : i.item_description !== "Bellyband")
-          );
-
-          if (poExisting.length > 0) {
-            init[pt][tab][art.id] = poExisting.map(e => ({
-              type: cfg.isBellyband ? cfg.typeOptions[0] : (cfg.category === "Insert Card" ? (e.size_spec || "") : e.item_description),
-              quality: cfg.category === "Insert Card" ? (e.item_description || "") : (cfg.splitDescSize ? "" : (e.size_spec || "")),
-              description: cfg.splitDescSize ? (e.size_spec || "") : "",
-              size: cfg.splitDescSize ? (e.color || "") : "",
-              wastage_percent: e.wastage_percent ?? cfg.defaultWastage,
-              multiplier: e.multiplier ?? 1,
-              pc_ean_code: e.pc_ean_code || "",
-              carton_ean_code: e.carton_ean_code || "",
-              existing_id: e.id,
-              bbOption: cfg.isBellyband ? ((e.quantity_required === 0) ? "Without" : "With") : "With",
-            }));
-          } else {
-            const row = defaultRow(cfg);
-            if (cfg.autoFillSize) row.size = getCartonSize(art);
-            init[pt][tab][art.id] = [row];
-          }
-        });
+        if (poExisting.length > 0) {
+          init[tab][art.id] = poExisting.map(e => ({
+            type: cfg.isBellyband ? cfg.typeOptions[0] : (cfg.category === "Insert Card" ? (e.size_spec || "") : e.item_description),
+            quality: cfg.category === "Insert Card" ? (e.item_description || "") : (cfg.splitDescSize ? "" : (e.size_spec || "")),
+            description: cfg.splitDescSize ? (e.size_spec || "") : "",
+            size: cfg.splitDescSize ? (e.color || "") : "",
+            wastage_percent: e.wastage_percent ?? cfg.defaultWastage,
+            multiplier: e.multiplier ?? 1,
+            pc_ean_code: e.pc_ean_code || "",
+            carton_ean_code: e.carton_ean_code || "",
+            existing_id: e.id,
+            bbOption: cfg.isBellyband ? ((e.quantity_required === 0) ? "Without" : "With") : "With",
+          }));
+        } else {
+          const row = defaultRow(cfg);
+          if (cfg.autoFillSize) row.size = getCartonSize(art);
+          init[tab][art.id] = [row];
+        }
       });
     });
 
     setAllRows(init);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePo?.id, poArticleIds, itemIds]);
+  }, [activePo?.id, activePackType, poArticleIds, itemIds]);
 
-  // Keep subTab valid when packingType changes
+  // Keep subTab valid when activePackType changes
   useEffect(() => {
-    if (!PACK_TABS[packingType].includes(subTab)) {
-      setSubTab(PACK_TABS[packingType][0]);
+    if (!PACK_TABS[activePackType].includes(subTab)) {
+      setSubTab(PACK_TABS[activePackType][0]);
     }
-  }, [packingType, subTab]);
+  }, [activePackType, subTab]);
 
   const handleChange = (artId, newRows) => {
     setAllRows(prev => ({
       ...prev,
-      [packingType]: {
-        ...prev[packingType],
-        [subTab]: { ...prev[packingType][subTab], [artId]: newRows }
-      }
+      [subTab]: { ...prev[subTab], [artId]: newRows }
     }));
   };
 
-  const buildOpsForPackType = (pt) => {
+  // Save ONLY active pack type — never write to other pack types
+  const buildActiveOps = () => {
     const ops = [];
-    PACK_TABS[pt].forEach(tab => {
+    const tabs = PACK_TABS[activePackType];
+    tabs.forEach(tab => {
       const cfg = TAB_CONFIG[tab];
       for (const art of poArticles) {
         const qty = art.order_quantity || 0;
-        const rows = allRows[pt]?.[tab]?.[art.id] || [];
+        const rows = allRows[tab]?.[art.id] || [];
 
         if (cfg.isBellyband) {
           for (const row of rows) {
             if (!row.type && !row.description) continue;
             const withBB = (row.bbOption || "With") !== "Without";
             const bbQty = withBB ? calcInclWastage(qty, row.wastage_percent) : 0;
-            const data = { po_id: activePo.id, po_number: activePo.po_number, article_name: art.article_name, article_code: art.article_code, packing_type: pt, category: "Polybag", item_description: "Bellyband", size_spec: row.description || "", color: row.size || "", quantity_required: bbQty, wastage_percent: parseFloat(row.wastage_percent) || 0, multiplier: 1, unit: "Pcs", status: "Planned", notes: `BB: ${withBB ? "With" : "Without"}` };
+            const data = {
+              po_id: activePo.id, po_number: activePo.po_number,
+              article_name: art.article_name, article_code: art.article_code,
+              packing_type: activePackType,         // ← always stamp active pack type
+              category: "Polybag", item_description: "Bellyband",
+              size_spec: row.description || "", color: row.size || "",
+              quantity_required: bbQty,
+              wastage_percent: parseFloat(row.wastage_percent) || 0,
+              multiplier: 1, unit: "Pcs", status: "Planned",
+              notes: `BB: ${withBB ? "With" : "Without"}`
+            };
             if (row.existing_id) ops.push(base44.entities.AccessoryItem.update(row.existing_id, data));
             else ops.push(base44.entities.AccessoryItem.create(data));
           }
@@ -490,7 +511,7 @@ export default function UnifiedPackagingPlanning() {
           const data = {
             po_id: activePo.id, po_number: activePo.po_number,
             article_name: art.article_name, article_code: art.article_code,
-            packing_type: pt,
+            packing_type: activePackType,           // ← always stamp active pack type
             category: cfg.category,
             item_description: cfg.category === "Insert Card" ? (row.quality || "") : row.type,
             size_spec: cfg.category === "Insert Card" ? (row.type || "") : (cfg.splitDescSize ? (row.description || "") : (row.quality || "")),
@@ -522,7 +543,7 @@ export default function UnifiedPackagingPlanning() {
   const handleSaveAll = async () => {
     if (!activePo) return;
     setSaving(true);
-    const ops = buildOpsForPackType(packingType);
+    const ops = buildActiveOps();
     if (ops.length > 0) await runOps(ops);
     setSaving(false);
   };
@@ -534,13 +555,21 @@ export default function UnifiedPackagingPlanning() {
     const ops = [];
     for (const art of poArticles) {
       const qty = art.order_quantity || 0;
-      const rows = allRows[packingType]?.[subTab]?.[art.id] || [];
+      const rows = allRows[subTab]?.[art.id] || [];
       if (cfg.isBellyband) {
         for (const row of rows) {
           if (!row.type && !row.description) continue;
           const withBB = (row.bbOption || "With") !== "Without";
           const bbQty = withBB ? calcInclWastage(qty, row.wastage_percent) : 0;
-          const data = { po_id: activePo.id, po_number: activePo.po_number, article_name: art.article_name, article_code: art.article_code, packing_type: packingType, category: "Polybag", item_description: "Bellyband", size_spec: row.description || "", color: row.size || "", quantity_required: bbQty, wastage_percent: parseFloat(row.wastage_percent) || 0, multiplier: 1, unit: "Pcs", status: "Planned" };
+          const data = {
+            po_id: activePo.id, po_number: activePo.po_number,
+            article_name: art.article_name, article_code: art.article_code,
+            packing_type: activePackType, category: "Polybag",
+            item_description: "Bellyband", size_spec: row.description || "",
+            color: row.size || "", quantity_required: bbQty,
+            wastage_percent: parseFloat(row.wastage_percent) || 0,
+            multiplier: 1, unit: "Pcs", status: "Planned"
+          };
           if (row.existing_id) ops.push(base44.entities.AccessoryItem.update(row.existing_id, data));
           else ops.push(base44.entities.AccessoryItem.create(data));
         }
@@ -548,7 +577,20 @@ export default function UnifiedPackagingPlanning() {
         for (const row of rows) {
           const hasContent = cfg.splitDescSize ? (row.description || row.size) : (row.type || row.quality);
           if (!hasContent) continue;
-          const data = { po_id: activePo.id, po_number: activePo.po_number, article_name: art.article_name, article_code: art.article_code, packing_type: packingType, category: cfg.category, item_description: cfg.category === "Insert Card" ? (row.quality || "") : row.type, size_spec: cfg.category === "Insert Card" ? (row.type || "") : (cfg.splitDescSize ? (row.description || "") : (row.quality || "")), color: cfg.splitDescSize ? (row.size || "") : "", quantity_required: calcInclWastageWithMultiplier(qty, row.wastage_percent, row.multiplier || 1), wastage_percent: parseFloat(row.wastage_percent) || 0, multiplier: parseFloat(row.multiplier) || 1, pc_ean_code: row.pc_ean_code || "", carton_ean_code: row.carton_ean_code || "", unit: "Pcs", status: "Planned" };
+          const data = {
+            po_id: activePo.id, po_number: activePo.po_number,
+            article_name: art.article_name, article_code: art.article_code,
+            packing_type: activePackType, category: cfg.category,
+            item_description: cfg.category === "Insert Card" ? (row.quality || "") : row.type,
+            size_spec: cfg.category === "Insert Card" ? (row.type || "") : (cfg.splitDescSize ? (row.description || "") : (row.quality || "")),
+            color: cfg.splitDescSize ? (row.size || "") : "",
+            quantity_required: calcInclWastageWithMultiplier(qty, row.wastage_percent, row.multiplier || 1),
+            wastage_percent: parseFloat(row.wastage_percent) || 0,
+            multiplier: parseFloat(row.multiplier) || 1,
+            pc_ean_code: row.pc_ean_code || "",
+            carton_ean_code: row.carton_ean_code || "",
+            unit: "Pcs", status: "Planned"
+          };
           if (row.existing_id) ops.push(base44.entities.AccessoryItem.update(row.existing_id, data));
           else ops.push(base44.entities.AccessoryItem.create(data));
         }
@@ -558,8 +600,8 @@ export default function UnifiedPackagingPlanning() {
     setSaving(false);
   };
 
-  const packColor = PACK_COLORS[packingType];
-  const visibleTabs = PACK_TABS[packingType];
+  const packColor = PACK_COLORS[activePackType];
+  const visibleTabs = PACK_TABS[activePackType];
 
   return (
     <div className="space-y-4">
@@ -569,59 +611,72 @@ export default function UnifiedPackagingPlanning() {
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <h2 className="font-bold text-base">Accessories & Packaging</h2>
-              <p className="text-xs opacity-75 mt-0.5">{PACK_DESCRIPTIONS[packingType]}</p>
+              <p className="text-xs opacity-75 mt-0.5">{PACK_DESCRIPTIONS[activePackType]}</p>
             </div>
-            {/* Pack Type Selector */}
-            <div className="flex rounded overflow-hidden border border-white/30">
-              {Object.keys(PACK_TABS).map(pt => (
-                <button key={pt} onClick={() => setPackingType(pt)}
-                  className={`px-3 py-1.5 text-xs font-semibold transition-all ${packingType === pt ? "bg-white text-gray-900" : "bg-transparent text-white hover:bg-white/20"}`}>
-                  {pt}
-                </button>
-              ))}
+            {/* Pack Type Display — shows active type, allows manual override only if no approved TP */}
+            <div className="flex items-center gap-2">
+              {activePackSource === "techpack" ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex rounded overflow-hidden border border-white/30">
+                    {Object.keys(PACK_TABS).map(pt => (
+                      <div key={pt} className={`px-3 py-1.5 text-xs font-semibold flex items-center gap-1 ${activePackType === pt ? "bg-white text-gray-900" : "bg-white/10 text-white/50 cursor-not-allowed"}`}>
+                        {activePackType === pt ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <Lock className="h-3 w-3" />}
+                        {pt}
+                      </div>
+                    ))}
+                  </div>
+                  <span className="text-xs bg-green-500/20 border border-green-400/40 text-white rounded px-2 py-0.5">
+                    ✓ From Approved Tech Pack
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <div className="flex rounded overflow-hidden border border-white/30">
+                    {Object.keys(PACK_TABS).map(pt => (
+                      <button key={pt} onClick={() => { setActivePackType(pt); setActivePackSource("manual"); initKeyRef.current = null; }}
+                        className={`px-3 py-1.5 text-xs font-semibold transition-all ${activePackType === pt ? "bg-white text-gray-900" : "bg-transparent text-white hover:bg-white/20"}`}>
+                        {pt}
+                      </button>
+                    ))}
+                  </div>
+                  {activePackSource === null && (
+                    <span className="text-xs bg-amber-500/30 border border-amber-400/40 text-white rounded px-2 py-0.5 flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" /> No Approved Tech Pack — select type manually
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
 
         {/* PO Selector + Actions */}
         <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center gap-2 flex-wrap">
-          <Select value={selectedPoId || activePo?.id || ""} onValueChange={v => { setSelectedPoId(v); setAutoDetectedType(null); }}>
+          <Select value={selectedPoId || activePo?.id || ""} onValueChange={v => { setSelectedPoId(v); initKeyRef.current = null; }}>
             <SelectTrigger className="w-72 h-8 text-xs"><SelectValue placeholder="Select Purchase Order" /></SelectTrigger>
             <SelectContent>{pos.map(p => <SelectItem key={p.id} value={p.id}>{p.po_number} – {p.customer_name}</SelectItem>)}</SelectContent>
           </Select>
-          {autoDetectedType && (
-            <span className="text-xs px-2 py-0.5 rounded-full font-semibold border" style={{ backgroundColor: packColor.light, color: packColor.bg, borderColor: packColor.bg }}>
-              ✓ Auto-detected: {autoDetectedType}
-            </span>
-          )}
           <Button size="sm" onClick={handleSaveAll} disabled={saving || !activePo} className="gap-1.5 ml-auto" style={{ backgroundColor: packColor.bg }}>
-            <Save className="h-3.5 w-3.5" /> {saving ? "Saving..." : `Save All ${packingType}`}
+            <Save className="h-3.5 w-3.5" /> {saving ? "Saving..." : `Save All (${activePackType})`}
           </Button>
         </div>
 
-        {/* Pack Type Info Badges */}
+        {/* Active Pack Type Info */}
         <div className="px-4 py-2 bg-white border-b border-gray-200 flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-gray-500 font-medium">Includes:</span>
+          <span className="text-xs text-gray-500 font-medium">Active Pack Type:</span>
+          <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ backgroundColor: packColor.light, color: packColor.bg }}>
+            {activePackType}
+          </span>
+          <span className="text-xs text-gray-400 mx-1">·</span>
+          <span className="text-xs text-gray-500">Tabs for this type:</span>
           {visibleTabs.map(t => (
             <span key={t} className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: packColor.light, color: packColor.bg }}>
               {t}
             </span>
           ))}
-          {packingType === "Sheet Pack" && (
-            <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-semibold border border-blue-200">
-              ✓ Stiffener + Inlay Card
-            </span>
-          )}
-          {packingType === "Roll Pack" && (
-            <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-800 font-semibold border border-green-200">
-              ✗ No Stiffener / Inlay Card
-            </span>
-          )}
-          {packingType === "Box Pack" && (
-            <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 font-semibold border border-orange-200">
-              ✗ No Stiffener / Inlay Card / Bellyband
-            </span>
-          )}
+          <span className="ml-auto text-xs text-red-500 font-medium flex items-center gap-1">
+            <Lock className="h-3 w-3" /> Inactive pack types are locked — no data written
+          </span>
         </div>
       </div>
 
@@ -649,10 +704,10 @@ export default function UnifiedPackagingPlanning() {
         <div className="space-y-3">
           {poArticles.map(art => (
             <ArticleBlock
-              key={`${packingType}|${subTab}|${art.id}`}
+              key={`${activePackType}|${subTab}|${art.id}`}
               art={art}
               cfg={TAB_CONFIG[subTab]}
-              rows={allRows[packingType]?.[subTab] || {}}
+              rows={allRows[subTab] || {}}
               onChange={handleChange}
               cartonSize={getCartonSize(art)}
               templates={allTemplates.filter(t => t.category === TAB_CONFIG[subTab].category)}
@@ -661,7 +716,7 @@ export default function UnifiedPackagingPlanning() {
           ))}
           <TotalsSummary
             subTab={subTab}
-            allRows={allRows[packingType] || {}}
+            tabRows={allRows[subTab] || {}}
             poArticles={poArticles}
             packColor={packColor}
           />

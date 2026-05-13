@@ -3,18 +3,13 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Save, Plus, Trash2, Download, Printer, Info } from "lucide-react";
-import { jsPDF } from "jspdf";
+import { Save, Plus, Trash2, Download, Printer, Info, CheckCircle2, AlertTriangle, Zap } from "lucide-react";
 
-// ─── Calculation engine ────────────────────────────────────────────────────────
-// Each calc_type has its own formula. Easy to extend by adding a new key.
+// ─── Calculation engine ────────────────────────────────────────────────────
 const CALC_TYPES = {
   "Per Piece": {
-    label: "Per Piece",
-    desc: "consumption × order_qty",
-    consumpLabel: "Pcs per Piece",
-    consumpPlaceholder: "e.g. 1, 2",
-    unit: "Pcs",
+    label: "Per Piece", desc: "consumption × order_qty",
+    consumpLabel: "Pcs per Piece", consumpPlaceholder: "e.g. 1, 2", unit: "Pcs",
     calc: (row, art) => {
       const qty = art.order_quantity || 0;
       const c = parseFloat(row.consumption_per_unit) || 1;
@@ -24,11 +19,8 @@ const CALC_TYPES = {
     qtyLabel: (art) => `Order Qty: ${(art.order_quantity || 0).toLocaleString()} pcs`,
   },
   "Per Meter": {
-    label: "Per Meter",
-    desc: "consumption × fabric_meters",
-    consumpLabel: "Units per Meter",
-    consumpPlaceholder: "e.g. 0.5, 1.2",
-    unit: "Meters",
+    label: "Per Meter", desc: "consumption × fabric_meters",
+    consumpLabel: "Units per Meter", consumpPlaceholder: "e.g. 0.5, 1.2", unit: "Meters",
     calc: (row, art) => {
       const meters = parseFloat(row.fabric_meters) || 0;
       const c = parseFloat(row.consumption_per_unit) || 1;
@@ -39,11 +31,8 @@ const CALC_TYPES = {
     needsFabricMeters: true,
   },
   "Per Set": {
-    label: "Per Set",
-    desc: "sets_per_piece × order_qty",
-    consumpLabel: "Sets per Piece",
-    consumpPlaceholder: "e.g. 1, 2",
-    unit: "Sets",
+    label: "Per Set", desc: "sets_per_piece × order_qty",
+    consumpLabel: "Sets per Piece", consumpPlaceholder: "e.g. 1, 2", unit: "Sets",
     calc: (row, art) => {
       const qty = art.order_quantity || 0;
       const c = parseFloat(row.consumption_per_unit) || 1;
@@ -53,11 +42,8 @@ const CALC_TYPES = {
     qtyLabel: (art) => `Order Qty: ${(art.order_quantity || 0).toLocaleString()} pcs`,
   },
   "Percentage": {
-    label: "Percentage",
-    desc: "% of order_qty",
-    consumpLabel: "% of Order Qty",
-    consumpPlaceholder: "e.g. 5, 10",
-    unit: "Pcs",
+    label: "Percentage", desc: "% of order_qty",
+    consumpLabel: "% of Order Qty", consumpPlaceholder: "e.g. 5, 10", unit: "Pcs",
     calc: (row, art) => {
       const qty = art.order_quantity || 0;
       const pct = parseFloat(row.consumption_per_unit) || 0;
@@ -76,11 +62,10 @@ const TRIM_CATEGORIES = [
 ];
 
 const UNITS = ["Pcs", "Meters", "Kgs", "Rolls", "Dozens", "Gross", "Sets", "Pairs"];
-
 const inputCls = "w-full text-xs border border-gray-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400";
 const numInputCls = "w-16 text-center text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400";
 
-const defaultRow = () => ({
+const defaultRow = (overrides = {}) => ({
   trim_category: "Zipper",
   item_description: "",
   color: "",
@@ -91,26 +76,46 @@ const defaultRow = () => ({
   wastage_percent: 5,
   unit: "Pcs",
   existing_id: null,
+  source: "manual",    // "techpack" | "master" | "manual"
+  approved: false,
+  ...overrides,
 });
 
-// ─── Article Block ─────────────────────────────────────────────────────────────
-function ArticleBlock({ art, rows, onChange }) {
+// ─── Article Block ──────────────────────────────────────────────────────────
+function ArticleBlock({ art, rows, onChange, missingFromMaster }) {
   const artRows = rows[art.id] || [defaultRow()];
 
   const add = () => onChange(art.id, [...artRows, defaultRow()]);
   const remove = (idx) => onChange(art.id, artRows.filter((_, i) => i !== idx));
   const update = (idx, field, val) =>
     onChange(art.id, artRows.map((r, i) => i === idx ? { ...r, [field]: val } : r));
+  const approve = (idx) =>
+    onChange(art.id, artRows.map((r, i) => i === idx ? { ...r, approved: true } : r));
+
+  const pendingCount = artRows.filter(r => r.source === "techpack" && !r.approved).length;
 
   return (
     <div className="rounded border border-gray-300 shadow-sm overflow-hidden">
-      <div className="px-3 py-2 text-xs font-bold text-white flex justify-between items-center" style={{ backgroundColor: "#1F3864" }}>
+      <div className="px-3 py-2 text-xs font-bold text-white flex justify-between items-center flex-wrap gap-2" style={{ backgroundColor: "#1F3864" }}>
         <span>{art.article_name}{art.article_code ? ` (${art.article_code})` : ""}</span>
-        <span className="font-normal opacity-80">Order Qty: {(art.order_quantity || 0).toLocaleString()}</span>
+        <div className="flex items-center gap-2">
+          {pendingCount > 0 && (
+            <span className="bg-amber-400 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-full">
+              {pendingCount} pending approval
+            </span>
+          )}
+          {missingFromMaster > 0 && (
+            <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+              {missingFromMaster} missing vs Master
+            </span>
+          )}
+          <span className="font-normal opacity-80">Order Qty: {(art.order_quantity || 0).toLocaleString()}</span>
+        </div>
       </div>
       <table className="w-full text-xs border-collapse">
         <thead>
           <tr style={{ backgroundColor: "#EBF0FA" }}>
+            <th className="border border-gray-300 px-2 py-1.5 text-center w-6" title="Source">Src</th>
             <th className="border border-gray-300 px-2 py-1.5 text-left w-36">Category</th>
             <th className="border border-gray-300 px-2 py-1.5 text-left">Description / Spec</th>
             <th className="border border-gray-300 px-2 py-1.5 text-left w-24">Color</th>
@@ -121,15 +126,39 @@ function ArticleBlock({ art, rows, onChange }) {
             <th className="border border-gray-300 px-2 py-1.5 text-center w-20">Wastage %</th>
             <th className="border border-gray-300 px-2 py-1.5 text-center w-20">Unit</th>
             <th className="border border-gray-300 px-2 py-1.5 text-center w-32" style={{ backgroundColor: "#FFF2CC" }}>Qty Required</th>
-            <th className="border border-gray-300 px-2 py-1.5 w-8"></th>
+            <th className="border border-gray-300 px-2 py-1.5 text-center w-20">Action</th>
           </tr>
         </thead>
         <tbody>
           {artRows.map((row, idx) => {
             const calcDef = CALC_TYPES[row.calc_type] || CALC_TYPES["Per Piece"];
             const calcQty = calcDef.calc(row, art);
+            const isFromTP = row.source === "techpack";
+            const isMissing = row.source === "missing";
+            const rowBg = isMissing
+              ? "#FFF1F0"
+              : isFromTP && !row.approved
+                ? "#FFFBEB"
+                : idx % 2 === 0 ? "#fff" : "#F9FAFB";
             return (
-              <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#F9FAFB" }}>
+              <tr key={idx} style={{ backgroundColor: rowBg }}>
+                <td className="border border-gray-300 px-1 py-1 text-center">
+                  {row.source === "techpack" && !row.approved && (
+                    <span title="From Tech Pack — pending approval" className="inline-block w-3 h-3 rounded-full bg-amber-400" />
+                  )}
+                  {(row.source === "techpack" && row.approved) && (
+                    <CheckCircle2 className="h-3 w-3 text-green-600 inline" title="Approved" />
+                  )}
+                  {row.source === "master" && (
+                    <span title="From Master Data" className="inline-block w-3 h-3 rounded-full bg-blue-400" />
+                  )}
+                  {row.source === "missing" && (
+                    <AlertTriangle className="h-3 w-3 text-red-500 inline" title="Missing — not in Tech Pack but in Master Data" />
+                  )}
+                  {row.source === "manual" && (
+                    <span title="Manual entry" className="inline-block w-3 h-3 rounded-full bg-gray-300" />
+                  )}
+                </td>
                 <td className="border border-gray-300 px-1.5 py-1">
                   <select className={inputCls} value={row.trim_category}
                     onChange={e => update(idx, "trim_category", e.target.value)}>
@@ -137,7 +166,8 @@ function ArticleBlock({ art, rows, onChange }) {
                   </select>
                 </td>
                 <td className="border border-gray-300 px-1.5 py-1">
-                  <input className={inputCls} placeholder="e.g. 5mm nylon zipper, white"
+                  <input className={`${inputCls} ${isMissing ? "border-red-400 bg-red-50" : ""}`}
+                    placeholder="e.g. 5mm nylon zipper, white"
                     value={row.item_description}
                     onChange={e => update(idx, "item_description", e.target.value)} />
                 </td>
@@ -186,11 +216,19 @@ function ArticleBlock({ art, rows, onChange }) {
                   {calcQty.toLocaleString()}
                 </td>
                 <td className="border border-gray-300 px-1.5 py-1 text-center">
-                  {artRows.length > 1 && (
-                    <button onClick={() => remove(idx)} className="text-red-400 hover:text-red-600">
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  )}
+                  <div className="flex items-center justify-center gap-1">
+                    {isFromTP && !row.approved && (
+                      <button onClick={() => approve(idx)} title="Approve this trim"
+                        className="text-green-600 hover:text-green-800 text-[10px] border border-green-400 rounded px-1 py-0.5 hover:bg-green-50">
+                        ✓
+                      </button>
+                    )}
+                    {artRows.length > 1 && (
+                      <button onClick={() => remove(idx)} className="text-red-400 hover:text-red-600">
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             );
@@ -206,36 +244,50 @@ function ArticleBlock({ art, rows, onChange }) {
   );
 }
 
-// ─── Main Page ─────────────────────────────────────────────────────────────────
+// ─── Main Page ──────────────────────────────────────────────────────────────
 export default function Trims() {
   const queryClient = useQueryClient();
   const [selectedPoId, setSelectedPoId] = useState("");
   const [saving, setSaving] = useState(false);
   const [allRows, setAllRows] = useState({});
+  const [autoPopulated, setAutoPopulated] = useState(false);
   const initKeyRef = useRef(null);
 
   const { data: pos = [] } = useQuery({ queryKey: ["purchaseOrders"], queryFn: () => base44.entities.PurchaseOrder.list() });
   const { data: articles = [] } = useQuery({ queryKey: ["articles"], queryFn: () => base44.entities.Article.list() });
   const { data: existingTrims = [] } = useQuery({ queryKey: ["trimItems"], queryFn: () => base44.entities.TrimItem.list("-created_date", 500) });
+  const { data: fabricTemplates = [] } = useQuery({ queryKey: ["fabricTemplates"], queryFn: () => base44.entities.FabricTemplate.list() });
+  const { data: techPackRecords = [] } = useQuery({ queryKey: ["techPackRecords"], queryFn: () => base44.entities.TechPackRecord.list("-created_date", 500) });
 
   const activePo = selectedPoId ? pos.find(p => p.id === selectedPoId) : pos[0];
   const poArticles = activePo ? articles.filter(a => a.po_id === activePo.id) : [];
 
   const poArticleIds = poArticles.map(a => a.id).sort().join(",");
   const trimIds = existingTrims.map(t => t.id).sort().join(",");
+  const tpIds = techPackRecords.map(t => t.id).sort().join(",");
 
   useEffect(() => {
     if (!activePo || poArticles.length === 0) return;
-    const key = `${activePo.id}|${poArticleIds}|${trimIds}`;
+    const key = `${activePo.id}|${poArticleIds}|${trimIds}|${tpIds}`;
     if (initKeyRef.current === key) return;
     initKeyRef.current = key;
 
+    // Get ONLY Approved tech packs for this PO
+    const approvedTPs = techPackRecords.filter(
+      r => r.po_id === activePo.id && r.approval_status === "Approved"
+    );
+
     const init = {};
+    let anyAutoPopulated = false;
+
     poArticles.forEach(art => {
+      // 1. Check for already-saved trims for this article
       const existing = existingTrims.filter(
         t => t.po_id === activePo.id && t.article_code === art.article_code
       );
+
       if (existing.length > 0) {
+        // Load from DB — mark as manual/approved
         init[art.id] = existing.map(e => ({
           trim_category: e.trim_category || "Zipper",
           item_description: e.item_description || "",
@@ -247,17 +299,99 @@ export default function Trims() {
           wastage_percent: e.wastage_percent ?? 5,
           unit: e.unit || "Pcs",
           existing_id: e.id,
+          source: "manual",
+          approved: true,
         }));
-      } else {
-        init[art.id] = [defaultRow()];
+        return;
       }
+
+      // 2. Try to auto-populate from Approved TechPackRecords
+      const matchingTP = approvedTPs.find(
+        r => r.article_code === art.article_code || r.article_name === art.article_name
+      );
+
+      if (matchingTP && matchingTP.extracted_data?.accessories) {
+        const tpTrims = (matchingTP.extracted_data.accessories || []).filter(acc => {
+          // Only include trim-category items (not packaging)
+          const trimsKeywords = ["zipper", "elastic", "button", "dori", "thread", "slider", "velcro", "tape", "ribbon", "eyelet", "snap", "hook", "buckle"];
+          const desc = (acc.item_description || acc.category || "").toLowerCase();
+          return trimsKeywords.some(k => desc.includes(k)) || TRIM_CATEGORIES.includes(acc.category);
+        });
+
+        if (tpTrims.length > 0) {
+          // Get master data trims for this article for comparison
+          const masterTemplate = fabricTemplates.find(
+            t => t.article_code === art.article_code || t.article_name === art.article_name
+          );
+
+          const rows = tpTrims.map(acc => defaultRow({
+            trim_category: TRIM_CATEGORIES.includes(acc.category) ? acc.category : "Other",
+            item_description: acc.item_description || acc.description || "",
+            color: acc.color || "",
+            size_spec: acc.size_spec || acc.size || "",
+            consumption_per_unit: parseFloat(acc.consumption_per_unit) || 1,
+            wastage_percent: parseFloat(acc.wastage_percent) || 5,
+            unit: acc.unit || "Pcs",
+            calc_type: "Per Piece",
+            source: "techpack",
+            approved: false,
+          }));
+
+          // 3. Highlight items in master data but NOT in tech pack (missing trims)
+          // We use FabricTemplate notes or component names as a proxy — real master trim data
+          // would come from TrimItem master records if present
+          const masterTrimsForArt = existingTrims.filter(
+            t => !t.po_id && t.article_code === art.article_code
+          );
+          masterTrimsForArt.forEach(masterTrim => {
+            const alreadyPresent = rows.some(
+              r => r.item_description.toLowerCase().includes(masterTrim.item_description.toLowerCase())
+            );
+            if (!alreadyPresent) {
+              rows.push(defaultRow({
+                trim_category: masterTrim.trim_category || "Other",
+                item_description: masterTrim.item_description,
+                color: masterTrim.color || "",
+                size_spec: masterTrim.size_spec || "",
+                consumption_per_unit: masterTrim.consumption_per_unit ?? 1,
+                wastage_percent: masterTrim.wastage_percent ?? 5,
+                unit: masterTrim.unit || "Pcs",
+                calc_type: masterTrim.calc_type || "Per Piece",
+                source: "missing",
+                approved: false,
+              }));
+            }
+          });
+
+          init[art.id] = rows;
+          anyAutoPopulated = true;
+          return;
+        }
+      }
+
+      // 3. Fallback — empty row
+      init[art.id] = [defaultRow()];
     });
+
     setAllRows(init);
+    setAutoPopulated(anyAutoPopulated);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePo?.id, poArticleIds, trimIds]);
+  }, [activePo?.id, poArticleIds, trimIds, tpIds]);
 
   const handleChange = (artId, newRows) => {
     setAllRows(prev => ({ ...prev, [artId]: newRows }));
+  };
+
+  const handleApproveAll = () => {
+    setAllRows(prev => {
+      const next = { ...prev };
+      poArticles.forEach(art => {
+        if (next[art.id]) {
+          next[art.id] = next[art.id].map(r => ({ ...r, approved: true }));
+        }
+      });
+      return next;
+    });
   };
 
   const handleSave = async () => {
@@ -334,7 +468,7 @@ export default function Trims() {
     const w = window.open("", "_blank"); w.document.write(html); w.document.close(); w.print();
   };
 
-  // Totals summary per category
+  // Totals — only filled rows
   const totals = {};
   poArticles.forEach(art => {
     (allRows[art.id] || []).forEach(row => {
@@ -347,17 +481,29 @@ export default function Trims() {
   });
   const totalEntries = Object.values(totals);
 
+  const pendingApprovalCount = poArticles.reduce((acc, art) =>
+    acc + (allRows[art.id] || []).filter(r => r.source === "techpack" && !r.approved).length, 0
+  );
+  const missingCount = poArticles.reduce((acc, art) =>
+    acc + (allRows[art.id] || []).filter(r => r.source === "missing").length, 0
+  );
+
   return (
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap">
-        <Select value={selectedPoId || activePo?.id || ""} onValueChange={setSelectedPoId}>
+        <Select value={selectedPoId || activePo?.id || ""} onValueChange={v => { setSelectedPoId(v); initKeyRef.current = null; }}>
           <SelectTrigger className="w-72 h-8 text-xs"><SelectValue placeholder="Select Purchase Order" /></SelectTrigger>
           <SelectContent>{pos.map(p => <SelectItem key={p.id} value={p.id}>{p.po_number} – {p.customer_name}</SelectItem>)}</SelectContent>
         </Select>
         <Button size="sm" onClick={handleSave} disabled={saving || !activePo} className="gap-1.5">
           <Save className="h-3.5 w-3.5" /> {saving ? "Saving..." : "Save"}
         </Button>
+        {pendingApprovalCount > 0 && (
+          <Button size="sm" variant="outline" onClick={handleApproveAll} className="gap-1.5 border-green-500 text-green-700 hover:bg-green-50">
+            <CheckCircle2 className="h-3.5 w-3.5" /> Approve All ({pendingApprovalCount})
+          </Button>
+        )}
         <div className="flex gap-1.5 ml-auto">
           <Button size="sm" variant="outline" onClick={handleDownloadCSV} disabled={!activePo || poArticles.length === 0} className="gap-1.5">
             <Download className="h-3.5 w-3.5" /> CSV
@@ -366,6 +512,31 @@ export default function Trims() {
             <Printer className="h-3.5 w-3.5" /> Print
           </Button>
         </div>
+      </div>
+
+      {/* Status banners */}
+      {autoPopulated && (
+        <div className="flex items-center gap-2 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 text-xs text-amber-800">
+          <Zap className="h-3.5 w-3.5 flex-shrink-0" />
+          <span><b>Auto-populated from Approved Tech Pack.</b> Review and approve each trim before saving.</span>
+          {pendingApprovalCount > 0 && <span className="ml-1 font-bold">{pendingApprovalCount} items pending approval.</span>}
+        </div>
+      )}
+      {missingCount > 0 && (
+        <div className="flex items-center gap-2 bg-red-50 border border-red-300 rounded-lg px-3 py-2 text-xs text-red-800">
+          <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+          <span><b>{missingCount} trims found in Master Data but NOT in Tech Pack.</b> Review highlighted rows (red background) and confirm or remove.</span>
+        </div>
+      )}
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-3 text-[10px] text-gray-500 bg-gray-50 border border-gray-200 rounded px-3 py-2">
+        <span className="font-semibold text-gray-600">Legend:</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-amber-400" /> From Tech Pack (pending)</span>
+        <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-green-600" /> Approved</span>
+        <span className="flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-red-500" /> Missing vs Master Data</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-blue-400" /> From Master Data</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-gray-300" /> Manual entry</span>
       </div>
 
       {/* Calc type legend */}
@@ -384,14 +555,18 @@ export default function Trims() {
       ) : (
         <>
           <div className="space-y-3">
-            {poArticles.map(art => (
-              <ArticleBlock
-                key={art.id}
-                art={art}
-                rows={allRows}
-                onChange={handleChange}
-              />
-            ))}
+            {poArticles.map(art => {
+              const artMissing = (allRows[art.id] || []).filter(r => r.source === "missing").length;
+              return (
+                <ArticleBlock
+                  key={art.id}
+                  art={art}
+                  rows={allRows}
+                  onChange={handleChange}
+                  missingFromMaster={artMissing}
+                />
+              );
+            })}
           </div>
 
           {/* Totals */}
