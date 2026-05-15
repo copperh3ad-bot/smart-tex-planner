@@ -225,9 +225,9 @@ export default function SmartExcelImport({ pos = [], selectedPoId, onSaved, onCl
           const bobSku      = get(art, "bob_sku", "bobsku") ?? "";
           const unitsPerCarton = parseNumber(get(art, "units_per_carton", "pcs_per_carton", "qty_per_carton"));
           const cartonSizeRaw  = get(art, "carton_size_cm", "carton_size") ?? "";
-          const pvcBagDimensions = get(art, "pvc_bag_dimensions") ?? "";
+          const pvcBagDimensions = get(art, "polybag_size", "polybag size", "pvc_bag_dimensions", "bag_size") ?? "";
           const stiffenerSize    = get(art, "stiffener_size") ?? "";
-          const insertDimensions = get(art, "insert_dimensions", "inlay_card_dimensions") ?? "";
+          const insertDimensions = get(art, "inlay_card_size", "inlay card_size", "inlay_card_dimensions", "insert_dimensions", "inlay_size") ?? "";
           const finishDimensions = get(art, "finish_dimensions") ?? "";
           const zipperLength     = parseNumber(get(art, "zipper_length_cm"));
           const productLenIn     = parseNumber(get(art, "product_length_in"));
@@ -270,9 +270,12 @@ export default function SmartExcelImport({ pos = [], selectedPoId, onSaved, onCl
             return cat === "polybag" || nm.includes("polybag") || nm.includes("poly bag") || nm.includes("bag material");
           });
           const stiffRow = accRows.find(a => {
-            const cat = String(get(a, "category") ?? "").toLowerCase();
             const nm  = String(get(a, "item_name") ?? "").toLowerCase();
-            return nm.includes("stiffener") || nm.includes("cardboard") || cat === "packaging";
+            return nm.includes("stiffener") || nm.includes("cardboard");
+          });
+          const inlayRow = accRows.find(a => {
+            const nm = String(get(a, "item_name") ?? "").toLowerCase();
+            return nm.includes("inlay") || nm.includes("insert card") || nm.includes("inlay card");
           });
 
           // All rows become AccessoryItem records (including packaging rows)
@@ -344,8 +347,14 @@ export default function SmartExcelImport({ pos = [], selectedPoId, onSaved, onCl
               size_cm:  get(stiffRow, "size_spec") ?? stiffenerSize ?? "",
               notes:    get(stiffRow, "placement") ?? "",
             } : (stiffenerSize ? { used: true, material: "Cardboard", size_cm: stiffenerSize } : null),
-            // Insert card from Articles sheet if no accessory row found
-            insert_card: insertDimensions ? { description: insertDimensions } : null,
+            // Insert card / Inlay Card — prefer accessory row, fallback to Articles sheet column
+            insert_card: inlayRow ? {
+              used:        true,
+              description: get(inlayRow, "item_name") ?? "Inlay Card",
+              size_cm:     get(inlayRow, "size_spec") ?? insertDimensions ?? "",
+              material:    get(inlayRow, "material") ?? "",
+              notes:       get(inlayRow, "placement") ?? "",
+            } : (insertDimensions ? { used: true, description: insertDimensions, size_cm: insertDimensions } : null),
             carton: {
               type:              "Printed",
               quality:           "",
@@ -600,7 +609,11 @@ export default function SmartExcelImport({ pos = [], selectedPoId, onSaved, onCl
                 sticker_type: s.sticker_type || "",
                 description:  s.description  || "",
               })),
-              notes: packaging.insert_card?.description || "",
+              other_accessories: packaging.insert_card ? [{
+                name: packaging.insert_card.description || "Inlay Card",
+                description: [packaging.insert_card.material, packaging.insert_card.size_cm].filter(Boolean).join(" — ") || packaging.insert_card.description || "",
+              }] : [],
+              notes: "",
             };
             const existingAp = apMap[artCodeKey];
             ops.push(
