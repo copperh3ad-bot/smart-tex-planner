@@ -112,7 +112,7 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
   const updateFabric  = (i, f, v) => setFabrics(p => p.map((r, idx) => idx === i ? { ...r, [f]: v } : r));
   const updateStitch  = (i, f, v) => setStitching(p => p.map((r, idx) => idx === i ? { ...r, [f]: v } : r));
   const updateAcc     = (i, f, v) => setAccessories(p => p.map((r, idx) => idx === i ? { ...r, [f]: v } : r));
-  const updateLabel   = (i, f, v) => setPackaging(p => ({ ...p, labels: (p.labels||[]).map((r,idx) => idx===i?{...r,[f]:v}:r) }));
+  const updateLabel   = (i, f, v) => setPackaging(p => ({ ...p, labels: (p.labels||[]).map((r,idx) => idx===i ? {...r,[f]:v} : r) }));
   const updateSticker = (i, f, v) => setPackaging(p => ({ ...p, stickers: (p.stickers||[]).map((r,idx) => idx===i?{...r,[f]:v}:r) }));
 
   // ── Missing field summary ─────────────────────────────────────────────────────
@@ -226,25 +226,24 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
         log.push(`✅ ${stitchOps.length} stitching entry(ies) → Accessories`);
       }
 
-      // ── 5. Accessories / Trims → AccessoryItem ────────────────────────────
-      const TRIM_CATS = ["Zipper", "Slider", "Elastic", "Button", "Dori", "Eyelet", "Stitching Thread"];
+      // ── 5. Accessories / Trims → AccessoryItem (hardware trims only — no packaging)
       const accOps = accessories
         .filter(a => a.item_description)
         .map(a => base44.entities.AccessoryItem.create({
           po_id: poId || null, po_number: poNum,
           article_name: artName, article_code: artCode,
           packing_type: packingType,
-          category: a.category || "Accessory",
+          category: a.category || "Other",
           item_description: a.item_description || "",
           color: a.color || "",
           size_spec: a.size_spec || "",
-          multiplier: a.quantity_per_piece || 1,
-          consumption_per_unit: a.quantity_per_piece || null,
+          consumption_per_unit: a.consumption_per_unit || a.quantity_per_piece || 1,
+          multiplier: a.consumption_per_unit || a.quantity_per_piece || 1,
           unit: a.unit || "Pcs",
           quantity_required: null,
-          wastage_percent: a.wastage_percent || 5,
+          wastage_percent: a.wastage_percent != null ? a.wastage_percent : 5,
           status: "Planned",
-          notes: [a.placement, a.variant].filter(Boolean).join(" | ") || "",
+          notes: [a.placement, a.material].filter(Boolean).join(" | ") || "",
         }));
       if (accOps.length > 0) {
         await Promise.all(accOps);
@@ -254,27 +253,34 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
       // ── 6. Packaging → AccessoryItems ─────────────────────────────────────
       const pkgOps = [];
 
+      // Labels → AccessoryItem
+      // item_description = label_type (e.g. "Care Label") so UnifiedPackagingPlanning can read it back as `type` field
+      // size_spec = size (size_cm) so it reads back as `quality` field in Labels tab
+      // color field = description text for display
       (packaging.labels || []).filter(l => l.label_type).forEach(l => {
         pkgOps.push(base44.entities.AccessoryItem.create({
           po_id: poId || null, po_number: poNum,
           article_name: artName, article_code: artCode,
           packing_type: packingType,
           category: "Label",
-          item_description: l.label_type,
-          size_spec: l.size_spec || l.description || "",
-          notes: [l.placement, l.variant].filter(Boolean).join(" | ") || "",
+          item_description: l.label_type,           // read back as `type` in Labels tab
+          size_spec: l.size_cm || l.size_cm || "",  // read back as `quality` in Labels tab
+          color: l.description || "",               // description stored in color for Labels tab
+          notes: l.placement || "",
           unit: "Pcs", wastage_percent: 5, multiplier: 1, status: "Planned",
         }));
       });
 
       if (packaging.polybag?.type) {
+        // Polybag → item_description = type, size_spec = size
         pkgOps.push(base44.entities.AccessoryItem.create({
           po_id: poId || null, po_number: poNum,
           article_name: artName, article_code: artCode,
           packing_type: packingType,
           category: "Polybag",
-          item_description: `${packaging.polybag.type} Polybag${packaging.polybag.printed ? " (Printed)" : ""}`,
+          item_description: packaging.polybag.type,   // e.g. "PE", "PVC"
           size_spec: packaging.polybag.size_cm || "",
+          color: packaging.polybag.printed ? "Printed" : "Plain",
           notes: packaging.polybag.thickness_microns ? `${packaging.polybag.thickness_microns} microns` : "",
           unit: "Pcs", wastage_percent: 3, multiplier: 1, status: "Planned",
         }));
@@ -286,20 +292,20 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
           article_name: artName, article_code: artCode,
           packing_type: packingType,
           category: "Stiffener",
-          item_description: packaging.stiffener.material || "Stiffener",
+          item_description: packaging.stiffener.material || "Stiffener/Board",
           size_spec: packaging.stiffener.size_cm || "",
           unit: "Pcs", wastage_percent: 3, multiplier: 1, status: "Planned",
         }));
       }
 
-      if (packaging.insert_card?.used) {
+      if (packaging.insert_card?.used || packaging.insert_card?.description) {
         pkgOps.push(base44.entities.AccessoryItem.create({
           po_id: poId || null, po_number: poNum,
           article_name: artName, article_code: artCode,
           packing_type: packingType,
           category: "Insert Card",
-          item_description: packaging.insert_card.description || "Insert / Inlay Card",
-          size_spec: packaging.insert_card.size_cm || "",
+          item_description: packaging.insert_card.size_cm || packaging.insert_card.description || "Insert Card",
+          size_spec: packaging.insert_card.description || "Insert / Inlay Card",
           unit: "Pcs", wastage_percent: 3, multiplier: 1, status: "Planned",
         }));
       }
@@ -310,8 +316,8 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
           article_name: artName, article_code: artCode,
           packing_type: packingType,
           category: "Carton",
-          item_description: packaging.carton.type || "Carton",
-          size_spec: packaging.carton.size_cm || "",
+          item_description: packaging.carton.type || "Printed",        // read back as `type`
+          size_spec: packaging.carton.size_cm || "",                   // read back as `quality`
           notes: packaging.carton.quality || "",
           multiplier: packaging.carton.pieces_per_carton || 1,
           unit: "Pcs", wastage_percent: 2, status: "Planned",
@@ -373,7 +379,8 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
             label_type: l.label_type || "",
             description: l.description || "",
             supplier: "",
-            notes: [l.placement, l.variant].filter(Boolean).join(" | ") || "",
+            unit_cost: null,
+            notes: l.placement || "",
           })),
           polybag: packaging.polybag ? {
             type: packaging.polybag.type || "PE",
@@ -633,8 +640,9 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
                 <FieldInput label="Description" value={a.item_description} onChange={v => updateAcc(i,"item_description",v)} required />
                 <FieldInput label="Color" value={a.color} onChange={v => updateAcc(i,"color",v)} />
                 <FieldInput label="Size / Spec" value={a.size_spec} onChange={v => updateAcc(i,"size_spec",v)} />
-                <FieldInput label="Qty per Piece" value={a.quantity_per_piece} onChange={v => updateAcc(i,"quantity_per_piece",v)} type="number" />
-                <SelectInput label="Unit" value={a.unit} onChange={v => updateAcc(i,"unit",v)} options={["Pcs","Meters","Kgs","Rolls","Sets"]} />
+                <FieldInput label="Consumption / Piece" value={a.consumption_per_unit} onChange={v => updateAcc(i,"consumption_per_unit",v)} type="number" />
+                <FieldInput label="Wastage %" value={a.wastage_percent} onChange={v => updateAcc(i,"wastage_percent",v)} type="number" />
+                <SelectInput label="Unit" value={a.unit} onChange={v => updateAcc(i,"unit",v)} options={["Pcs","Meters","Kgs","Rolls","Sets","Pairs"]} />
               </div>
             </div>
           ))}
@@ -668,14 +676,15 @@ export default function TechPackReview({ extractedData, selectedPoId, pos, onSav
             <p className="text-xs font-bold text-gray-600 mb-2 uppercase tracking-wide">Labels</p>
             <div className="space-y-2">
               {(packaging.labels || []).map((l, i) => (
-                <div key={i} className="border border-gray-200 rounded-lg p-3 bg-gray-50 grid grid-cols-3 gap-2 relative">
+                <div key={i} className="border border-gray-200 rounded-lg p-3 bg-gray-50 grid grid-cols-2 md:grid-cols-4 gap-2 relative">
                   <button onClick={() => setPackaging(p => ({...p, labels: (p.labels||[]).filter((_,idx)=>idx!==i)}))}
                     className="absolute top-2 right-2 text-red-400 hover:text-red-600">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                   <FieldInput label="Label Type" value={l.label_type} onChange={v => updateLabel(i,"label_type",v)} required />
                   <FieldInput label="Description" value={l.description} onChange={v => updateLabel(i,"description",v)} />
-                  <FieldInput label="Size Spec" value={l.size_spec} onChange={v => updateLabel(i,"size_spec",v)} />
+                  <FieldInput label="Size (cm)" value={l.size_cm} onChange={v => updateLabel(i,"size_cm",v)} />
+                  <FieldInput label="Placement" value={l.placement} onChange={v => updateLabel(i,"placement",v)} />
                 </div>
               ))}
               <button onClick={() => setPackaging(p => ({...p, labels: [...(p.labels||[]), {}]}))}

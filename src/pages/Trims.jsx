@@ -317,10 +317,11 @@ export default function Trims() {
 
       if (matchingTP && matchingTP.extracted_data?.accessories) {
         const tpTrims = (matchingTP.extracted_data.accessories || []).filter(acc => {
-          // Only include trim-category items (not packaging)
-          const trimsKeywords = ["zipper", "elastic", "button", "dori", "thread", "slider", "velcro", "tape", "ribbon", "eyelet", "snap", "hook", "buckle"];
-          const desc = (acc.item_description || acc.category || "").toLowerCase();
-          return trimsKeywords.some(k => desc.includes(k)) || TRIM_CATEGORIES.includes(acc.category);
+          // Only include hardware trim-category items — exclude all packaging categories
+          const PACKAGING_CATS = new Set(["Label", "Polybag", "Stiffener", "Carton", "Sticker", "Insert Card"]);
+          const cat = acc.category || "";
+          if (PACKAGING_CATS.has(cat)) return false;
+          return TRIM_CATEGORIES.includes(cat) || cat === "Other" || cat === "";
         });
 
         if (tpTrims.length > 0) {
@@ -329,18 +330,23 @@ export default function Trims() {
             t => t.article_code === art.article_code || t.article_name === art.article_name
           );
 
-          const rows = tpTrims.map(acc => defaultRow({
-            trim_category: TRIM_CATEGORIES.includes(acc.category) ? acc.category : "Other",
-            item_description: acc.item_description || acc.description || "",
-            color: acc.color || "",
-            size_spec: acc.size_spec || acc.size || "",
-            consumption_per_unit: parseFloat(acc.consumption_per_unit) || 1,
-            wastage_percent: parseFloat(acc.wastage_percent) || 5,
-            unit: acc.unit || "Pcs",
-            calc_type: "Per Piece",
-            source: "techpack",
-            approved: false,
-          }));
+          const rows = tpTrims.map(acc => {
+            // Map unit to calc_type: meters-based items use Per Meter
+            const unit = acc.unit || "Pcs";
+            const calcType = (unit === "Meters" || unit === "Rolls") ? "Per Meter" : "Per Piece";
+            return defaultRow({
+              trim_category: TRIM_CATEGORIES.includes(acc.category) ? acc.category : "Other",
+              item_description: acc.item_description || acc.description || "",
+              color: acc.color || "",
+              size_spec: acc.size_spec || acc.size || "",
+              consumption_per_unit: parseFloat(acc.consumption_per_unit) || parseFloat(acc.quantity_per_piece) || 1,
+              wastage_percent: parseFloat(acc.wastage_percent) ?? 5,
+              unit,
+              calc_type: calcType,
+              source: "techpack",
+              approved: false,
+            });
+          });
 
           // 3. Highlight items in master data but NOT in tech pack (missing trims)
           // We use FabricTemplate notes or component names as a proxy — real master trim data

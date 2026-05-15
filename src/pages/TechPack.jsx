@@ -43,64 +43,88 @@ Search every section/sheet for:
 
 ### FABRIC SPECS / COMPONENTS
 Look for a "Fabric specs", "Fabric", "BOM", "Consumption", or "Materials" section/table.
-The columns may be: Component, Fabric, GSM, Color, Construction, Finish — OR — component_type, fabric_type, gsm, width, composition, etc.
 For EACH fabric row extract:
-- component_type: "Component" column value — e.g. "Platform only", "Skirt only", "Body", "Flat Sheet", "Fitted Sheet", "Pillow Case", "This is inside bound seam — all inside seams"
-- fabric_type: "Fabric" column — full description e.g. "100% Tencel jersey knitted fabric in white", "70gsm — 100% Polyester interlock knitted fabric in white"
-- composition: extract fiber content from fabric description e.g. "100% Tencel", "100% Polyester", "100% Cotton"
-- gsm: numeric GSM value from "GSM" column — e.g. 113, 70
-- color: "Color" column value — e.g. "White", "—" (use null if dash)
-- construction: "Construction" column value — e.g. "32S - A100", "75DFTY", "190T" — map to width field
-- finish: "Finish" column — full finish description e.g. "0.02mmTPU PU Coating(DingZing) in White Color B) SILVADUR (TM) 930 Antimicrobial - PRN 98-10" — store in notes field
-- consumption_per_unit: if present; default 0 if not found
-- wastage_percent: if present; default 0 if not found
+- component_type: e.g. "Platform only", "Skirt only", "Body", "Flat Sheet", "Fitted Sheet", "Pillow Case"
+- fabric_type: full fabric description e.g. "100% Tencel jersey knitted fabric in white"
+- composition: fiber content e.g. "100% Tencel", "100% Polyester", "100% Cotton"
+- gsm: numeric GSM value
+- color: color value (null if dash/empty)
+- construction: Construction column value e.g. "32S-A100", "75DFTY"
+- finish: full finish/coating description
+- consumption_per_unit: fabric consumption per unit (default 0)
+- wastage_percent: wastage percentage (default 0)
 - product_size: product dimensions if present
 - direction: knitting direction if present
 
-### LABELS SECTION
-Look for a "Labels" section/table with columns: Section, Type, Material, Size, Color, Placement.
-For EACH label row extract as an accessory with category "Label":
-- item_description: combine "Section" + "Type" — e.g. "SATIN PRINTED LABEL — Satin woven label with printed artwork"
-- size_spec: "Size" column — e.g. "60x133mm (6x13.3cm) (full length)", "4.0cmX6.0cm", "50x80mm (5x8cm)"
-- color: "Color" column — e.g. "Label white ground with printed color fonts"
-- notes: "Placement" column — full placement instructions
-- material: "Material" column — e.g. "100% polyester satin woven fabric", "3M non woven material with white ground"
-- quantity_per_piece: 1 (default for labels)
-- unit: "Pcs"
-ALSO add each label to packaging.labels[] array with type, description, size_cm, material, color, placement fields.
+### TRIMS (go into accessories[] array — these are production trims, NOT packaging)
+Look for "Trims", "Accessories" sections and extract ONLY hardware/functional items:
+- Zipper/zip → category: "Zipper"
+- Slider → category: "Slider"  
+- Elastic band/tape → category: "Elastic"
+- Button/snap button → category: "Button"
+- Cord/dori/drawstring → category: "Dori"
+- Sewing thread/overlock thread → category: "Stitching Thread"
+- Velcro/hook-and-loop → category: "Velcro"
+- Eyelet/grommet → category: "Eyelet"
+- Hook & Eye → category: "Hook & Eye"
+- Ribbon/tape → category: "Ribbon"
+- Buckle → category: "Buckle"
+- Other hardware → category: "Other"
+DO NOT put labels, polybags, cartons, stickers, insert cards, or stiffeners into accessories[].
+Those go ONLY into packaging{} object.
 
-### ACCESSORIES / TRIMS SECTION
-Look for "Accessories", "Trims", "BOM" sections. Extract every row and classify:
-- Zipper/zip → "Zipper"
-- Slider → "Slider"
-- Elastic/tape → "Elastic"
-- Button/snap → "Button"
-- Cord/dori/drawstring → "Dori"
-- Thread/sewing thread → "Stitching Thread"
-- Label (care/brand/woven/wash/size/law tag/hang tag) → "Label"
-- Polybag/poly bag → "Polybag"
-- Stiffener/board/insert board → "Stiffener"
-- Carton/box → "Carton"
-- Sticker/barcode/UPC → "Sticker"
-- Insert card/inlay card → "Insert Card"
-- Anything else → "Accessory"
+For each trim row:
+- category: one of the categories above
+- item_description: full description e.g. "5mm nylon coil zipper", "20mm white elastic band"
+- color: color
+- size_spec: size or specification
+- material: material if mentioned
+- consumption_per_unit: pieces/meters per garment (default 1)
+- wastage_percent: wastage % (default 5)
+- unit: "Pcs" for count items, "Meters" for length items, "Kgs" for weight items
 
-### PACKAGING
-- Labels array: all label rows with type, description, size_cm, material, color, placement
-- Polybag: type, size_cm, thickness_microns, printed
-- Stiffener: used, material, size_cm
-- Insert Card: used, description, size_cm
-- Carton: type, quality, size_cm, pieces_per_carton, cbm_per_carton
-- Stickers: array of sticker rows
+### LABELS (go into packaging.labels[] — NOT into accessories[])
+Look for "Labels" section with columns: Section, Type, Material, Size, Color, Placement.
+For EACH label row, populate packaging.labels[] with:
+- label_type: determine the correct label type from these exact values only:
+  "Brand Label" | "Care Label" | "Size Label" | "Wash Label" | "Country of Origin" |
+  "Composition Label" | "Hang Tag" | "Law Tag" | "Barcode Label" | "Price Ticket" |
+  "GOTS Label" | "Compliance Label" | "Direction Label" | "Woven Label" | "Printed Label"
+  Map from source text: care/wash instructions → "Care Label", brand/logo → "Brand Label",
+  size → "Size Label", law/legal → "Law Tag", hang/swing tag → "Hang Tag",
+  barcode/UPC/EAN → "Barcode Label", country of origin/COO → "Country of Origin",
+  GOTS/organic → "GOTS Label", composition/content → "Composition Label",
+  price → "Price Ticket", direction/usage → "Direction Label"
+- description: full label description from the Type column
+- material: material e.g. "100% polyester satin woven fabric"
+- size_cm: size e.g. "6x13.3cm", "4.0x6.0cm"
+- color: color description
+- placement: full placement instructions
+
+### PACKAGING ITEMS (go into packaging{} object — NOT into accessories[])
+- packaging.polybag: { type: "PVC"|"PP"|"PE"|"LDPE"|"OPP", size_cm, thickness_microns (number), printed (boolean) }
+- packaging.stiffener: { used: true/false, material, size_cm }
+- packaging.insert_card: { used: true/false, description, size_cm }
+- packaging.carton: { type: "Printed"|"Plain"|"Brown"|"White", quality (e.g. "5-ply"), size_cm (e.g. "40x30x20"),
+  pieces_per_carton (number), cbm_per_carton (number) }
+- packaging.stickers: [{ sticker_type: "Barcode Sticker"|"UPC Sticker"|"QR Code"|"Warning Sticker"|"Packaging Info", description }]
+
+### STITCHING (go into stitching[] array)
+Look for stitch type, thread specification, seam details:
+- stitch_type: e.g. "Overlock 5-thread", "Chain Stitch", "Lock Stitch"
+- thread_type: e.g. "Polyester", "Cotton"
+- thread_count: e.g. "40/2", "60/2"
+- color: thread color
+- location: e.g. "Side Seam", "Hem", "Label attachment"
 
 ### CRITICAL RULES
 1. NEVER return empty article fields — search every section for article name and code
 2. wastage values between 0 and 1 (e.g. 0.1) → multiply by 100 to get percent
 3. Extract ALL rows from every table — do not skip rows
 4. For "—" or empty cells use null, not empty string
-5. The "Construction" column in fabric specs maps to the width/construction field
-6. Capture the full "Finish" text as a notes field on fabric components
-7. Extract label placement instructions fully into the notes/placement field
+5. STRICT SEPARATION: trims/hardware → accessories[], labels/polybag/carton/stickers → packaging{}
+6. label_type MUST be one of the allowed values listed above — map intelligently from source text
+7. For polybag thickness: extract numeric value only (e.g. "0.05mm" → 50 microns, "50mu" → 50)
 
 Return ONLY valid JSON (no markdown, no extra text):
 {
@@ -115,40 +139,46 @@ Return ONLY valid JSON (no markdown, no extra text):
   },
   "fabric_components": [
     {
-      "component_type": "string — e.g. Platform only, Skirt only",
+      "component_type": "string",
       "product_size": "string or null",
       "direction": "string or null",
-      "fabric_type": "string — full fabric description",
-      "composition": "string — fiber content e.g. 100% Tencel",
+      "fabric_type": "string",
+      "composition": "string",
       "gsm": 0,
       "width": 0,
-      "construction": "string — e.g. 32S-A100, 75DFTY",
-      "finish": "string — full finish/coating description or null",
+      "construction": "string or null",
+      "finish": "string or null",
       "consumption_per_unit": 0,
       "wastage_percent": 0,
       "notes": "string or null"
     }
   ],
-  "stitching": [],
+  "stitching": [
+    {
+      "stitch_type": "string",
+      "thread_type": "string",
+      "thread_count": "string",
+      "color": "string",
+      "location": "string"
+    }
+  ],
   "accessories": [
     {
-      "category": "string",
+      "category": "Zipper|Slider|Elastic|Button|Dori|Stitching Thread|Velcro|Eyelet|Hook & Eye|Ribbon|Buckle|Other",
       "item_description": "string — full description",
       "color": "string or null",
       "size_spec": "string or null",
       "material": "string or null",
-      "placement": "string or null",
-      "quantity_per_piece": null,
-      "unit": "Pcs"
+      "consumption_per_unit": 1,
+      "wastage_percent": 5,
+      "unit": "Pcs|Meters|Kgs"
     }
   ],
   "packaging": {
     "labels": [
       {
-        "label_type": "string — e.g. Brand Label, Care Label, Law Tag",
-        "section": "string",
-        "type": "string",
-        "description": "string",
+        "label_type": "Brand Label|Care Label|Size Label|Wash Label|Country of Origin|Composition Label|Hang Tag|Law Tag|Barcode Label|Price Ticket|GOTS Label|Compliance Label|Direction Label|Woven Label|Printed Label",
+        "description": "string — full label description",
         "material": "string",
         "size_cm": "string",
         "color": "string",
@@ -198,7 +228,19 @@ const RESPONSE_SCHEMA = {
         },
       },
     },
-    stitching: { type: "array" },
+    stitching: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          stitch_type: { type: "string" },
+          thread_type: { type: "string" },
+          thread_count: { type: "string" },
+          color: { type: "string" },
+          location: { type: "string" },
+        },
+      },
+    },
     accessories: {
       type: "array",
       items: {
@@ -209,8 +251,8 @@ const RESPONSE_SCHEMA = {
           color: { type: "string" },
           size_spec: { type: "string" },
           material: { type: "string" },
-          placement: { type: "string" },
-          quantity_per_piece: { type: "number" },
+          consumption_per_unit: { type: "number" },
+          wastage_percent: { type: "number" },
           unit: { type: "string" },
         },
       },
@@ -224,8 +266,6 @@ const RESPONSE_SCHEMA = {
             type: "object",
             properties: {
               label_type: { type: "string" },
-              section: { type: "string" },
-              type: { type: "string" },
               description: { type: "string" },
               material: { type: "string" },
               size_cm: { type: "string" },
@@ -270,7 +310,102 @@ const parseExcelToText = (f) => new Promise((resolve, reject) => {
   reader.readAsArrayBuffer(f);
 });
 
+// Categories that belong in Trims module (accessories[])
+const TRIM_ONLY_CATEGORIES = new Set([
+  "Zipper", "Slider", "Slider Metal", "Slider Stopper",
+  "Elastic", "Button", "Dori", "Eyelet", "Stitching Thread",
+  "Velcro", "Snap Button", "Hook & Eye", "Buckle", "Drawstring",
+  "Ribbon", "Tape", "Other"
+]);
+
+// Categories that belong in Packaging module (packaging{}) — should NOT be in accessories[]
+const PACKAGING_CATEGORIES = new Set([
+  "Label", "Polybag", "Stiffener", "Carton", "Sticker", "Insert Card"
+]);
+
+// Map raw AI category strings to canonical values
+const canonicalizeCategory = (raw = "") => {
+  const s = raw.trim().toLowerCase();
+  if (s.includes("zipper") || s.includes("zip")) return "Zipper";
+  if (s.includes("slider metal") || s.includes("slider stopper")) return s.includes("stopper") ? "Slider Stopper" : "Slider Metal";
+  if (s.includes("slider")) return "Slider";
+  if (s.includes("elastic")) return "Elastic";
+  if (s.includes("snap") || s.includes("button")) return s.includes("snap") ? "Snap Button" : "Button";
+  if (s.includes("dori") || s.includes("drawstring") || s.includes("cord")) return "Dori";
+  if (s.includes("eyelet") || s.includes("grommet")) return "Eyelet";
+  if (s.includes("thread")) return "Stitching Thread";
+  if (s.includes("velcro") || s.includes("hook-and-loop") || s.includes("hook and loop")) return "Velcro";
+  if (s.includes("hook") && s.includes("eye")) return "Hook & Eye";
+  if (s.includes("buckle")) return "Buckle";
+  if (s.includes("ribbon") || s.includes("tape")) return "Ribbon";
+  // Packaging items — caller should handle these separately
+  if (s.includes("label")) return "Label";
+  if (s.includes("polybag") || s.includes("poly bag")) return "Polybag";
+  if (s.includes("stiffener") || s.includes("insert board")) return "Stiffener";
+  if (s.includes("carton") || s.includes("box")) return "Carton";
+  if (s.includes("sticker") || s.includes("barcode") || s.includes("upc")) return "Sticker";
+  if (s.includes("insert card") || s.includes("inlay")) return "Insert Card";
+  return raw || "Other";
+};
+
+// Promote packaging items that leaked into accessories[] up into packaging{}
+const promoteMisplacedPackaging = (result) => {
+  if (!result) return result;
+  const misplaced = (result.accessories || []).filter(a => {
+    const cat = canonicalizeCategory(a.category);
+    return PACKAGING_CATEGORIES.has(cat);
+  });
+  const kept = (result.accessories || []).filter(a => {
+    const cat = canonicalizeCategory(a.category);
+    return !PACKAGING_CATEGORIES.has(cat);
+  });
+  result.accessories = kept;
+
+  // Merge misplaced items into packaging
+  if (!result.packaging) result.packaging = {};
+  misplaced.forEach(item => {
+    const cat = canonicalizeCategory(item.category);
+    if (cat === "Label") {
+      if (!result.packaging.labels) result.packaging.labels = [];
+      // Avoid duplicates
+      const already = result.packaging.labels.some(l =>
+        l.label_type === (item.label_type || item.item_description)
+      );
+      if (!already) {
+        result.packaging.labels.push({
+          label_type: item.label_type || item.item_description || "Label",
+          description: item.item_description || item.description || "",
+          material: item.material || "",
+          size_cm: item.size_spec || item.size_cm || "",
+          color: item.color || "",
+          placement: item.placement || item.notes || "",
+        });
+      }
+    } else if (cat === "Polybag" && !result.packaging.polybag) {
+      result.packaging.polybag = {
+        type: item.material || "PE",
+        size_cm: item.size_spec || "",
+        thickness_microns: null,
+        printed: false,
+      };
+    } else if (cat === "Stiffener" && !result.packaging.stiffener) {
+      result.packaging.stiffener = { used: true, material: item.item_description || "", size_cm: item.size_spec || "" };
+    } else if (cat === "Insert Card" && !result.packaging.insert_card) {
+      result.packaging.insert_card = { used: true, description: item.item_description || "", size_cm: item.size_spec || "" };
+    } else if (cat === "Carton" && !result.packaging.carton) {
+      result.packaging.carton = { type: "Printed", quality: "", size_cm: item.size_spec || "", pieces_per_carton: null };
+    } else if (cat === "Sticker") {
+      if (!result.packaging.stickers) result.packaging.stickers = [];
+      result.packaging.stickers.push({ sticker_type: item.item_description || "Sticker", description: "" });
+    }
+  });
+  return result;
+};
+
 const normalizeExtracted = (result) => {
+  if (!result) return result;
+
+  // Fix fabric wastage percent
   if (result?.fabric_components?.length) {
     result.fabric_components = result.fabric_components.map(fc => ({
       ...fc,
@@ -279,10 +414,37 @@ const normalizeExtracted = (result) => {
         : fc.wastage_percent,
     }));
   }
+
+  // Canonicalize accessory categories
+  if (result?.accessories?.length) {
+    result.accessories = result.accessories.map(a => ({
+      ...a,
+      category: canonicalizeCategory(a.category),
+      consumption_per_unit: a.consumption_per_unit ?? 1,
+      wastage_percent: a.wastage_percent ?? 5,
+      unit: a.unit || "Pcs",
+    }));
+  }
+
+  // Promote packaging items that leaked into accessories[]
+  result = promoteMisplacedPackaging(result);
+
+  // Normalize packaging labels — ensure label_type is always populated
+  if (result?.packaging?.labels?.length) {
+    result.packaging.labels = result.packaging.labels.map(l => ({
+      ...l,
+      label_type: l.label_type || l.type || l.section || "Label",
+      description: l.description || l.type || "",
+      size_cm: l.size_cm || l.size || "",
+    }));
+  }
+
+  // Fix article name fallback
   if (result?.article && !result.article.article_name) {
     const parts = [result.article.description, result.article.size_label].filter(Boolean);
     if (parts.length) result.article.article_name = parts.join(" ");
   }
+
   return result;
 };
 
@@ -496,13 +658,12 @@ export default function TechPack() {
     setSingleExtracted(null);
     setSingleFileUrl(null);
     setSingleRawText(null);
-    setExtractedData(null);
     setGlobalError(null);
     setExtractionWarning(null);
     setSelectedPoId("");
     setEditingRecord(null);
     setIsNewVersion(false);
-    setReviewTab("bulk");
+    setReviewTab("summary");
   };
 
   // Prevent stale setExtractedData — proxy to either queue or single
