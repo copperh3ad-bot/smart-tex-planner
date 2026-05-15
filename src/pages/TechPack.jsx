@@ -7,6 +7,7 @@ import {
   Upload, FileText, CheckCircle, Loader2, X, List, Plus, Table2, Eye,
   AlertTriangle, FileSpreadsheet, FileScan, Layers, ChevronRight, Trash2
 } from "lucide-react";
+
 import TechPackReview from "../components/techpack/TechPackReview";
 import TechPackList from "../components/techpack/TechPackList";
 import ExtractionDebugView from "../components/techpack/ExtractionDebugView";
@@ -14,6 +15,7 @@ import ExtractionSummaryTable from "../components/techpack/ExtractionSummaryTabl
 import BulkEditTable from "../components/techpack/BulkEditTable";
 import SmartExcelImport from "../components/techpack/SmartExcelImport";
 import SyncDiagnosticDashboard from "../components/techpack/SyncDiagnosticDashboard";
+import TechPackSummaryView from "../components/techpack/TechPackSummaryView";
 import * as XLSX from "xlsx";
 
 const STEPS = ["Upload", "Extracting", "Review & Edit", "Saved"];
@@ -306,7 +308,7 @@ export default function TechPack() {
   const [selectedPoId, setSelectedPoId] = useState("");
   const [editingRecord, setEditingRecord] = useState(null);
   const [isNewVersion, setIsNewVersion] = useState(false);
-  const [reviewTab, setReviewTab] = useState("bulk");
+  const [reviewTab, setReviewTab] = useState("summary");
   const [packingType, setPackingType] = useState("Sheet Pack");
   // For single-file backward compat (editing existing)
   const [singleExtracted, setSingleExtracted] = useState(null);
@@ -477,7 +479,7 @@ export default function TechPack() {
       const nextIdx = fileQueue.findIndex((f, i) => i > activeFileIdx && f.status === "done");
       if (nextIdx >= 0) {
         setActiveFileIdx(nextIdx);
-        setReviewTab("bulk");
+        setReviewTab("summary");
         // Stay on step 2
       } else {
         setStep(3);
@@ -836,8 +838,9 @@ export default function TechPack() {
               {/* Sub-tabs */}
               <div className="flex border-b border-gray-200 bg-white rounded-t-lg overflow-hidden overflow-x-auto">
                 {[
-                  { key: "bulk",    icon: <Table2 className="h-3.5 w-3.5" />,    label: "Bulk Edit & Validate" },
-                  { key: "summary", icon: <Eye className="h-3.5 w-3.5" />,       label: "Extraction Summary" },
+                  { key: "summary", icon: <Eye className="h-3.5 w-3.5" />,         label: "Tech Pack Summary" },
+                  { key: "bulk",    icon: <Table2 className="h-3.5 w-3.5" />,      label: "Bulk Edit & Validate" },
+                  { key: "extract", icon: <FileText className="h-3.5 w-3.5" />,    label: "Extraction Detail" },
                   { key: "review",  icon: <CheckCircle className="h-3.5 w-3.5" />, label: "Full Review & Save" },
                   ...(currentRawText ? [{ key: "debug", icon: <span>🔍</span>, label: "Raw Debug" }] : []),
                 ].map(t => (
@@ -852,10 +855,13 @@ export default function TechPack() {
                 ))}
               </div>
 
+              {reviewTab === "summary" && (
+                <TechPackSummaryView extractedData={currentExtracted} />
+              )}
               {reviewTab === "bulk" && (
                 <BulkEditTable extractedData={currentExtracted} onChange={setExtractedData} />
               )}
-              {reviewTab === "summary" && (
+              {reviewTab === "extract" && (
                 <ExtractionSummaryTable extractedData={currentExtracted} />
               )}
               {reviewTab === "review" && (
