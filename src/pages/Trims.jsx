@@ -3,7 +3,118 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Save, Plus, Trash2, Download, Printer, Info, CheckCircle2, AlertTriangle, Zap } from "lucide-react";
+import { Save, Plus, Trash2, Download, Printer, Info, CheckCircle2, AlertTriangle, Zap, Tag } from "lucide-react";
+
+// ─── Label types ────────────────────────────────────────────────────────────
+const LABEL_TYPES = [
+  "Brand Label", "Care Label", "Size Label", "Direction Label", "GOTS Label",
+  "Barcode Label", "Hang Tag", "Country of Origin Label", "Composition Label",
+  "Wash Label", "Price Ticket", "Compliance Label", "Retailer Label", "Eco Label",
+  "Care label in 3 Languages 1X3", "Custom Label"
+];
+
+const labelInputCls = "w-full text-xs border border-gray-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400";
+const labelNumCls = "w-16 text-center text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400";
+
+const defaultLabelRow = () => ({
+  label_type: "Brand Label",
+  quality: "",
+  size_spec: "",
+  color: "",
+  placement: "",
+  multiplier: 1,
+  wastage_percent: 5,
+  pc_ean_code: "",
+  carton_ean_code: "",
+  existing_id: null,
+});
+
+function LabelArticleBlock({ art, rows, onChange }) {
+  const artRows = rows[art.id] || [defaultLabelRow()];
+  const qty = art.order_quantity || 0;
+
+  const add = () => onChange(art.id, [...artRows, defaultLabelRow()]);
+  const remove = (idx) => onChange(art.id, artRows.filter((_, i) => i !== idx));
+  const update = (idx, field, val) =>
+    onChange(art.id, artRows.map((r, i) => i === idx ? { ...r, [field]: val } : r));
+
+  return (
+    <div className="rounded border border-gray-300 shadow-sm overflow-hidden">
+      <div className="px-3 py-2 text-xs font-bold text-white flex justify-between items-center flex-wrap gap-2" style={{ backgroundColor: "#1F3864" }}>
+        <span>{art.article_name}{art.article_code ? ` (${art.article_code})` : ""}</span>
+        <span className="font-normal opacity-80">Order Qty: {qty.toLocaleString()}</span>
+      </div>
+      <table className="w-full text-xs border-collapse">
+        <thead>
+          <tr style={{ backgroundColor: "#FFF8E1" }}>
+            <th className="border border-gray-300 px-2 py-1.5 text-left w-48">Label Type</th>
+            <th className="border border-gray-300 px-2 py-1.5 text-left">Quality / Description</th>
+            <th className="border border-gray-300 px-2 py-1.5 text-left w-32" style={{ backgroundColor: "#E8F5E9" }}>Size (cm)</th>
+            <th className="border border-gray-300 px-2 py-1.5 text-left w-28">Color</th>
+            <th className="border border-gray-300 px-2 py-1.5 text-left w-32">Placement</th>
+            <th className="border border-gray-300 px-2 py-1.5 text-center w-20" style={{ backgroundColor: "#F3E5F5" }}>x Qty</th>
+            <th className="border border-gray-300 px-2 py-1.5 text-center w-20">Wastage %</th>
+            <th className="border border-gray-300 px-2 py-1.5 text-center w-32" style={{ backgroundColor: "#FFF2CC" }}>Qty Req.</th>
+            <th className="border border-gray-300 px-2 py-1.5 text-left w-36" style={{ backgroundColor: "#E8F5E9" }}>PC EAN</th>
+            <th className="border border-gray-300 px-2 py-1.5 text-left w-36" style={{ backgroundColor: "#E3F2FD" }}>Carton EAN</th>
+            <th className="border border-gray-300 px-2 py-1.5 w-8"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {artRows.map((row, idx) => {
+            const inclQty = Math.ceil(qty * (parseFloat(row.multiplier) || 1) * (1 + (parseFloat(row.wastage_percent) || 0) / 100));
+            return (
+              <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#FFFDF0" }}>
+                <td className="border border-gray-300 px-1.5 py-1">
+                  <select className={labelInputCls} value={row.label_type} onChange={e => update(idx, "label_type", e.target.value)}>
+                    {LABEL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </td>
+                <td className="border border-gray-300 px-1.5 py-1">
+                  <input className={labelInputCls} placeholder="e.g. Woven, Satin, 3x5cm" value={row.quality || ""} onChange={e => update(idx, "quality", e.target.value)} />
+                </td>
+                <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#F1F8E9" }}>
+                  <input className={labelInputCls} placeholder="e.g. 3x5cm" value={row.size_spec || ""} onChange={e => update(idx, "size_spec", e.target.value)} />
+                </td>
+                <td className="border border-gray-300 px-1.5 py-1">
+                  <input className={labelInputCls} placeholder="Color" value={row.color || ""} onChange={e => update(idx, "color", e.target.value)} />
+                </td>
+                <td className="border border-gray-300 px-1.5 py-1">
+                  <input className={labelInputCls} placeholder="e.g. Center back" value={row.placement || ""} onChange={e => update(idx, "placement", e.target.value)} />
+                </td>
+                <td className="border border-gray-300 px-1.5 py-1 text-center" style={{ backgroundColor: "#FDF6FF" }}>
+                  <select className="w-14 text-center text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none" value={row.multiplier || 1} onChange={e => update(idx, "multiplier", parseFloat(e.target.value))}>
+                    {Array.from({ length: 20 }, (_, i) => i + 1).map(m => <option key={m} value={m}>x{m}</option>)}
+                  </select>
+                </td>
+                <td className="border border-gray-300 px-1.5 py-1 text-center">
+                  <input type="number" min="0" max="100" step="0.5" className={labelNumCls} value={row.wastage_percent} onChange={e => update(idx, "wastage_percent", e.target.value)} />
+                </td>
+                <td className="border border-gray-300 px-2 py-1 text-center font-bold" style={{ backgroundColor: "#FFF2CC" }}>
+                  {inclQty.toLocaleString()}
+                </td>
+                <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#F1F8E9" }}>
+                  <input className={labelInputCls} placeholder="e.g. 1234567890123" value={row.pc_ean_code || ""} onChange={e => update(idx, "pc_ean_code", e.target.value)} />
+                </td>
+                <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#E3F2FD" }}>
+                  <input className={labelInputCls} placeholder="e.g. 9876543210123" value={row.carton_ean_code || ""} onChange={e => update(idx, "carton_ean_code", e.target.value)} />
+                </td>
+                <td className="border border-gray-300 px-1.5 py-1 text-center">
+                  {artRows.length > 1 && <button onClick={() => remove(idx)} className="text-red-400 hover:text-red-600"><Trash2 className="h-3 w-3" /></button>}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div className="px-3 py-1.5 bg-gray-50 border-t border-gray-200">
+        <button onClick={add} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs font-medium">
+          <Plus className="h-3 w-3" /> Add Label
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // ─── Calculation engine ────────────────────────────────────────────────────
 const CALC_TYPES = {
@@ -250,12 +361,15 @@ export default function Trims() {
   const [selectedPoId, setSelectedPoId] = useState("");
   const [saving, setSaving] = useState(false);
   const [allRows, setAllRows] = useState({});
+  const [labelRows, setLabelRows] = useState({});
   const [autoPopulated, setAutoPopulated] = useState(false);
+  const [activeTab, setActiveTab] = useState("trims"); // "trims" | "labels"
   const initKeyRef = useRef(null);
 
   const { data: pos = [] } = useQuery({ queryKey: ["purchaseOrders"], queryFn: () => base44.entities.PurchaseOrder.list() });
   const { data: articles = [] } = useQuery({ queryKey: ["articles"], queryFn: () => base44.entities.Article.list() });
   const { data: existingTrims = [] } = useQuery({ queryKey: ["trimItems"], queryFn: () => base44.entities.TrimItem.list("-created_date", 500) });
+  const { data: existingAccessoryItems = [] } = useQuery({ queryKey: ["accessoryItemsForLabels"], queryFn: () => base44.entities.AccessoryItem.list("-created_date", 2000) });
   const { data: fabricTemplates = [] } = useQuery({ queryKey: ["fabricTemplates"], queryFn: () => base44.entities.FabricTemplate.list() });
   const { data: techPackRecords = [] } = useQuery({ queryKey: ["techPackRecords"], queryFn: () => base44.entities.TechPackRecord.list("-created_date", 500) });
 
@@ -389,8 +503,42 @@ export default function Trims() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePo?.id, poArticleIds, trimIds, tpIds]);
 
+  // Load label rows from AccessoryItem (category=Label)
+  const labelItemIds = existingAccessoryItems.map(i => i.id).sort().join(',');
+  useEffect(() => {
+    if (!activePo || poArticles.length === 0) return;
+    const init = {};
+    poArticles.forEach(art => {
+      const saved = existingAccessoryItems.filter(
+        i => i.po_id === activePo.id && i.article_code === art.article_code && i.category === "Label"
+      );
+      if (saved.length > 0) {
+        init[art.id] = saved.map(e => ({
+          label_type: e.item_description || "Brand Label",
+          quality: e.size_spec || "",
+          size_spec: e.color || "",
+          color: e.notes || "",
+          placement: e.notes || "",
+          multiplier: e.multiplier ?? 1,
+          wastage_percent: e.wastage_percent ?? 5,
+          pc_ean_code: e.pc_ean_code || "",
+          carton_ean_code: e.carton_ean_code || "",
+          existing_id: e.id,
+        }));
+      } else {
+        init[art.id] = [defaultLabelRow()];
+      }
+    });
+    setLabelRows(init);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePo?.id, poArticleIds, labelItemIds]);
+
   const handleChange = (artId, newRows) => {
     setAllRows(prev => ({ ...prev, [artId]: newRows }));
+  };
+
+  const handleLabelChange = (artId, newRows) => {
+    setLabelRows(prev => ({ ...prev, [artId]: newRows }));
   };
 
   const handleApproveAll = () => {
@@ -440,6 +588,45 @@ export default function Trims() {
     const BATCH = 3;
     for (let i = 0; i < ops.length; i += BATCH) await Promise.all(ops.slice(i, i + BATCH));
     queryClient.invalidateQueries({ queryKey: ["trimItems"] });
+    setSaving(false);
+  };
+
+  const handleSaveLabels = async () => {
+    if (!activePo) return;
+    setSaving(true);
+    const ops = [];
+    for (const art of poArticles) {
+      const qty = art.order_quantity || 0;
+      const rows = labelRows[art.id] || [];
+      for (const row of rows) {
+        if (!row.label_type) continue;
+        const inclQty = Math.ceil(qty * (parseFloat(row.multiplier) || 1) * (1 + (parseFloat(row.wastage_percent) || 0) / 100));
+        const data = {
+          po_id: activePo.id,
+          po_number: activePo.po_number,
+          article_name: art.article_name,
+          article_code: art.article_code,
+          packing_type: "Sheet Pack",
+          category: "Label",
+          item_description: row.label_type,
+          size_spec: row.quality || "",
+          color: row.size_spec || "",
+          notes: row.placement || "",
+          multiplier: parseFloat(row.multiplier) || 1,
+          wastage_percent: parseFloat(row.wastage_percent) || 0,
+          quantity_required: inclQty,
+          pc_ean_code: row.pc_ean_code || "",
+          carton_ean_code: row.carton_ean_code || "",
+          unit: "Pcs",
+          status: "Planned",
+        };
+        if (row.existing_id) ops.push(base44.entities.AccessoryItem.update(row.existing_id, data));
+        else ops.push(base44.entities.AccessoryItem.create(data));
+      }
+    }
+    const BATCH = 3;
+    for (let i = 0; i < ops.length; i += BATCH) await Promise.all(ops.slice(i, i + BATCH));
+    queryClient.invalidateQueries({ queryKey: ["accessoryItemsForLabels"] });
     setSaving(false);
   };
 
@@ -507,106 +694,200 @@ export default function Trims() {
           <SelectTrigger className="w-72 h-8 text-xs"><SelectValue placeholder="Select Purchase Order" /></SelectTrigger>
           <SelectContent>{pos.map(p => <SelectItem key={p.id} value={p.id}>{p.po_number} – {p.customer_name}</SelectItem>)}</SelectContent>
         </Select>
-        <Button size="sm" onClick={handleSave} disabled={saving || !activePo} className="gap-1.5">
-          <Save className="h-3.5 w-3.5" /> {saving ? "Saving..." : "Save"}
-        </Button>
-        {pendingApprovalCount > 0 && (
-          <Button size="sm" variant="outline" onClick={handleApproveAll} className="gap-1.5 border-green-500 text-green-700 hover:bg-green-50">
-            <CheckCircle2 className="h-3.5 w-3.5" /> Approve All ({pendingApprovalCount})
+        {activeTab === "trims" && (
+          <>
+            <Button size="sm" onClick={handleSave} disabled={saving || !activePo} className="gap-1.5">
+              <Save className="h-3.5 w-3.5" /> {saving ? "Saving..." : "Save Trims"}
+            </Button>
+            {pendingApprovalCount > 0 && (
+              <Button size="sm" variant="outline" onClick={handleApproveAll} className="gap-1.5 border-green-500 text-green-700 hover:bg-green-50">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Approve All ({pendingApprovalCount})
+              </Button>
+            )}
+            <div className="flex gap-1.5 ml-auto">
+              <Button size="sm" variant="outline" onClick={handleDownloadCSV} disabled={!activePo || poArticles.length === 0} className="gap-1.5">
+                <Download className="h-3.5 w-3.5" /> CSV
+              </Button>
+              <Button size="sm" variant="outline" onClick={handlePrint} disabled={!activePo || poArticles.length === 0} className="gap-1.5">
+                <Printer className="h-3.5 w-3.5" /> Print
+              </Button>
+            </div>
+          </>
+        )}
+        {activeTab === "labels" && (
+          <Button size="sm" onClick={handleSaveLabels} disabled={saving || !activePo} className="gap-1.5">
+            <Save className="h-3.5 w-3.5" /> {saving ? "Saving..." : "Save Labels"}
           </Button>
         )}
-        <div className="flex gap-1.5 ml-auto">
-          <Button size="sm" variant="outline" onClick={handleDownloadCSV} disabled={!activePo || poArticles.length === 0} className="gap-1.5">
-            <Download className="h-3.5 w-3.5" /> CSV
-          </Button>
-          <Button size="sm" variant="outline" onClick={handlePrint} disabled={!activePo || poArticles.length === 0} className="gap-1.5">
-            <Printer className="h-3.5 w-3.5" /> Print
-          </Button>
-        </div>
       </div>
 
-      {/* Status banners */}
-      {autoPopulated && (
-        <div className="flex items-center gap-2 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 text-xs text-amber-800">
-          <Zap className="h-3.5 w-3.5 flex-shrink-0" />
-          <span><b>Auto-populated from Approved Tech Pack.</b> Review and approve each trim before saving.</span>
-          {pendingApprovalCount > 0 && <span className="ml-1 font-bold">{pendingApprovalCount} items pending approval.</span>}
-        </div>
-      )}
-      {missingCount > 0 && (
-        <div className="flex items-center gap-2 bg-red-50 border border-red-300 rounded-lg px-3 py-2 text-xs text-red-800">
-          <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
-          <span><b>{missingCount} trims found in Master Data but NOT in Tech Pack.</b> Review highlighted rows (red background) and confirm or remove.</span>
-        </div>
-      )}
-
-      {/* Legend */}
-      <div className="flex flex-wrap gap-3 text-[10px] text-gray-500 bg-gray-50 border border-gray-200 rounded px-3 py-2">
-        <span className="font-semibold text-gray-600">Legend:</span>
-        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-amber-400" /> From Tech Pack (pending)</span>
-        <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-green-600" /> Approved</span>
-        <span className="flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-red-500" /> Missing vs Master Data</span>
-        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-blue-400" /> From Master Data</span>
-        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-gray-300" /> Manual entry</span>
+      {/* Main Tabs */}
+      <div className="flex items-center gap-0 border-b-2 border-gray-200">
+        <button onClick={() => setActiveTab("trims")}
+          className={`px-5 py-2 text-sm font-medium border-b-2 -mb-0.5 transition-colors ${activeTab === "trims" ? "border-blue-700 text-blue-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
+          Trims & Hardware
+        </button>
+        <button onClick={() => setActiveTab("labels")}
+          className={`px-5 py-2 text-sm font-medium border-b-2 -mb-0.5 transition-colors flex items-center gap-1.5 ${activeTab === "labels" ? "border-amber-600 text-amber-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
+          <Tag className="h-3.5 w-3.5" /> Labels
+        </button>
       </div>
 
-      {/* Calc type legend */}
-      <div className="flex flex-wrap gap-2">
-        {Object.entries(CALC_TYPES).map(([k, v]) => (
-          <div key={k} className="flex items-center gap-1.5 text-xs bg-blue-50 border border-blue-200 rounded px-2 py-1 text-blue-700">
-            <Info className="h-3 w-3" />
-            <span><b>{v.label}:</b> {v.desc}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Article blocks */}
-      {poArticles.length === 0 ? (
-        <div className="py-12 text-center text-muted-foreground text-sm">No articles found for this PO.</div>
-      ) : (
+      {/* ── TRIMS TAB ── */}
+      {activeTab === "trims" && (
         <>
-          <div className="space-y-3">
-            {poArticles.map(art => {
-              const artMissing = (allRows[art.id] || []).filter(r => r.source === "missing").length;
-              return (
-                <ArticleBlock
-                  key={art.id}
-                  art={art}
-                  rows={allRows}
-                  onChange={handleChange}
-                  missingFromMaster={artMissing}
-                />
-              );
-            })}
+          {/* Status banners */}
+          {autoPopulated && (
+            <div className="flex items-center gap-2 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 text-xs text-amber-800">
+              <Zap className="h-3.5 w-3.5 flex-shrink-0" />
+              <span><b>Auto-populated from Approved Tech Pack.</b> Review and approve each trim before saving.</span>
+              {pendingApprovalCount > 0 && <span className="ml-1 font-bold">{pendingApprovalCount} items pending approval.</span>}
+            </div>
+          )}
+          {missingCount > 0 && (
+            <div className="flex items-center gap-2 bg-red-50 border border-red-300 rounded-lg px-3 py-2 text-xs text-red-800">
+              <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+              <span><b>{missingCount} trims found in Master Data but NOT in Tech Pack.</b> Review highlighted rows (red background) and confirm or remove.</span>
+            </div>
+          )}
+
+          {/* Legend */}
+          <div className="flex flex-wrap gap-3 text-[10px] text-gray-500 bg-gray-50 border border-gray-200 rounded px-3 py-2">
+            <span className="font-semibold text-gray-600">Legend:</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-amber-400" /> From Tech Pack (pending)</span>
+            <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-green-600" /> Approved</span>
+            <span className="flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-red-500" /> Missing vs Master Data</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-blue-400" /> From Master Data</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-gray-300" /> Manual entry</span>
           </div>
 
-          {/* Totals */}
-          {totalEntries.length > 0 && (
-            <div className="rounded border border-gray-300 overflow-hidden shadow-sm">
-              <div className="px-3 py-2 text-xs font-bold text-white" style={{ backgroundColor: "#1F3864" }}>
-                TRIMS — TOTALS SUMMARY
+          {/* Calc type legend */}
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(CALC_TYPES).map(([k, v]) => (
+              <div key={k} className="flex items-center gap-1.5 text-xs bg-blue-50 border border-blue-200 rounded px-2 py-1 text-blue-700">
+                <Info className="h-3 w-3" />
+                <span><b>{v.label}:</b> {v.desc}</span>
               </div>
-              <table className="w-full text-xs border-collapse">
-                <thead>
-                  <tr style={{ backgroundColor: "#EBF0FA" }}>
-                    <th className="border border-gray-300 px-3 py-1.5 text-left">Category</th>
-                    <th className="border border-gray-300 px-3 py-1.5 text-left">Description</th>
-                    <th className="border border-gray-300 px-3 py-1.5 text-center w-24">Unit</th>
-                    <th className="border border-gray-300 px-3 py-1.5 text-center w-40" style={{ backgroundColor: "#FFF2CC" }}>Total Qty Required</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {totalEntries.map((t, idx) => (
-                    <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#F9FAFB" }}>
-                      <td className="border border-gray-300 px-3 py-1.5 font-medium">{t.category}</td>
-                      <td className="border border-gray-300 px-3 py-1.5">{t.desc}</td>
-                      <td className="border border-gray-300 px-3 py-1.5 text-center">{t.unit}</td>
-                      <td className="border border-gray-300 px-3 py-1.5 text-center font-bold" style={{ backgroundColor: "#FFF9E6" }}>{t.qty.toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            ))}
+          </div>
+
+          {/* Article blocks */}
+          {poArticles.length === 0 ? (
+            <div className="py-12 text-center text-muted-foreground text-sm">No articles found for this PO.</div>
+          ) : (
+            <>
+              <div className="space-y-3">
+                {poArticles.map(art => {
+                  const artMissing = (allRows[art.id] || []).filter(r => r.source === "missing").length;
+                  return (
+                    <ArticleBlock
+                      key={art.id}
+                      art={art}
+                      rows={allRows}
+                      onChange={handleChange}
+                      missingFromMaster={artMissing}
+                    />
+                  );
+                })}
+              </div>
+
+              {/* Totals */}
+              {totalEntries.length > 0 && (
+                <div className="rounded border border-gray-300 overflow-hidden shadow-sm">
+                  <div className="px-3 py-2 text-xs font-bold text-white" style={{ backgroundColor: "#1F3864" }}>
+                    TRIMS — TOTALS SUMMARY
+                  </div>
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr style={{ backgroundColor: "#EBF0FA" }}>
+                        <th className="border border-gray-300 px-3 py-1.5 text-left">Category</th>
+                        <th className="border border-gray-300 px-3 py-1.5 text-left">Description</th>
+                        <th className="border border-gray-300 px-3 py-1.5 text-center w-24">Unit</th>
+                        <th className="border border-gray-300 px-3 py-1.5 text-center w-40" style={{ backgroundColor: "#FFF2CC" }}>Total Qty Required</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {totalEntries.map((t, idx) => (
+                        <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#F9FAFB" }}>
+                          <td className="border border-gray-300 px-3 py-1.5 font-medium">{t.category}</td>
+                          <td className="border border-gray-300 px-3 py-1.5">{t.desc}</td>
+                          <td className="border border-gray-300 px-3 py-1.5 text-center">{t.unit}</td>
+                          <td className="border border-gray-300 px-3 py-1.5 text-center font-bold" style={{ backgroundColor: "#FFF9E6" }}>{t.qty.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+
+      {/* ── LABELS TAB ── */}
+      {activeTab === "labels" && (
+        <>
+          <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
+            <Tag className="h-3.5 w-3.5 flex-shrink-0" />
+            <span>Enter all label requirements per article. Quantities are auto-calculated including wastage and multiplier.</span>
+          </div>
+          {poArticles.length === 0 ? (
+            <div className="py-12 text-center text-muted-foreground text-sm">No articles found for this PO.</div>
+          ) : (
+            <>
+              <div className="space-y-3">
+                {poArticles.map(art => (
+                  <LabelArticleBlock
+                    key={art.id}
+                    art={art}
+                    rows={labelRows}
+                    onChange={handleLabelChange}
+                  />
+                ))}
+              </div>
+
+              {/* Label Totals */}
+              {(() => {
+                const labelTotals = {};
+                poArticles.forEach(art => {
+                  const qty = art.order_quantity || 0;
+                  (labelRows[art.id] || []).forEach(row => {
+                    if (!row.label_type) return;
+                    const inclQty = Math.ceil(qty * (parseFloat(row.multiplier) || 1) * (1 + (parseFloat(row.wastage_percent) || 0) / 100));
+                    const key = `${row.label_type}||${row.quality || ""}`;
+                    if (!labelTotals[key]) labelTotals[key] = { label_type: row.label_type, quality: row.quality || "", qty: 0 };
+                    labelTotals[key].qty += inclQty;
+                  });
+                });
+                const entries = Object.values(labelTotals);
+                if (entries.length === 0) return null;
+                return (
+                  <div className="rounded border border-gray-300 overflow-hidden shadow-sm">
+                    <div className="px-3 py-2 text-xs font-bold text-white" style={{ backgroundColor: "#B45309" }}>
+                      LABELS — TOTALS SUMMARY
+                    </div>
+                    <table className="w-full text-xs border-collapse">
+                      <thead>
+                        <tr style={{ backgroundColor: "#FFF8E1" }}>
+                          <th className="border border-gray-300 px-3 py-1.5 text-left">Label Type</th>
+                          <th className="border border-gray-300 px-3 py-1.5 text-left">Quality / Description</th>
+                          <th className="border border-gray-300 px-3 py-1.5 text-center w-40" style={{ backgroundColor: "#FFF2CC" }}>Total Qty Required</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {entries.map((t, idx) => (
+                          <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#FFFDF0" }}>
+                            <td className="border border-gray-300 px-3 py-1.5 font-medium">{t.label_type}</td>
+                            <td className="border border-gray-300 px-3 py-1.5">{t.quality}</td>
+                            <td className="border border-gray-300 px-3 py-1.5 text-center font-bold" style={{ backgroundColor: "#FFF9E6" }}>{t.qty.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+            </>
           )}
         </>
       )}

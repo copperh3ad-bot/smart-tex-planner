@@ -7,20 +7,6 @@ import { Save, Plus, Trash2, AlertTriangle, CheckCircle2, Lock } from "lucide-re
 
 // ─── Tab configuration ─────────────────────────────────────────────────────
 const TAB_CONFIG = {
-  Labels: {
-    category: "Label",
-    typeOptions: [
-      "Brand Label", "Care Label", "Size Label", "Direction Label", "GOTS Label",
-      "Barcode Label", "Hang Tag", "Country of Origin Label", "Composition Label",
-      "Wash Label", "Price Ticket", "Compliance Label", "Retailer Label", "Eco Label",
-      "Care label in 3 Languages 1X3", "Custom Label"
-    ],
-    typeLabel: "Label Type",
-    qualityLabel: "Quality / Description",
-    qualityPlaceholder: "e.g. Woven, Satin, 3x5cm",
-    defaultWastage: 5,
-    showMultiplier: true,
-  },
   "Insert Card": {
     category: "Insert Card",
     typeOptions: ["Art Card", "Box Packaging", "Bleach Card", "Bux Board", "Custom"],
@@ -89,9 +75,9 @@ const TAB_CONFIG = {
 
 // ─── Pack type → allowed tabs ──────────────────────────────────────────────
 const PACK_TABS = {
-  "Sheet Pack": ["Labels", "Insert Card", "Polybag", "Stiffener", "Carton", "Sticker", "Bellyband (BB)"],
-  "Roll Pack":  ["Labels", "Polybag", "Carton", "Sticker", "Bellyband (BB)"],
-  "Box Pack":   ["Labels", "Polybag", "Carton", "Sticker"],
+  "Sheet Pack": ["Insert Card", "Polybag", "Stiffener", "Carton", "Sticker", "Bellyband (BB)"],
+  "Roll Pack":  ["Polybag", "Carton", "Sticker", "Bellyband (BB)"],
+  "Box Pack":   ["Polybag", "Carton", "Sticker"],
 };
 
 const PACK_COLORS = {
