@@ -556,14 +556,21 @@ export default function Trims() {
   const handleSave = async () => {
     if (!activePo) return;
     setSaving(true);
-    const ops = [];
+    // Delete all existing trims for this PO first to prevent duplicates
+    const deleteOps = existingTrims
+      .filter(t => t.po_id === activePo.id)
+      .map(t => base44.entities.TrimItem.delete(t.id));
+    const BATCH = 3;
+    for (let i = 0; i < deleteOps.length; i += BATCH) await Promise.all(deleteOps.slice(i, i + BATCH));
+
+    const createOps = [];
     for (const art of poArticles) {
       const rows = allRows[art.id] || [];
       for (const row of rows) {
         if (!row.item_description && !row.trim_category) continue;
         const calcDef = CALC_TYPES[row.calc_type] || CALC_TYPES["Per Piece"];
         const calcQty = calcDef.calc(row, art);
-        const data = {
+        createOps.push(base44.entities.TrimItem.create({
           po_id: activePo.id,
           po_number: activePo.po_number,
           article_name: art.article_name,
@@ -580,28 +587,33 @@ export default function Trims() {
           quantity_required: calcQty,
           unit: row.unit || "Pcs",
           status: "Planned",
-        };
-        if (row.existing_id) ops.push(base44.entities.TrimItem.update(row.existing_id, data));
-        else ops.push(base44.entities.TrimItem.create(data));
+        }));
       }
     }
-    const BATCH = 3;
-    for (let i = 0; i < ops.length; i += BATCH) await Promise.all(ops.slice(i, i + BATCH));
+    for (let i = 0; i < createOps.length; i += BATCH) await Promise.all(createOps.slice(i, i + BATCH));
     queryClient.invalidateQueries({ queryKey: ["trimItems"] });
+    initKeyRef.current = null;
     setSaving(false);
   };
 
   const handleSaveLabels = async () => {
     if (!activePo) return;
     setSaving(true);
-    const ops = [];
+    const BATCH = 3;
+    // Delete all existing Label AccessoryItems for this PO to prevent duplicates
+    const deleteOps = existingAccessoryItems
+      .filter(i => i.po_id === activePo.id && i.category === "Label")
+      .map(i => base44.entities.AccessoryItem.delete(i.id));
+    for (let i = 0; i < deleteOps.length; i += BATCH) await Promise.all(deleteOps.slice(i, i + BATCH));
+
+    const createOps = [];
     for (const art of poArticles) {
       const qty = art.order_quantity || 0;
       const rows = labelRows[art.id] || [];
       for (const row of rows) {
         if (!row.label_type) continue;
         const inclQty = Math.ceil(qty * (parseFloat(row.multiplier) || 1) * (1 + (parseFloat(row.wastage_percent) || 0) / 100));
-        const data = {
+        createOps.push(base44.entities.AccessoryItem.create({
           po_id: activePo.id,
           po_number: activePo.po_number,
           article_name: art.article_name,
@@ -619,14 +631,12 @@ export default function Trims() {
           carton_ean_code: row.carton_ean_code || "",
           unit: "Pcs",
           status: "Planned",
-        };
-        if (row.existing_id) ops.push(base44.entities.AccessoryItem.update(row.existing_id, data));
-        else ops.push(base44.entities.AccessoryItem.create(data));
+        }));
       }
     }
-    const BATCH = 3;
-    for (let i = 0; i < ops.length; i += BATCH) await Promise.all(ops.slice(i, i + BATCH));
+    for (let i = 0; i < createOps.length; i += BATCH) await Promise.all(createOps.slice(i, i + BATCH));
     queryClient.invalidateQueries({ queryKey: ["accessoryItemsForLabels"] });
+    initKeyRef.current = null;
     setSaving(false);
   };
 

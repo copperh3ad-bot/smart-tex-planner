@@ -38,7 +38,7 @@ const TAB_CONFIG = {
     typeLabel: "Carton Type",
     splitDescSize: true, descLabel: "Description", descPlaceholder: "e.g. 5-ply B-flute",
     sizeLabel: "Size (LxWxH cm)", sizePlaceholder: "e.g. 56x28x27",
-    autoFillSize: true, defaultWastage: 2,
+    autoFillSize: true, defaultWastage: 2, isCarton: true,
   },
   Sticker: {
     category: "Sticker",
@@ -86,6 +86,7 @@ const defaultRow = (cfg) => ({
   type: cfg.typeOptions[0], quality: "", description: "", size: "",
   wastage_percent: cfg.defaultWastage, existing_id: null,
   pc_ean_code: "", carton_ean_code: "", multiplier: 1, bbOption: "With",
+  pieces_per_carton: cfg.isCarton ? 1 : undefined,
 });
 
 // ─── Article Block ─────────────────────────────────────────────────────────
@@ -182,7 +183,8 @@ function ArticleBlock({ art, cfg, rows, onChange, cartonSize, templates = [], pa
                 )}
                 <th className="border border-gray-300 px-2 py-1.5 text-center w-20">Qty</th>
                 <th className="border border-gray-300 px-2 py-1.5 text-center w-24">Wastage %</th>
-                <th className="border border-gray-300 px-2 py-1.5 text-center w-28" style={{ backgroundColor: "#FFF2CC" }}>Incl. Wastage Qty</th>
+                {cfg.isCarton && <th className="border border-gray-300 px-2 py-1.5 text-center w-24" style={{ backgroundColor: "#E3F2FD" }}>Pcs/Ctn</th>}
+                <th className="border border-gray-300 px-2 py-1.5 text-center w-28" style={{ backgroundColor: "#FFF2CC" }}>{cfg.isCarton ? "Carton Order Qty" : "Incl. Wastage Qty"}</th>
                 {cfg.showEAN && <th className="border border-gray-300 px-2 py-1.5 text-left w-36" style={{ backgroundColor: "#E8F5E9" }}>PC EAN</th>}
                 {cfg.showEAN && <th className="border border-gray-300 px-2 py-1.5 text-left w-36" style={{ backgroundColor: "#E3F2FD" }}>Carton EAN</th>}
                 <th className="border border-gray-300 px-2 py-1.5 w-8"></th>
@@ -202,7 +204,16 @@ function ArticleBlock({ art, cfg, rows, onChange, cartonSize, templates = [], pa
                   )}
                   <td className="border border-gray-300 px-2 py-1 text-center font-medium">{qty.toLocaleString()}</td>
                   <td className="border border-gray-300 px-1.5 py-1 text-center"><input type="number" min="0" max="100" step="0.5" className={numInputCls} value={row.wastage_percent} onChange={e => update(idx, "wastage_percent", e.target.value)} /></td>
-                  <td className="border border-gray-300 px-2 py-1 text-center font-bold" style={{ backgroundColor: "#FFF2CC" }}>{calcWithMultiplier(qty, row.wastage_percent, 1).toLocaleString()}</td>
+                  {cfg.isCarton && (
+                    <td className="border border-gray-300 px-1.5 py-1 text-center" style={{ backgroundColor: "#EBF5FB" }}>
+                      <input type="number" min="1" step="1" className={numInputCls} value={row.pieces_per_carton ?? 1} onChange={e => update(idx, "pieces_per_carton", e.target.value)} title="Pieces per carton" />
+                    </td>
+                  )}
+                  <td className="border border-gray-300 px-2 py-1 text-center font-bold" style={{ backgroundColor: "#FFF2CC" }}>
+                    {cfg.isCarton
+                      ? Math.ceil(calcWithMultiplier(qty, row.wastage_percent, 1) / (parseFloat(row.pieces_per_carton) || 1)).toLocaleString()
+                      : calcWithMultiplier(qty, row.wastage_percent, 1).toLocaleString()}
+                  </td>
                   {cfg.showEAN && <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#F1F8E9" }}><input className={inputCls} placeholder="e.g. 1234567890123" value={row.pc_ean_code || ""} onChange={e => update(idx, "pc_ean_code", e.target.value)} /></td>}
                   {cfg.showEAN && <td className="border border-gray-300 px-1.5 py-1" style={{ backgroundColor: "#E3F2FD" }}><input className={inputCls} placeholder="e.g. 9876543210123" value={row.carton_ean_code || ""} onChange={e => update(idx, "carton_ean_code", e.target.value)} /></td>}
                   <td className="border border-gray-300 px-1.5 py-1 text-center">{artRows.length > 1 && <button onClick={() => remove(idx)} className="text-red-400 hover:text-red-600"><Trash2 className="h-3 w-3" /></button>}</td>
@@ -494,6 +505,7 @@ export default function UnifiedPackagingPlanning() {
             carton_ean_code: e.carton_ean_code || "",
             existing_id: e.id,
             bbOption: cfg.isBellyband ? (e.quantity_required === 0 ? "Without" : "With") : "With",
+            pieces_per_carton: cfg.isCarton ? (e.multiplier || 1) : undefined,
           }));
         } else {
           const row = defaultRow(cfg);
@@ -525,19 +537,32 @@ export default function UnifiedPackagingPlanning() {
   };
 
   // Build save ops for active pack type only — Rule 2
+  // Uses delete-then-recreate per (tab, article) to prevent duplicate records
   const buildOps = (tabsToSave) => {
-    const ops = [];
+    const deleteOps = [];
+    const createOps = [];
     tabsToSave.forEach(tab => {
       const cfg = TAB_CONFIG[tab];
       for (const art of poArticles) {
         const qty = art.order_quantity || 0;
         const rows = allRows[tab]?.[art.id] || [];
+
+        // Delete all existing records for this tab+article+packType to avoid duplicates
+        const toDelete = existingItems.filter(i =>
+          i.po_id === activePo.id &&
+          i.article_code === art.article_code &&
+          i.packing_type === activePackType &&
+          i.category === cfg.category &&
+          (cfg.isBellyband ? i.item_description === "Bellyband" : i.item_description !== "Bellyband")
+        );
+        toDelete.forEach(i => deleteOps.push(base44.entities.AccessoryItem.delete(i.id)));
+
         if (cfg.isBellyband) {
           for (const row of rows) {
             if (!row.type && !row.description) continue;
             const withBB = (row.bbOption || "With") !== "Without";
             const bbQty = withBB ? calcInclWastage(qty, row.wastage_percent) : 0;
-            const data = {
+            createOps.push(base44.entities.AccessoryItem.create({
               po_id: activePo.id, po_number: activePo.po_number,
               article_name: art.article_name, article_code: art.article_code,
               packing_type: activePackType, category: "Polybag",
@@ -546,61 +571,67 @@ export default function UnifiedPackagingPlanning() {
               wastage_percent: parseFloat(row.wastage_percent) || 0,
               multiplier: 1, unit: "Pcs", status: approvalStatus === "Approved" ? "Approved" : "Planned",
               notes: buyerInstructions,
-            };
-            if (row.existing_id) ops.push(base44.entities.AccessoryItem.update(row.existing_id, data));
-            else ops.push(base44.entities.AccessoryItem.create(data));
+            }));
           }
           continue;
         }
+
         for (const row of rows) {
           const hasContent = cfg.splitDescSize ? (row.description || row.size) : (row.type || row.quality);
           if (!hasContent) continue;
-          const data = {
+          const pcsPerCtn = cfg.isCarton ? (parseFloat(row.pieces_per_carton) || 1) : 1;
+          const rawQty = calcWithMultiplier(qty, row.wastage_percent, 1);
+          const finalQty = cfg.isCarton ? Math.ceil(rawQty / pcsPerCtn) : rawQty;
+          createOps.push(base44.entities.AccessoryItem.create({
             po_id: activePo.id, po_number: activePo.po_number,
             article_name: art.article_name, article_code: art.article_code,
             packing_type: activePackType, category: cfg.category,
             item_description: cfg.category === "Insert Card" ? (row.quality || "") : row.type,
             size_spec: cfg.category === "Insert Card" ? (row.type || "") : (cfg.splitDescSize ? (row.description || "") : (row.quality || "")),
             color: cfg.splitDescSize ? (row.size || "") : "",
-            quantity_required: calcWithMultiplier(qty, row.wastage_percent, 1),
+            quantity_required: finalQty,
             wastage_percent: parseFloat(row.wastage_percent) || 0,
-            multiplier: 1,
+            // Store pieces_per_carton in multiplier field for Carton rows so it survives reload
+            multiplier: cfg.isCarton ? pcsPerCtn : 1,
             pc_ean_code: row.pc_ean_code || "",
             carton_ean_code: row.carton_ean_code || "",
-            unit: "Pcs", status: approvalStatus === "Approved" ? "Approved" : "Planned",
+            unit: cfg.isCarton ? "Pcs" : "Pcs",
+            status: approvalStatus === "Approved" ? "Approved" : "Planned",
             notes: buyerInstructions,
-          };
-          if (row.existing_id) ops.push(base44.entities.AccessoryItem.update(row.existing_id, data));
-          else ops.push(base44.entities.AccessoryItem.create(data));
+          }));
         }
       }
     });
-    return ops;
+    return { deleteOps, createOps };
   };
 
-  const runOps = async (ops) => {
+  const runBatch = async (ops) => {
     const BATCH = 3;
     for (let i = 0; i < ops.length; i += BATCH) {
       await Promise.all(ops.slice(i, i + BATCH));
       if (i + BATCH < ops.length) await new Promise(r => setTimeout(r, 100));
     }
-    queryClient.invalidateQueries({ queryKey: ["accessoryItems"] });
-    initKeyRef.current = null;
   };
 
   const handleSaveAll = async () => {
     if (!activePo) return;
     setSaving(true);
-    const ops = buildOps(PACK_TABS[activePackType]);
-    if (ops.length > 0) await runOps(ops);
+    const { deleteOps, createOps } = buildOps(PACK_TABS[activePackType]);
+    if (deleteOps.length > 0) await runBatch(deleteOps);
+    if (createOps.length > 0) await runBatch(createOps);
+    queryClient.invalidateQueries({ queryKey: ["accessoryItems"] });
+    initKeyRef.current = null;
     setSaving(false);
   };
 
   const handleSaveTab = async () => {
     if (!activePo) return;
     setSaving(true);
-    const ops = buildOps([subTab]);
-    if (ops.length > 0) await runOps(ops);
+    const { deleteOps, createOps } = buildOps([subTab]);
+    if (deleteOps.length > 0) await runBatch(deleteOps);
+    if (createOps.length > 0) await runBatch(createOps);
+    queryClient.invalidateQueries({ queryKey: ["accessoryItems"] });
+    initKeyRef.current = null;
     setSaving(false);
   };
 
