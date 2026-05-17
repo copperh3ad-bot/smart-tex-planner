@@ -216,16 +216,14 @@ export default function AccessoryPurchaseOrders() {
 
       {/* View PO Dialog */}
       {viewingPO && (() => {
-        // Build category summary
-        const catSummary = {};
+        // Build description-wise summary grouped by category
+        const catGroups = {};
         (viewingPO.items || []).forEach(item => {
           const cat = item.category || "Other";
-          if (!catSummary[cat]) catSummary[cat] = { count: 0, totalQty: 0, totalCost: 0 };
-          catSummary[cat].count++;
-          catSummary[cat].totalQty += item.quantity || 0;
-          catSummary[cat].totalCost += item.total_cost || 0;
+          if (!catGroups[cat]) catGroups[cat] = [];
+          catGroups[cat].push(item);
         });
-        const summaryEntries = Object.entries(catSummary);
+        const summaryEntries = Object.entries(catGroups);
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
             <div className="bg-card rounded-xl shadow-2xl w-full max-w-3xl mx-4 max-h-[90vh] flex flex-col">
@@ -300,36 +298,60 @@ export default function AccessoryPurchaseOrders() {
                       ))}
                     </div>
 
-                    {/* Category breakdown */}
+                    {/* Description-wise Summary grouped by Category */}
                     <div>
-                      <p className="text-xs font-bold text-gray-600 uppercase mb-2">Category Breakdown</p>
+                      <p className="text-xs font-bold text-gray-600 uppercase mb-2">Description-wise Summary</p>
                       <div className="rounded border border-gray-300 overflow-hidden">
                         <table className="w-full text-xs border-collapse">
                           <thead>
                             <tr style={{ backgroundColor: "#1F3864", color: "white" }}>
-                              <th className="border border-gray-400 px-3 py-2 text-left">Category</th>
-                              <th className="border border-gray-400 px-3 py-2 text-center">No. of Items</th>
+                              <th className="border border-gray-400 px-3 py-2 text-left">Description</th>
+                              <th className="border border-gray-400 px-3 py-2 text-left">Spec/Size</th>
+                              <th className="border border-gray-400 px-3 py-2 text-left">Unit</th>
                               <th className="border border-gray-400 px-3 py-2 text-center" style={{ backgroundColor: "#7d6608" }}>Total Qty</th>
+                              <th className="border border-gray-400 px-3 py-2 text-right">Unit Cost</th>
                               <th className="border border-gray-400 px-3 py-2 text-right">Total Cost ({viewingPO.currency})</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {summaryEntries.map(([cat, s], idx) => (
-                              <tr key={cat} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#F9FAFB" }}>
-                                <td className="border border-gray-300 px-3 py-1.5 font-medium">{cat}</td>
-                                <td className="border border-gray-300 px-3 py-1.5 text-center">{s.count}</td>
-                                <td className="border border-gray-300 px-3 py-1.5 text-center font-bold" style={{ backgroundColor: "#FFF9E6" }}>{s.totalQty.toLocaleString()}</td>
-                                <td className="border border-gray-300 px-3 py-1.5 text-right font-bold">{s.totalCost > 0 ? s.totalCost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "—"}</td>
-                              </tr>
-                            ))}
+                            {summaryEntries.map(([cat, items]) => {
+                              const catQty = items.reduce((s, i) => s + (i.quantity || 0), 0);
+                              const catCost = items.reduce((s, i) => s + (i.total_cost || 0), 0);
+                              return [
+                                // Category header row
+                                <tr key={`cat-${cat}`}>
+                                  <td colSpan={6} className="px-3 py-1.5 text-xs font-bold text-white" style={{ backgroundColor: "#3D5A99" }}>
+                                    {cat} — {items.length} item{items.length !== 1 ? "s" : ""}
+                                  </td>
+                                </tr>,
+                                // Description rows
+                                ...items.map((item, idx) => (
+                                  <tr key={`${cat}-${idx}`} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#F9FAFB" }}>
+                                    <td className="border border-gray-300 px-3 py-1.5 font-medium">{item.item_description}</td>
+                                    <td className="border border-gray-300 px-3 py-1.5 text-gray-600">{item.size_spec || "—"}</td>
+                                    <td className="border border-gray-300 px-3 py-1.5">{item.unit || "Pcs"}</td>
+                                    <td className="border border-gray-300 px-3 py-1.5 text-center font-bold" style={{ backgroundColor: "#FFF9E6" }}>{(item.quantity || 0).toLocaleString()}</td>
+                                    <td className="border border-gray-300 px-3 py-1.5 text-right">{item.unit_cost ? item.unit_cost : "—"}</td>
+                                    <td className="border border-gray-300 px-3 py-1.5 text-right font-bold">{item.total_cost ? item.total_cost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "—"}</td>
+                                  </tr>
+                                )),
+                                // Category subtotal row
+                                <tr key={`subtotal-${cat}`} style={{ backgroundColor: "#EBF0FA" }}>
+                                  <td colSpan={3} className="border border-gray-300 px-3 py-1.5 text-right text-xs font-bold text-gray-700 italic">Subtotal — {cat}</td>
+                                  <td className="border border-gray-300 px-3 py-1.5 text-center font-bold" style={{ backgroundColor: "#FFF2CC" }}>{catQty.toLocaleString()}</td>
+                                  <td className="border border-gray-300 px-3 py-1.5"></td>
+                                  <td className="border border-gray-300 px-3 py-1.5 text-right font-bold">{catCost > 0 ? catCost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "—"}</td>
+                                </tr>
+                              ];
+                            })}
                           </tbody>
                           <tfoot>
                             <tr style={{ backgroundColor: "#1F3864", color: "white", fontWeight: "bold" }}>
-                              <td className="border border-gray-400 px-3 py-2">TOTAL</td>
-                              <td className="border border-gray-400 px-3 py-2 text-center">{(viewingPO.items || []).length}</td>
+                              <td colSpan={3} className="border border-gray-400 px-3 py-2">GRAND TOTAL</td>
                               <td className="border border-gray-400 px-3 py-2 text-center" style={{ backgroundColor: "#7d6608" }}>
-                                {summaryEntries.reduce((s, [, v]) => s + v.totalQty, 0).toLocaleString()}
+                                {summaryEntries.reduce((s, [, items]) => s + items.reduce((ss, i) => ss + (i.quantity || 0), 0), 0).toLocaleString()}
                               </td>
+                              <td className="border border-gray-400 px-3 py-2"></td>
                               <td className="border border-gray-400 px-3 py-2 text-right" style={{ backgroundColor: "#7d6608" }}>
                                 {(viewingPO.total_cost || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                               </td>
