@@ -755,6 +755,8 @@ export default function UnifiedPackagingPlanning() {
         <div className="py-12 text-center text-muted-foreground text-sm">Select a Purchase Order to begin.</div>
       ) : poArticles.length === 0 ? (
         <div className="py-12 text-center text-muted-foreground text-sm">No articles found for this PO.</div>
+      ) : !TAB_CONFIG[subTab] ? (
+        <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
       ) : (
         <div className="space-y-3">
           {poArticles.map(art => (
