@@ -23,6 +23,7 @@ export default function AccessoryPurchaseOrders() {
   const queryClient = useQueryClient();
   const [showGenerator, setShowGenerator] = useState(false);
   const [viewingPO, setViewingPO] = useState(null);
+  const [viewTab, setViewTab] = useState("items"); // "items" | "summary"
 
   // Generator state
   const [selectedPoId, setSelectedPoId] = useState("");
@@ -199,7 +200,7 @@ export default function AccessoryPurchaseOrders() {
                     <p className="text-xs text-muted-foreground">{(po.items || []).length} items &nbsp;|&nbsp; Total: <span className="font-bold text-foreground">{po.currency} {(po.total_cost || 0).toLocaleString()}</span></p>
                   </div>
                   <div className="flex gap-2 flex-wrap">
-                    <Button size="sm" variant="outline" onClick={() => setViewingPO(po)}><Eye className="h-3.5 w-3.5 mr-1" /> View</Button>
+                    <Button size="sm" variant="outline" onClick={() => { setViewingPO(po); setViewTab("items"); }}><Eye className="h-3.5 w-3.5 mr-1" /> View</Button>
                     <Button size="sm" variant="outline" onClick={() => downloadPDF(po)}><Download className="h-3.5 w-3.5 mr-1" /> PDF</Button>
                     {po.status === "Draft" && <Button size="sm" variant="outline" onClick={() => handleStatusUpdate(po.id, "Issued")}><CheckCircle className="h-3.5 w-3.5 mr-1" /> Issue</Button>}
                     {po.status === "Issued" && <Button size="sm" variant="outline" onClick={() => handleStatusUpdate(po.id, "Confirmed")}>Confirm</Button>}
@@ -214,55 +215,148 @@ export default function AccessoryPurchaseOrders() {
       )}
 
       {/* View PO Dialog */}
-      {viewingPO && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-card rounded-xl shadow-2xl w-full max-w-3xl mx-4 max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b" style={{ backgroundColor: "#1F3864" }}>
-              <div>
-                <h2 className="font-bold text-base text-white">{viewingPO.apo_number}</h2>
-                <p className="text-xs text-blue-200">Supplier: {viewingPO.supplier} &nbsp;|&nbsp; Ref: {viewingPO.po_ref} &nbsp;|&nbsp; {viewingPO.order_date}</p>
+      {viewingPO && (() => {
+        // Build category summary
+        const catSummary = {};
+        (viewingPO.items || []).forEach(item => {
+          const cat = item.category || "Other";
+          if (!catSummary[cat]) catSummary[cat] = { count: 0, totalQty: 0, totalCost: 0 };
+          catSummary[cat].count++;
+          catSummary[cat].totalQty += item.quantity || 0;
+          catSummary[cat].totalCost += item.total_cost || 0;
+        });
+        const summaryEntries = Object.entries(catSummary);
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-card rounded-xl shadow-2xl w-full max-w-3xl mx-4 max-h-[90vh] flex flex-col">
+              <div className="flex items-center justify-between p-4 border-b" style={{ backgroundColor: "#1F3864" }}>
+                <div>
+                  <h2 className="font-bold text-base text-white">{viewingPO.apo_number}</h2>
+                  <p className="text-xs text-blue-200">Supplier: {viewingPO.supplier} &nbsp;|&nbsp; Ref: {viewingPO.po_ref} &nbsp;|&nbsp; {viewingPO.order_date}</p>
+                </div>
+                <button onClick={() => setViewingPO(null)}><X className="h-5 w-5 text-white" /></button>
               </div>
-              <button onClick={() => setViewingPO(null)}><X className="h-5 w-5 text-white" /></button>
-            </div>
-            <div className="overflow-y-auto flex-1 p-4">
-              <div className="overflow-x-auto rounded border border-gray-300">
-                <table className="w-full text-xs border-collapse">
-                  <thead>
-                    <tr style={{ backgroundColor: "#EBF0FA" }}>
-                      {["#", "Category", "Description", "Article", "Spec/Size", "Qty", "Unit", "Unit Cost", "Total"].map(h => (
-                        <th key={h} className="border border-gray-300 px-2 py-1.5 text-left font-semibold">{h}</th>
+
+              {/* Tabs */}
+              <div className="flex border-b bg-gray-50">
+                {["items", "summary"].map(tab => (
+                  <button key={tab} onClick={() => setViewTab(tab)}
+                    className={`px-5 py-2.5 text-xs font-semibold capitalize border-b-2 transition-colors ${viewTab === tab ? "border-blue-700 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
+                    {tab === "items" ? `Items (${(viewingPO.items || []).length})` : "Summary"}
+                  </button>
+                ))}
+              </div>
+
+              <div className="overflow-y-auto flex-1 p-4">
+                {viewTab === "items" ? (
+                  <>
+                    <div className="overflow-x-auto rounded border border-gray-300">
+                      <table className="w-full text-xs border-collapse">
+                        <thead>
+                          <tr style={{ backgroundColor: "#EBF0FA" }}>
+                            {["#", "Category", "Description", "Article", "Spec/Size", "Qty", "Unit", "Unit Cost", "Total"].map(h => (
+                              <th key={h} className="border border-gray-300 px-2 py-1.5 text-left font-semibold">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(viewingPO.items || []).map((item, idx) => (
+                            <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#F9FAFB" }}>
+                              <td className="border border-gray-300 px-2 py-1">{idx + 1}</td>
+                              <td className="border border-gray-300 px-2 py-1">{item.category}</td>
+                              <td className="border border-gray-300 px-2 py-1 font-medium">{item.item_description}</td>
+                              <td className="border border-gray-300 px-2 py-1">{item.article_code || item.article_name}</td>
+                              <td className="border border-gray-300 px-2 py-1">{item.size_spec || "—"}</td>
+                              <td className="border border-gray-300 px-2 py-1 font-bold text-center" style={{ backgroundColor: "#FFF2CC" }}>{(item.quantity || 0).toLocaleString()}</td>
+                              <td className="border border-gray-300 px-2 py-1">{item.unit}</td>
+                              <td className="border border-gray-300 px-2 py-1">{item.unit_cost ? `${viewingPO.currency} ${item.unit_cost}` : "—"}</td>
+                              <td className="border border-gray-300 px-2 py-1 font-bold">{item.total_cost ? `${viewingPO.currency} ${item.total_cost.toFixed(0)}` : "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="mt-3 flex justify-end">
+                      <div className="text-sm font-bold">{viewingPO.currency} {(viewingPO.total_cost || 0).toLocaleString()} Total</div>
+                    </div>
+                    {viewingPO.notes && <p className="mt-2 text-xs text-muted-foreground">Notes: {viewingPO.notes}</p>}
+                  </>
+                ) : (
+                  <div className="space-y-4">
+                    {/* PO Info */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {[
+                        { label: "APO Number", value: viewingPO.apo_number },
+                        { label: "Status", value: viewingPO.status },
+                        { label: "Supplier", value: viewingPO.supplier || "—" },
+                        { label: "Ref PO", value: viewingPO.po_ref || "—" },
+                        { label: "Order Date", value: viewingPO.order_date || "—" },
+                        { label: "Currency", value: viewingPO.currency },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                          <p className="text-[10px] text-gray-500 uppercase font-semibold mb-0.5">{label}</p>
+                          <p className="text-sm font-bold text-gray-800">{value}</p>
+                        </div>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(viewingPO.items || []).map((item, idx) => (
-                      <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#F9FAFB" }}>
-                        <td className="border border-gray-300 px-2 py-1">{idx + 1}</td>
-                        <td className="border border-gray-300 px-2 py-1">{item.category}</td>
-                        <td className="border border-gray-300 px-2 py-1 font-medium">{item.item_description}</td>
-                        <td className="border border-gray-300 px-2 py-1">{item.article_code || item.article_name}</td>
-                        <td className="border border-gray-300 px-2 py-1">{item.size_spec || "—"}</td>
-                        <td className="border border-gray-300 px-2 py-1 font-bold text-center" style={{ backgroundColor: "#FFF2CC" }}>{(item.quantity || 0).toLocaleString()}</td>
-                        <td className="border border-gray-300 px-2 py-1">{item.unit}</td>
-                        <td className="border border-gray-300 px-2 py-1">{item.unit_cost ? `${viewingPO.currency} ${item.unit_cost}` : "—"}</td>
-                        <td className="border border-gray-300 px-2 py-1 font-bold">{item.total_cost ? `${viewingPO.currency} ${item.total_cost.toFixed(0)}` : "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </div>
+
+                    {/* Category breakdown */}
+                    <div>
+                      <p className="text-xs font-bold text-gray-600 uppercase mb-2">Category Breakdown</p>
+                      <div className="rounded border border-gray-300 overflow-hidden">
+                        <table className="w-full text-xs border-collapse">
+                          <thead>
+                            <tr style={{ backgroundColor: "#1F3864", color: "white" }}>
+                              <th className="border border-gray-400 px-3 py-2 text-left">Category</th>
+                              <th className="border border-gray-400 px-3 py-2 text-center">No. of Items</th>
+                              <th className="border border-gray-400 px-3 py-2 text-center" style={{ backgroundColor: "#7d6608" }}>Total Qty</th>
+                              <th className="border border-gray-400 px-3 py-2 text-right">Total Cost ({viewingPO.currency})</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {summaryEntries.map(([cat, s], idx) => (
+                              <tr key={cat} style={{ backgroundColor: idx % 2 === 0 ? "#fff" : "#F9FAFB" }}>
+                                <td className="border border-gray-300 px-3 py-1.5 font-medium">{cat}</td>
+                                <td className="border border-gray-300 px-3 py-1.5 text-center">{s.count}</td>
+                                <td className="border border-gray-300 px-3 py-1.5 text-center font-bold" style={{ backgroundColor: "#FFF9E6" }}>{s.totalQty.toLocaleString()}</td>
+                                <td className="border border-gray-300 px-3 py-1.5 text-right font-bold">{s.totalCost > 0 ? s.totalCost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "—"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr style={{ backgroundColor: "#1F3864", color: "white", fontWeight: "bold" }}>
+                              <td className="border border-gray-400 px-3 py-2">TOTAL</td>
+                              <td className="border border-gray-400 px-3 py-2 text-center">{(viewingPO.items || []).length}</td>
+                              <td className="border border-gray-400 px-3 py-2 text-center" style={{ backgroundColor: "#7d6608" }}>
+                                {summaryEntries.reduce((s, [, v]) => s + v.totalQty, 0).toLocaleString()}
+                              </td>
+                              <td className="border border-gray-400 px-3 py-2 text-right" style={{ backgroundColor: "#7d6608" }}>
+                                {(viewingPO.total_cost || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+
+                    {viewingPO.notes && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                        <p className="text-[10px] text-amber-700 font-semibold uppercase mb-0.5">Notes</p>
+                        <p className="text-xs text-amber-800">{viewingPO.notes}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-              <div className="mt-3 flex justify-end">
-                <div className="text-sm font-bold">{viewingPO.currency} {(viewingPO.total_cost || 0).toLocaleString()} Total</div>
+
+              <div className="p-4 border-t flex justify-end gap-2">
+                <Button variant="outline" onClick={() => downloadPDF(viewingPO)}><Download className="h-4 w-4 mr-1.5" /> Download PDF</Button>
+                <Button variant="outline" onClick={() => setViewingPO(null)}>Close</Button>
               </div>
-              {viewingPO.notes && <p className="mt-2 text-xs text-muted-foreground">Notes: {viewingPO.notes}</p>}
-            </div>
-            <div className="p-4 border-t flex justify-end gap-2">
-              <Button variant="outline" onClick={() => downloadPDF(viewingPO)}><Download className="h-4 w-4 mr-1.5" /> Download PDF</Button>
-              <Button variant="outline" onClick={() => setViewingPO(null)}>Close</Button>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Generator Dialog */}
       {showGenerator && (
