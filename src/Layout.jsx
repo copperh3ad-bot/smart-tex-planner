@@ -6,7 +6,6 @@ import {
   FileText,
   Layers,
   Scissors,
-  Factory,
   ClipboardList,
   Menu,
   X,
@@ -31,7 +30,6 @@ const navItems = [
   { name: "Tech Pack", icon: FileText, page: "TechPack" },
   { name: "Production", icon: Cog, page: "Production" },
   { name: "Shipping Docs", icon: FileText, page: "ShippingDocuments" },
-  { name: "Production", icon: Factory, page: "Production" },
   { name: "Job Cards", icon: ClipboardList, page: "JobCards" },
 ];
 
