@@ -496,21 +496,38 @@ export default function UnifiedPackagingPlanning() {
         if (poExisting.length > 0) {
           const artCartonSize = getCartonSize(art);
           init[tab][art.id] = poExisting.map(e => {
-            // For Carton rows: prefer saved color field, fall back to auto-detected size from POItem
-            const savedSize = cfg.splitDescSize ? (e.color || "") : "";
-            const resolvedSize = cfg.autoFillSize ? (savedSize || artCartonSize) : savedSize;
+            // Detect TechPack-imported record: color is empty but size_spec has a real size value.
+            // Packaging-module-saved records store: size_spec=description, color=size.
+            // TechPack-imported records store: item_description=full description, size_spec=size, color="".
+            const isTechPackImport = cfg.splitDescSize && !e.color && !!e.size_spec;
+
+            let description = "";
+            let size = "";
+            if (cfg.splitDescSize) {
+              if (isTechPackImport) {
+                // TechPack layout: item_description = description text, size_spec = size
+                description = e.item_description || "";
+                size = e.size_spec || "";
+              } else {
+                // Packaging-module layout: size_spec = description text, color = size
+                description = e.size_spec || "";
+                size = e.color || "";
+              }
+              // For Carton: fall back to auto-detected size from POItem if size is empty
+              if (cfg.autoFillSize && !size) size = artCartonSize;
+            }
+
             return {
               type: cfg.isBellyband ? cfg.typeOptions[0] : (cfg.category === "Insert Card" ? (e.size_spec || "") : e.item_description),
               quality: cfg.category === "Insert Card" ? (e.item_description || "") : (cfg.splitDescSize ? "" : (e.size_spec || "")),
-              description: cfg.splitDescSize ? (e.size_spec || "") : "",
-              size: resolvedSize,
+              description,
+              size,
               wastage_percent: e.wastage_percent ?? cfg.defaultWastage,
               multiplier: e.multiplier ?? 1,
               pc_ean_code: e.pc_ean_code || "",
               carton_ean_code: e.carton_ean_code || "",
               existing_id: e.id,
               bbOption: cfg.isBellyband ? (e.quantity_required === 0 ? "Without" : "With") : "With",
-              // pieces_per_carton is stored in the multiplier field on save — restore it here
               pieces_per_carton: cfg.isCarton ? (e.multiplier || 1) : undefined,
             };
           });
