@@ -1,0 +1,37 @@
+{
+  "name": "PriceList",
+  "type": "object",
+  "properties": {
+    "program_code": {
+      "type": "string",
+      "description": "Program code e.g. FT4"
+    },
+    "article": {
+      "type": "string",
+      "description": "Article name e.g. Terry Mattress Protector"
+    },
+    "item_code": {
+      "type": "string",
+      "description": "Item code / SKU"
+    },
+    "size": {
+      "type": "string",
+      "description": "Size e.g. Twin, Queen, King"
+    },
+    "price_usd": {
+      "type": "number",
+      "description": "Standard price in USD"
+    },
+    "qty_per_carton": {
+      "type": "number",
+      "description": "Quantity per carton"
+    },
+    "cbm_per_carton": {
+      "type": "number",
+      "description": "CBM per carton"
+    }
+  },
+  "required": [
+    "item_code"
+  ]
+}

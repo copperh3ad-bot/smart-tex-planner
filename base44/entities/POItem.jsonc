@@ -1,0 +1,117 @@
+{
+  "name": "POItem",
+  "type": "object",
+  "properties": {
+    "po_id": {
+      "type": "string",
+      "description": "Reference to PurchaseOrder"
+    },
+    "po_number": {
+      "type": "string",
+      "description": "PO Number for display"
+    },
+    "item_code": {
+      "type": "string",
+      "description": "Item code / Quality code"
+    },
+    "item_description": {
+      "type": "string"
+    },
+    "fabric_type": {
+      "type": "string",
+      "description": "Type of fabric"
+    },
+    "gsm": {
+      "type": "number",
+      "description": "Grams per square meter"
+    },
+    "width": {
+      "type": "number",
+      "description": "Fabric width in inches or cm"
+    },
+    "quantity": {
+      "type": "number",
+      "description": "Order quantity"
+    },
+    "unit": {
+      "type": "string",
+      "enum": [
+        "Meters",
+        "Yards",
+        "Kgs",
+        "Pieces",
+        "Rolls"
+      ],
+      "default": "Meters"
+    },
+    "unit_price": {
+      "type": "number",
+      "description": "Price per unit"
+    },
+    "total_price": {
+      "type": "number",
+      "description": "Total price for this item"
+    },
+    "delivery_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "price_status": {
+      "type": "string",
+      "enum": [
+        "Pending",
+        "Matched",
+        "Mismatch",
+        "Approved"
+      ],
+      "default": "Pending"
+    },
+    "expected_price": {
+      "type": "number",
+      "description": "Expected price from price list"
+    },
+    "fabric_construction": {
+      "type": "string",
+      "description": "Fabric construction details"
+    },
+    "finish": {
+      "type": "string",
+      "description": "Fabric finish type"
+    },
+    "shrinkage": {
+      "type": "string",
+      "description": "Shrinkage percentage"
+    },
+    "cbm": {
+      "type": "number",
+      "description": "Cubic meters for this item"
+    },
+    "packing_method": {
+      "type": "string",
+      "enum": [
+        "Roll",
+        "Bale",
+        "Carton",
+        "Pallet"
+      ],
+      "default": "Roll"
+    },
+    "carton_length": {
+      "type": "number"
+    },
+    "carton_width": {
+      "type": "number"
+    },
+    "carton_height": {
+      "type": "number"
+    },
+    "pieces_per_carton": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "po_id",
+    "item_code",
+    "quantity"
+  ]
+}

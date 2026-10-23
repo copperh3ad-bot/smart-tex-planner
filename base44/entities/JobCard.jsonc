@@ -1,0 +1,73 @@
+{
+  "name": "JobCard",
+  "type": "object",
+  "properties": {
+    "po_id": {
+      "type": "string",
+      "description": "Reference to PurchaseOrder"
+    },
+    "po_item_id": {
+      "type": "string",
+      "description": "Reference to POItem"
+    },
+    "job_card_number": {
+      "type": "string"
+    },
+    "fabric_details": {
+      "type": "string",
+      "description": "Fabric construction and specs"
+    },
+    "yarn_details": {
+      "type": "string",
+      "description": "Yarn type and count"
+    },
+    "process_steps": {
+      "type": "array",
+      "description": "Production process steps",
+      "items": {
+        "type": "object",
+        "properties": {
+          "step_name": {
+            "type": "string",
+            "description": "e.g. Weaving, Knitting, Dyeing, Finishing, Packing"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "Pending",
+              "In Progress",
+              "Completed"
+            ],
+            "default": "Pending"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "quantity": {
+      "type": "number"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Created",
+        "In Progress",
+        "Completed"
+      ],
+      "default": "Created"
+    }
+  },
+  "required": [
+    "job_card_number"
+  ]
+}

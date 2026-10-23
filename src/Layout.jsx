@@ -13,7 +13,8 @@ import {
   Receipt,
   Shirt,
   Tag,
-  Cog
+  Cog,
+  Workflow
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +30,7 @@ const navItems = [
   { name: "Accessory Orders", icon: Package, page: "AccessoryPurchaseOrders" },
   { name: "Tech Pack", icon: FileText, page: "TechPack" },
   { name: "Production", icon: Cog, page: "Production" },
+  { name: "App Flow", icon: Workflow, page: "AppFlowchart" },
   { name: "Shipping Docs", icon: FileText, page: "ShippingDocuments" },
   { name: "Job Cards", icon: ClipboardList, page: "JobCards" },
 ];

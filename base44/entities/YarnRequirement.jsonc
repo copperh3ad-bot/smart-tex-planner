@@ -1,0 +1,61 @@
+{
+  "name": "YarnRequirement",
+  "type": "object",
+  "properties": {
+    "po_id": {
+      "type": "string",
+      "description": "Reference to PurchaseOrder"
+    },
+    "po_item_id": {
+      "type": "string",
+      "description": "Reference to POItem"
+    },
+    "article_id": {
+      "type": "string",
+      "description": "Reference to Article"
+    },
+    "yarn_count": {
+      "type": "string",
+      "description": "Yarn count (e.g. 20s, 30s, 40s)"
+    },
+    "yarn_type": {
+      "type": "string",
+      "description": "Yarn type (e.g. Cotton, Polyester, Blend)"
+    },
+    "consumption_per_unit": {
+      "type": "number",
+      "description": "Yarn consumption per unit in kgs"
+    },
+    "total_yarn_required": {
+      "type": "number",
+      "description": "Total yarn required in kgs"
+    },
+    "procurement_source": {
+      "type": "string",
+      "enum": [
+        "Local",
+        "Import"
+      ],
+      "default": "Local"
+    },
+    "lead_time_days": {
+      "type": "number",
+      "description": "Procurement lead time in days"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Planned",
+        "Ordered",
+        "In Transit",
+        "Received"
+      ],
+      "default": "Planned"
+    }
+  },
+  "required": [
+    "yarn_count",
+    "yarn_type",
+    "total_yarn_required"
+  ]
+}
