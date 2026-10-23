@@ -3,6 +3,7 @@ import {
   FileText, Receipt, Layers, Shirt, Scissors, Tag, Package,
   Cog, Ship, ClipboardList, Workflow, ChevronDown, CheckCircle2, Sparkles
 } from "lucide-react";
+import MermaidFlow from "@/components/flow/MermaidFlow";
 
 const STAGE_COLORS = {
   intake: "#2563eb",
@@ -71,6 +72,9 @@ export default function AppFlowchart() {
           </div>
         </div>
       </div>
+
+      {/* Mermaid Flowchart */}
+      <MermaidFlow />
 
       {/* STAGE 1 — PO Intake */}
       <section>
