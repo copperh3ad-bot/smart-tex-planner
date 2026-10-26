@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import mermaid from "mermaid";
 import { Button } from "@/components/ui/button";
-import { Code2, Copy, Check } from "lucide-react";
+import { Code2, Copy, Check, Printer } from "lucide-react";
 
 mermaid.initialize({ startOnLoad: false, theme: "neutral", securityLevel: "loose" });
 
@@ -69,6 +69,18 @@ export default function MermaidFlow() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const printChart = () => {
+    const w = window.open("", "_blank", "width=1100,height=800");
+    w.document.write(
+      `<html><head><title>Smart Tex Planner - App Flowchart</title>` +
+      `<style>body{font-family:sans-serif;padding:16px}svg{max-width:100%;height:auto}</style>` +
+      `</head><body>${svg}</body></html>`
+    );
+    w.document.close();
+    w.focus();
+    w.print();
+  };
+
   return (
     <div className="rounded-xl border bg-card p-5 shadow-sm">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -80,6 +92,10 @@ export default function MermaidFlow() {
           <Button variant="outline" size="sm" onClick={copyCode}>
             {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
             {copied ? "Copied" : "Copy Code"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={printChart} disabled={!svg}>
+            <Printer className="h-3.5 w-3.5" />
+            Print
           </Button>
           <Button variant="ghost" size="sm" onClick={() => setShowCode(!showCode)}>
             <Code2 className="h-3.5 w-3.5" />
